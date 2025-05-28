@@ -1,4 +1,4 @@
-# ⚡ Sonel Analysis Data Extractor
+# SonelAnalysis# ⚡ Sonel Analysis Data Extractor
 
 Automatización para la extracción, transformación y carga (ETL) de datos eléctricos desde archivos generados por **Sonel Analysis 4.6.6** a una base de datos **PostgreSQL**. Este script permite procesar archivos exportados o, en su defecto, automatizar la interfaz gráfica de la aplicación para obtener datos estructurados, con un enfoque especial en mediciones de **voltaje**.
 
@@ -6,7 +6,7 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
 
 ## 📋 Tabla de Contenidos
 
-- [⚡ Sonel Analysis Data Extractor](#-sonel-analysis-data-extractor)
+- [SonelAnalysis# ⚡ Sonel Analysis Data Extractor](#sonelanalysis--sonel-analysis-data-extractor)
   - [📋 Tabla de Contenidos](#-tabla-de-contenidos)
   - [📋 Tabla de Contenidos](#-tabla-de-contenidos-1)
   - [📌 Características principales](#-características-principales)
@@ -37,15 +37,14 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
   - [⚠️ Limitaciones](#️-limitaciones)
   - [🤝 Contribución](#-contribución)
   - [📄 Licencia](#-licencia)
-- [SonelAnalysis](#sonelanalysis)
 
 ---
 
 ## 📋 Tabla de Contenidos
 
-- [⚡ Sonel Analysis Data Extractor](#-sonel-analysis-data-extractor)
+- [SonelAnalysis# ⚡ Sonel Analysis Data Extractor](#sonelanalysis--sonel-analysis-data-extractor)
   - [📋 Tabla de Contenidos](#-tabla-de-contenidos)
-  - [� Tabla de Contenidos](#-tabla-de-contenidos-1)
+  - [📋 Tabla de Contenidos](#-tabla-de-contenidos-1)
   - [📌 Características principales](#-características-principales)
   - [🛠️ Requisitos previos](#️-requisitos-previos)
   - [📦 Instalación](#-instalación)
@@ -74,7 +73,6 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
   - [⚠️ Limitaciones](#️-limitaciones)
   - [🤝 Contribución](#-contribución)
   - [📄 Licencia](#-licencia)
-- [SonelAnalysis](#sonelanalysis)
 
 ---
 
@@ -340,4 +338,3 @@ Este proyecto está disponible bajo la licencia que consideres apropiada para tu
 **[⬆ Volver al inicio](#-sonel-analysis-data-extractor)**
 
 </div>
-# SonelAnalysis
