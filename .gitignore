@@ -1,0 +1,7 @@
+/config
+/extractors/gui_extractor.py
+/logs
+/data
+/venv
+.env
+config.ini
