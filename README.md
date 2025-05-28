@@ -40,6 +40,7 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
   - [⚠️ Limitaciones](#️-limitaciones)
   - [🤝 Contribución](#-contribución)
   - [📄 Licencia](#-licencia)
+- [SonelAnalysis](#sonelanalysis)
 
 ---
 
@@ -299,3 +300,4 @@ Este proyecto está disponible bajo la licencia que consideres apropiada para tu
 **[⬆ Volver al inicio](#-sonel-analysis-data-extractor)**
 
 </div>
+# SonelAnalysis
