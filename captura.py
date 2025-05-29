@@ -8,660 +8,428 @@ from datetime import datetime
 import threading
 import sys
 
-# ✅ CLASE PARA INDICADOR DE PROGRESO EN TIEMPO REAL
-class ProgressIndicator:
-    def __init__(self, logger):
-        self.logger = logger
-        self.is_running = False
-        self.current_step = ""
-        self.thread = None
-        self.step_start_time = None
-        
-    def start(self, step_name):
-        """Inicia el indicador de progreso para un paso específico"""
-        self.current_step = step_name
-        self.step_start_time = time.time()
-        self.is_running = True
-        self.thread = threading.Thread(target=self._show_progress, daemon=True)
-        self.thread.start()
-        
-    def stop(self):
-        """Detiene el indicador de progreso"""
-        self.is_running = False
-        if self.thread:
-            self.thread.join(timeout=1)
-            
-    def _show_progress(self):
-        """Muestra el progreso en tiempo real"""
-        counter = 0
-        spinner_chars = "|/-\\"
-        
-        while self.is_running:
-            elapsed_time = time.time() - self.step_start_time if self.step_start_time else 0
-            spinner = spinner_chars[counter % len(spinner_chars)]
-            
-            # Mostrar en consola
-            sys.stdout.write(f"\r🔄 {spinner} Ejecutando: {self.current_step} - Tiempo: {elapsed_time:.1f}s")
-            sys.stdout.flush()
-            
-            # Log cada 10 segundos
-            if counter % 20 == 0:  # Cada 10 segundos (0.5s * 20)
-                self.logger.info(f"⏱️ PROGRESO: {self.current_step} - {elapsed_time:.1f}s transcurridos")
-            
-            time.sleep(0.5)
-            counter += 1
-
-# Configurar logging para escribir tanto en consola como en archivo
-class DualHandler:
-    def __init__(self, filename):
-        self.terminal = open("CON", "w", encoding='utf-8') if os.name == 'nt' else None
-        self.log_file = open(filename, 'w', encoding='utf-8')
-        
-    def write(self, message):
-        if self.terminal:
-            self.terminal.write(message)
-        self.log_file.write(message)
-        self.log_file.flush()
-        
-    def flush(self):
-        if self.terminal:
-            self.terminal.flush()
-        self.log_file.flush()
-        
-    def close(self):
-        if self.terminal:
-            self.terminal.close()
-        self.log_file.close()
-
-# ✅ COORDENADAS GUI CENTRALIZADAS - Resolución 1920x1080
-GUI_COORDINATES = {
-    # Coordenadas principales del flujo de trabajo
-    'config_1': (284, 144),
-    'analisis_datos': (1238, 750),
-    'mediciones': (182, 179),
-    'check_usuario': (374, 389),
-   
-    # Coordenadas de exportación
-    'tabla_esquina': (393, 436),
-    'informes': (189, 365),
-    'exportar_csv': (191, 426),
-    'dialogo_nombre': (522, 689),
-   
-    # Coordenadas adicionales para estabilidad
-    'ventana_principal': (960, 540),  # Centro de pantalla
-    'boton_guardar': (700, 700),     # Botón guardar genérico
-    'campo_archivo': (600, 500),     # Campo de nombre de archivo genérico
-    'boton_cerrar': (1900, 10),      # Botón X para cerrar
-}
-
-class SonelAnalysisAutomator:
+class SonelTreeExtractor:
     def __init__(self, archivo_pqm, ruta_exe="D:/Wolfly/Sonel/SonelAnalysis.exe"):
         self.archivo_pqm = archivo_pqm
         self.ruta_exe = ruta_exe
         self.app = None
         self.main_window = None
-        self.controles_mapeados = {}
-        
-        # Crear archivo de log con timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.log_filename = f"sonel_analysis_log_{timestamp}.txt"
-        
-        # Configurar logging dual (consola + archivo)
-        self.dual_handler = DualHandler(self.log_filename)
+        self.analysis_window = None  # La ventana secundaria específica
         
         # Configurar logging
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.log_filename = f"sonel_tree_analysis_{timestamp}.txt"
+        
         logging.basicConfig(
-            level=logging.INFO, 
+            level=logging.INFO,
             format='%(asctime)s - %(levelname)s: %(message)s',
             handlers=[
-                logging.StreamHandler(self.dual_handler)
+                logging.FileHandler(self.log_filename, encoding='utf-8'),
+                logging.StreamHandler()
             ]
         )
         self.logger = logging.getLogger(__name__)
         
-        # ✅ INICIALIZAR INDICADOR DE PROGRESO
-        self.progress = ProgressIndicator(self.logger)
-        
         self.logger.info("="*80)
-        self.logger.info("🚀 SONEL ANALYSIS AUTOMATOR - INICIADO")
+        self.logger.info("🌳 EXTRACTOR OPTIMIZADO - ÁRBOL DE CONFIGURACIÓN SONEL")
         self.logger.info(f"📁 Archivo PQM: {archivo_pqm}")
-        self.logger.info(f"📄 Log guardándose en: {self.log_filename}")
         self.logger.info("="*80)
-        
-    def safe_click(self, x, y, description, delay=2):
-        """Realiza un clic seguro y registra la acción"""
+
+    def conectar_ventana_analisis_secundaria(self):
+        """Conecta específicamente con la ventana secundaria de análisis"""
         try:
-            self.logger.info(f"🖱️ Clic en: {description} - ({x}, {y})")
-            pyautogui.click(x, y)
+            self.logger.info("🔍 Conectando con ventana de análisis secundaria...")
             
-            # ✅ MOSTRAR PROGRESO DURANTE LA ESPERA
-            self.progress.start(f"Esperando después de clic en {description}")
-            time.sleep(delay)
-            self.progress.stop()
-            print()  # Nueva línea después del spinner
-            
-            return True
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error en clic {description}: {e}")
-            return False
-            
-    def inicializar_aplicacion(self):
-        """Inicializa la aplicación Sonel Analysis"""
-        try:
-            self.progress.start("Verificando archivo PQM")
-            
-            if not os.path.exists(self.archivo_pqm):
-                self.progress.stop()
-                print()
-                raise FileNotFoundError(f"El archivo {self.archivo_pqm} no existe")
-            
-            self.progress.stop()
-            print()
-            self.logger.info("✅ Archivo PQM verificado")
-            
-            self.progress.start("Iniciando Sonel Analysis")
-            self.logger.info("🚀 Iniciando Sonel Analysis...")
-            
-            self.app = Application(backend="uia").start(f'"{self.ruta_exe}" "{self.archivo_pqm}"')
-            
-            # Espera con indicador de progreso
-            self.progress.stop()
-            print()
-            self.progress.start("Esperando carga completa de la aplicación")
-            time.sleep(10)  # Esperar carga completa
-            self.progress.stop()
-            print()
+            # Conectar con aplicación existente o iniciar nueva
+            try:
+                self.app = Application(backend="uia").connect(title_re=".*Sonel.*|.*Analysis.*")
+                self.logger.info("✅ Conectado con aplicación existente")
+            except:
+                self.logger.info("🚀 Iniciando nueva instancia de Sonel Analysis...")
+                self.app = Application(backend="uia").start(f'"{self.ruta_exe}" "{self.archivo_pqm}"')
+                time.sleep(10)  # Esperar carga completa
             
             # Obtener ventana principal
-            self.progress.start("Obteniendo ventana principal")
-            ventanas = self.app.windows()
-            self.logger.info(f"📋 Ventanas detectadas: {[w.window_text() for w in ventanas]}")
-            
             self.main_window = self.app.top_window()
             self.main_window.set_focus()
-            self.main_window.maximize()
+            self.logger.info(f"🏠 Ventana principal: {self.main_window.window_text()}")
             
-            self.progress.stop()
-            print()
-            self.logger.info(f"🪟 Ventana principal: {self.main_window.window_text()}")
-            return True
+            # Buscar la ventana secundaria específica con "Análisis"
+            self.analysis_window = self._encontrar_ventana_analisis_secundaria()
             
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error inicializando aplicación: {e}")
-            return False
-    
-    def mapear_controles(self):
-        """Mapea y extrae información de los controles disponibles"""
-        try:
-            self.progress.start("Mapeando controles disponibles")
-            self.logger.info("🗺️ Mapeando controles disponibles...")
-            
-            # Extraer información completa de controles
-            self.logger.info("📋 === ESTRUCTURA COMPLETA DE CONTROLES ===")
-            self.main_window.print_control_identifiers()
-            
-            # Mapear controles específicos que necesitamos
-            self._buscar_controles_especificos()
-            
-            self.progress.stop()
-            print()
-            return True
-            
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error mapeando controles: {e}")
-            return False
-    
-    def _buscar_controles_especificos(self):
-        """Busca controles específicos por tipo y texto"""
-        try:
-            self.progress.start("Buscando controles específicos")
-            
-            # Buscar ventana de análisis
-            dialogs = self.main_window.descendants(control_type="Window")
-            for dialog in dialogs:
-                title = dialog.window_text()
-                if "Análisis" in title and ".pqm" in title:
-                    self.controles_mapeados['ventana_analisis'] = dialog
-                    self.logger.info(f"✅ Encontrada ventana de análisis: {title}")
-                    break
-            
-            # Buscar TreeView (árbol de navegación)
-            treeviews = self.main_window.descendants(control_type="Tree")
-            if treeviews:
-                self.controles_mapeados['tree_navegacion'] = treeviews[0]
-                self.logger.info("✅ TreeView de navegación encontrado")
+            if self.analysis_window:
+                self.logger.info(f"✅ Ventana de análisis secundaria encontrada!")
+                self.logger.info(f"📋 Título: {self.analysis_window.window_text()}")
+                self.logger.info(f"📐 Posición: {self.analysis_window.rectangle()}")
                 
-                # Explorar elementos del árbol
-                self._explorar_tree_view(treeviews[0])
-            
-            # Buscar menús
-            menus = self.main_window.descendants(control_type="MenuBar")
-            if menus:
-                self.controles_mapeados['menu_principal'] = menus[0]
-                self.logger.info("✅ Menú principal encontrado")
-            
-            # Buscar botones
-            buttons = self.main_window.descendants(control_type="Button")
-            for button in buttons:
-                button_text = button.window_text()
-                if button_text:
-                    self.controles_mapeados[f'button_{button_text.lower()}'] = button
-                    self.logger.info(f"✅ Botón encontrado: {button_text}")
-            
-            self.progress.stop()
-            print()
-            
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error buscando controles específicos: {e}")
-    
-    def _explorar_tree_view(self, tree_control):
-        """Explora los elementos del TreeView"""
-        try:
-            self.logger.info("🌳 Explorando TreeView...")
-            
-            # Obtener elementos del árbol
-            tree_items = tree_control.descendants(control_type="TreeItem")
-            
-            for i, item in enumerate(tree_items):
-                item_text = item.window_text()
-                if item_text:
-                    self.controles_mapeados[f'tree_item_{i}'] = item
-                    self.logger.info(f"  📂 Item {i}: {item_text}")
-                    
-                    # Si es un elemento que necesitamos, guardarlo con nombre específico
-                    if "Config" in item_text:
-                        self.controles_mapeados['config_node'] = item
-                    elif "Mediciones" in item_text:
-                        self.controles_mapeados['mediciones_node'] = item
-                    elif "Informes" in item_text:
-                        self.controles_mapeados['informes_node'] = item
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error explorando TreeView: {e}")
-    
-    def ejecutar_flujo_completo(self):
-        """Ejecuta TODOS los pasos del flujo siguiendo las coordenadas exactas"""
-        try:
-            self.logger.info("🧭 === INICIANDO FLUJO COMPLETO CON COORDENADAS EXACTAS ===")
-            
-            # PASO 1: Config (usando coordenadas exactas)
-            self.logger.info("=== PASO 1: CONFIG ===")
-            if not self.safe_click(GUI_COORDINATES['config_1'][0], GUI_COORDINATES['config_1'][1], "Config 1", 3):
-                return False
-            self._extraer_info_paso("Config 1")
-            
-            # PASO 2: Análisis de Datos
-            self.logger.info("=== PASO 2: ANÁLISIS DE DATOS ===")
-            if not self.safe_click(GUI_COORDINATES['analisis_datos'][0], GUI_COORDINATES['analisis_datos'][1], "Análisis de Datos", 3):
-                return False
-            self._extraer_info_paso("Análisis de Datos")
-            
-            # PASO 3: Mediciones (CON TIMEOUT PARA EVITAR CUELGUE)
-            self.logger.info("=== PASO 3: MEDICIONES ===")
-            self.logger.info("⚠️ INICIANDO PASO CRÍTICO - MEDICIONES")
-            
-            if not self.safe_click(GUI_COORDINATES['mediciones'][0], GUI_COORDINATES['mediciones'][1], "Mediciones", 3):
-                return False
-            
-            # ✅ EXTRAER INFO CON TIMEOUT PARA EVITAR CUELGUE
-            self.logger.info("🔍 Extrayendo información de Mediciones con timeout...")
-            try:
-                self._extraer_info_paso_con_timeout("Mediciones", timeout_seconds=30)
-            except TimeoutError:
-                self.logger.warning("⚠️ TIMEOUT en extracción de Mediciones - Continuando...")
-            
-            # PASO 4: Checkbox usuario
-            self.logger.info("=== PASO 4: CHECKBOX USUARIO ===")
-            if not self.safe_click(GUI_COORDINATES['check_usuario'][0], GUI_COORDINATES['check_usuario'][1], "Checkbox usuario", 3):
-                return False
-            self._extraer_info_paso("Checkbox usuario")
-            
-            # PASO 5: Tabla esquina
-            self.logger.info("=== PASO 5: TABLA ESQUINA ===")
-            if not self.safe_click(GUI_COORDINATES['tabla_esquina'][0], GUI_COORDINATES['tabla_esquina'][1], "Tabla esquina", 3):
-                return False
-            self._extraer_info_paso("Tabla esquina")
-            
-            # PASO 6: Menú Informes
-            self.logger.info("=== PASO 6: MENÚ INFORMES ===")
-            if not self.safe_click(GUI_COORDINATES['informes'][0], GUI_COORDINATES['informes'][1], "Menú Informes", 3):
-                return False
-            self._extraer_info_paso("Menú Informes")
-            
-            # PASO 7: Exportar CSV
-            self.logger.info("=== PASO 7: EXPORTAR CSV ===")
-            if not self.safe_click(GUI_COORDINATES['exportar_csv'][0], GUI_COORDINATES['exportar_csv'][1], "Exportar CSV", 3):
-                return False
-            self._extraer_info_paso("Exportar CSV")
-            
-            # PASO 8: Campo nombre archivo
-            self.logger.info("=== PASO 8: CONFIGURAR NOMBRE DE ARCHIVO ===")
-            if not self.safe_click(GUI_COORDINATES['dialogo_nombre'][0], GUI_COORDINATES['dialogo_nombre'][1], "Campo nombre archivo", 3):
-                return False
-            
-            # Generar nombre del archivo CSV
-            csv_base_name = self.generate_csv_filename(self.archivo_pqm)
-            csv_full_path = f"D:\\Universidad\\8vo Semestre\\Practicas\\Sonel\\data\\archivos_csv\\{csv_base_name}.csv"
-            
-            # Limpiar campo y escribir nombre
-            self.progress.start("Escribiendo nombre de archivo")
-            pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.3)
-            pyautogui.write(csv_full_path)
-            time.sleep(0.5)
-            self.progress.stop()
-            print()
-            
-            self.logger.info(f"💾 Nombre de archivo establecido: {csv_full_path}")
-            
-            self.progress.start("Guardando archivo CSV")
-            pyautogui.press('enter')
-            time.sleep(5)  # Esperar a que se complete la exportación
-            self.progress.stop()
-            print()
-            
-            self._extraer_info_paso("Configuración nombre archivo")
-            
-            # Verificar si el archivo se creó
-            if os.path.exists(csv_full_path):
-                file_size = os.path.getsize(csv_full_path)
-                self.logger.info(f"✅ Archivo CSV creado exitosamente: {csv_full_path} ({file_size:,} bytes)")
+                # Enfocar la ventana secundaria
+                self.analysis_window.set_focus()
+                return True
             else:
-                self.logger.warning(f"⚠️ No se pudo verificar la creación del archivo: {csv_full_path}")
-            
-            self.logger.info("✅ FLUJO COMPLETO FINALIZADO EXITOSAMENTE")
-            return True
-            
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error en flujo completo: {e}")
-            return False
-    
-    def _extraer_info_paso_con_timeout(self, paso, timeout_seconds=30):
-        """Extrae información con timeout para evitar cuelgues"""
-        import signal
-        
-        def timeout_handler(signum, frame):
-            raise TimeoutError(f"Timeout en extracción de {paso}")
-        
-        # Solo en sistemas Unix/Linux
-        if hasattr(signal, 'SIGALRM'):
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(timeout_seconds)
-        
-        try:
-            self.progress.start(f"Extrayendo información de {paso}")
-            self._extraer_info_paso(paso)
-            self.progress.stop()
-            print()
-            
-            if hasattr(signal, 'SIGALRM'):
-                signal.alarm(0)  # Cancelar alarma
+                self.logger.error("❌ No se encontró ventana de análisis secundaria")
+                return False
                 
         except Exception as e:
-            self.progress.stop()
-            print()
-            if hasattr(signal, 'SIGALRM'):
-                signal.alarm(0)
-            
-            if "Timeout" in str(e):
-                raise TimeoutError(f"Timeout en {paso}")
-            else:
-                raise e
-    
-    def generate_csv_filename(self, pqm_file_path):
-        """Genera nombre del archivo CSV basado en el archivo PQM"""
+            self.logger.error(f"❌ Error conectando con ventana secundaria: {e}")
+            return False
+
+    def _encontrar_ventana_analisis_secundaria(self):
+        """Encuentra la ventana secundaria específica que contiene 'Análisis'"""
         try:
-            base_name = os.path.splitext(os.path.basename(pqm_file_path))[0]
-            # Limpiar caracteres especiales
-            clean_name = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
-            return clean_name.replace(' ', '_')
-        except Exception as e:
-            self.logger.error(f"Error generando nombre CSV: {e}")
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"sonel_export_{timestamp}"
-    
-    def _extraer_info_paso(self, paso):
-        """🚀 VERSIÓN OPTIMIZADA - SOLO DETECTA TABLAS SIN ANÁLISIS EXHAUSTIVO"""
-        try:
-            self.logger.info(f"📋 === INFORMACIÓN DESPUÉS DE: {paso} ===")
+            self.logger.info("🔍 Buscando ventana secundaria con 'Análisis'...")
             
-            # Extraer estructura completa de controles (esto es rápido)
+            # Método 1: Buscar directamente por título con regex
             try:
-                self.logger.info("🔍 === ESTRUCTURA COMPLETA DE CONTROLES ===")
-                self.main_window.print_control_identifiers()
+                ventana_analisis = self.app.window(title_re=".*Análisis.*")
+                if ventana_analisis.exists():
+                    self.logger.info("✅ Método 1 exitoso: Encontrada por title_re")
+                    return ventana_analisis
             except Exception as e:
-                self.logger.error(f"❌ Error imprimiendo estructura: {e}")
+                self.logger.debug(f"Método 1 falló: {e}")
             
-            # ✅ PROCESAMIENTO OPTIMIZADO - SIN ANÁLISIS EXHAUSTIVO DE TABLAS
-            control_types_to_process = [
-                ("Window", "Window"),
-                ("Dialog", "Window"), 
-                ("Table", "Table"),      # ✅ OPTIMIZADO: Solo info básica
-                ("DataGrid", "DataGrid"), # ✅ OPTIMIZADO: Solo info básica
-                ("Text", "Text"),
-                ("Edit", "Edit"),
-                ("Button", "Button"),
-                ("Tree", "Tree"),
-                ("List", "List"),
-                ("MenuItem", "MenuItem"),
-                ("CheckBox", "CheckBox"),
-                ("ComboBox", "ComboBox")
-            ]
-            
-            for control_name, control_type in control_types_to_process:
-                try:
-                    controls = self.main_window.descendants(control_type=control_type)
-                    if controls:
-                        self.logger.info(f"\n🔍 === {control_name.upper()} - {len(controls)} ENCONTRADOS ===")
-                        
-                        for i, control in enumerate(controls):
-                            try:
-                                # Extraer información básica
-                                text = control.window_text()
-                                rect = control.rectangle()
-                                auto_id = getattr(control.element_info, 'automation_id', '')
-                                class_name = getattr(control.element_info, 'class_name', '')
-                                control_type_info = getattr(control.element_info, 'control_type', '')
-                                
-                                self.logger.info(f"[{i}] === {control_name} BÁSICO ===")
-                                self.logger.info(f"TEXTO: {text}")
-                                self.logger.info(f"AUTO_ID: {auto_id}")
-                                self.logger.info(f"CLASS: {class_name}")
-                                self.logger.info(f"TYPE: {control_type_info}")
-                                self.logger.info(f"POS: {rect}")
-                                
-                                # ✅ OPTIMIZACIÓN CLAVE: TABLAS SIN ANÁLISIS EXHAUSTIVO
-                                if control_type == "Table" or control_type == "DataGrid":
-                                    try:
-                                        self.logger.info("=== 📊 TABLA DETECTADA - INFO BÁSICA SOLAMENTE ===")
-                                        
-                                        # ✅ SOLO CONTAR ELEMENTOS, NO PROCESARLOS UNO POR UNO
-                                        try:
-                                            rows = control.descendants(control_type="DataItem")
-                                            headers = control.descendants(control_type="Header")
-                                            cells = control.descendants(control_type="Custom")
-                                            
-                                            self.logger.info(f"📊 TABLA RESUMEN:")
-                                            self.logger.info(f"   🔢 TOTAL FILAS: {len(rows)}")
-                                            self.logger.info(f"   📋 TOTAL HEADERS: {len(headers)}")
-                                            self.logger.info(f"   📦 TOTAL CELDAS: {len(cells)}")
-                                            self.logger.info(f"   ✅ TABLA DETECTADA Y CONTABILIZADA")
-                                            
-                                            # ✅ SOLO MOSTRAR ALGUNOS HEADERS (NO TODOS)
-                                            if headers and len(headers) > 0:
-                                                self.logger.info("📋 ALGUNOS HEADERS ENCONTRADOS:")
-                                                for h_idx, header in enumerate(headers[:5]):  # ✅ SOLO LOS PRIMEROS 5
-                                                    header_text = header.window_text()
-                                                    self.logger.info(f"   HEADER[{h_idx}]: {header_text}")
-                                                
-                                                if len(headers) > 5:
-                                                    self.logger.info(f"   ... y {len(headers) - 5} headers más")
-                                            
-                                        except Exception as count_error:
-                                            self.logger.info(f"Info conteo tabla - Error: {count_error}")
-                                            self.logger.info("✅ TABLA DETECTADA (conteo no disponible)")
-                                        
-                                        self.logger.info("=== FIN INFO TABLA ===")
-                                        
-                                    except Exception as table_error:
-                                        self.logger.info(f"Info tabla básica - Error: {table_error}")
-                                        self.logger.info("✅ TABLA DETECTADA (info básica no disponible)")
-                                
-                                self.logger.info("=" * 30)
-                                
-                            except Exception as control_error:
-                                self.logger.error(f"Error procesando {control_name}[{i}]: {control_error}")
-                                
-                except Exception as type_error:
-                    self.logger.info(f"No se pudieron obtener controles {control_name}: {type_error}")
-                    
-        except Exception as e:
-            self.logger.error(f"❌ Error en extracción paso {paso}: {e}")
-    
-    def extraer_datos_completos_final(self):
-        """Extrae TODOS los datos disponibles en la aplicación - ANÁLISIS FINAL OPTIMIZADO"""
-        try:
-            self.progress.start("Extracción final optimizada de datos")
-            self.logger.info("📊 === EXTRACCIÓN FINAL OPTIMIZADA ===")
-            
-            # Estructura COMPLETA final
-            self.logger.info("🔍 === ESTRUCTURA COMPLETA FINAL ===")
+            # Método 2: Buscar en descendientes de la ventana principal
             try:
-                self.main_window.print_control_identifiers()
+                descendants = self.main_window.descendants(control_type="Window")
+                for i, desc in enumerate(descendants):
+                    title = desc.window_text()
+                    if "Análisis" in title and ".pqm" in title:
+                        self.logger.info(f"✅ Método 2 exitoso: Encontrada en descendiente {i}")
+                        self.logger.info(f"   📋 Título completo: {title}")
+                        return desc
             except Exception as e:
-                self.logger.error(f"Error imprimiendo estructura final: {e}")
+                self.logger.debug(f"Método 2 falló: {e}")
             
-            # ✅ SOLO CONTROLES IMPORTANTES Y PROCESAMIENTO MÍNIMO
-            important_control_types = [
-                "Table", "DataGrid", "Text", "Button", "Tree", "List"
-            ]
+            # Método 3: Listar todas las ventanas y buscar
+            try:
+                windows = self.app.windows()
+                for i, window in enumerate(windows):
+                    title = window.window_text()
+                    if "Análisis" in title:
+                        self.logger.info(f"✅ Método 3 exitoso: Encontrada en ventana {i}")
+                        self.logger.info(f"   📋 Título completo: {title}")
+                        return window
+            except Exception as e:
+                self.logger.debug(f"Método 3 falló: {e}")
             
-            self.progress.stop()
-            print()
-            self.logger.info("🔍 === EXTRACCIÓN OPTIMIZADA DE CONTROLES IMPORTANTES ===")
+            return None
+
+        except Exception as e:
+            self.logger.error(f"Error buscando ventana secundaria: {e}")
+            return None
+
+    def extraer_arbol_configuracion(self):
+        """Extrae información específica del árbol de configuración lateral izquierdo"""
+        try:
+            self.logger.info("\n🌳 === EXTRACCIÓN: ÁRBOL DE CONFIGURACIÓN ===")
             
-            for control_type in important_control_types:
+            if not self.analysis_window:
+                self.logger.error("❌ No hay ventana de análisis disponible")
+                return {}
+            
+            arboles_encontrados = {}
+            
+            # Método 1: Buscar Tree directamente
+            self.logger.info("🔍 Método 1: Buscando control Tree...")
+            try:
+                trees = self.analysis_window.descendants(control_type="Tree")
+                for i, tree in enumerate(trees):
+                    self.logger.info(f"🌳 Árbol {i} encontrado:")
+                    detalles = self._analizar_arbol_detallado(tree, i)
+                    if detalles:
+                        arboles_encontrados[f"Tree_{i}"] = detalles
+            except Exception as e:
+                self.logger.debug(f"Error buscando Tree: {e}")
+            
+            # Método 2: Buscar TreeView (SysTreeView32)
+            self.logger.info("🔍 Método 2: Buscando TreeView...")
+            try:
+                # Usar child_window para TreeView
+                tree_view = self.analysis_window.child_window(class_name="SysTreeView32")
+                if tree_view.exists():
+                    self.logger.info("🌳 TreeView encontrado por class_name")
+                    detalles = self._analizar_arbol_detallado(tree_view, "TreeView")
+                    if detalles:
+                        arboles_encontrados["TreeView_SysTreeView32"] = detalles
+            except Exception as e:
+                self.logger.debug(f"Error buscando TreeView: {e}")
+            
+            # Método 3: Buscar por control_type="TreeView"
+            self.logger.info("🔍 Método 3: Buscando por control_type TreeView...")
+            try:
+                treeviews = self.analysis_window.descendants(control_type="TreeView")
+                for i, tv in enumerate(treeviews):
+                    self.logger.info(f"🌳 TreeView {i} encontrado por control_type:")
+                    detalles = self._analizar_arbol_detallado(tv, f"TreeView_{i}")
+                    if detalles:
+                        arboles_encontrados[f"TreeView_ControlType_{i}"] = detalles
+            except Exception as e:
+                self.logger.debug(f"Error buscando TreeView por control_type: {e}")
+            
+            # Método 4: Buscar TreeItem directamente (nodos sueltos)
+            self.logger.info("🔍 Método 4: Buscando TreeItems sueltos...")
+            try:
+                tree_items = self.analysis_window.descendants(control_type="TreeItem")
+                if tree_items:
+                    self.logger.info(f"📋 {len(tree_items)} TreeItems encontrados:")
+                    items_info = self._analizar_tree_items(tree_items)
+                    if items_info:
+                        arboles_encontrados["TreeItems_Sueltos"] = items_info
+            except Exception as e:
+                self.logger.debug(f"Error buscando TreeItems: {e}")
+            
+            # Método 5: Imprimir identificadores si no se encuentra nada
+            if not arboles_encontrados:
+                self.logger.info("⚠️ No se encontraron árboles. Imprimiendo identificadores de control...")
                 try:
-                    self.progress.start(f"Procesando {control_type}")
-                    controls = self.main_window.descendants(control_type=control_type)
-                    
-                    if controls:
-                        self.logger.info(f"\n{'='*60}")
-                        self.logger.info(f"🔍 TIPO: {control_type.upper()} - TOTAL: {len(controls)}")
-                        self.logger.info(f"{'='*60}")
-                        
-                        # ✅ PROCESAMIENTO MÍNIMO - SOLO PRIMEROS 3 CONTROLES
-                        for i, control in enumerate(controls[:3]):
-                            try:
-                                self.logger.info(f"\n--- [{control_type}][{i}] ---")
-                                
-                                text = control.window_text()
-                                rect = control.rectangle()
-                                element_info = control.element_info
-                                auto_id = getattr(element_info, 'automation_id', '')
-                                
-                                self.logger.info(f"TEXT: {repr(text)}")
-                                self.logger.info(f"AUTO_ID: {repr(auto_id)}")
-                                self.logger.info(f"RECT: {rect}")
-                                
-                                # ✅ PARA TABLAS: SOLO INFO BÁSICA
-                                if control_type in ["Table", "DataGrid"]:
-                                    try:
-                                        descendants_count = len(control.descendants())
-                                        self.logger.info(f"TABLA INFO: {descendants_count} elementos internos total")
-                                        self.logger.info("✅ TABLA PROCESADA BÁSICAMENTE")
-                                    except:
-                                        self.logger.info("✅ TABLA DETECTADA")
-                                
-                            except Exception as control_error:
-                                self.logger.error(f"ERROR {control_type}[{i}]: {control_error}")
-                    
-                    self.progress.stop()
-                    print()
-                                
-                except Exception as type_error:
-                    self.progress.stop()
-                    print()
-                    if "No such" not in str(type_error):
-                        self.logger.info(f"INFO - No {control_type}: {type_error}")
+                    self.analysis_window.print_control_identifiers(depth=3)
+                except Exception as e:
+                    self.logger.debug(f"Error imprimiendo identificadores: {e}")
             
-            self.logger.info("\n" + "="*60)
-            self.logger.info("✅ EXTRACCIÓN OPTIMIZADA FINALIZADA")
+            self.logger.info(f"📊 RESUMEN ÁRBOLES: {len(arboles_encontrados)} encontrados")
+            return arboles_encontrados
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo árbol de configuración: {e}")
+            return {}
+
+    def _analizar_arbol_detallado(self, tree_control, indice):
+        """Analiza un control de árbol en detalle"""
+        try:
             self.logger.info("="*60)
-                    
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error en extracción completa final: {e}")
-    
-    def ejecutar_automatizacion_completa(self):
-        """Ejecuta el flujo completo de automatización"""
-        try:
-            self.logger.info("🚀 === INICIANDO AUTOMATIZACIÓN COMPLETA ===")
+            self.logger.info(f"🌳 ANÁLISIS DETALLADO DEL ÁRBOL [{indice}]")
             
-            if not self.inicializar_aplicacion():
-                self.logger.error("❌ Fallo en inicialización")
-                return False
-            
-            if not self.mapear_controles():
-                self.logger.error("❌ Fallo en mapeo de controles")
-                return False
-            
-            if not self.ejecutar_flujo_completo():
-                self.logger.error("❌ Fallo en ejecución del flujo")
-                return False
-            
-            self.extraer_datos_completos_final()
-            
-            self.logger.info("✅ === AUTOMATIZACIÓN COMPLETADA EXITOSAMENTE ===")
-            self.logger.info(f"📄 Información completa guardada en: {self.log_filename}")
-            return True
-            
-        except Exception as e:
-            self.progress.stop()
-            print()
-            self.logger.error(f"❌ Error en automatización completa: {e}")
-            return False
-        finally:
-            self.progress.stop()
-            
-            if self.app:
-                try:
-                    self.app.kill()
-                    self.logger.info("🔚 Aplicación cerrada")
-                except:
-                    pass
-            
-            # Cerrar el archivo de log
+            # Información básica del control
+            texto = tree_control.window_text()
             try:
-                self.dual_handler.close()
+                auto_id = tree_control.automation_id
             except:
-                pass
+                auto_id = "No disponible"
+            
+            try:
+                class_name = tree_control.class_name
+            except:
+                class_name = "No disponible"
+            
+            rect = tree_control.rectangle()
+            
+            detalles = {
+                'indice': indice,
+                'texto': texto,
+                'auto_id': auto_id,
+                'class_name': class_name,
+                'control_type': str(tree_control.element_info.control_type),
+                'rectangle': f"(L{rect.left}, T{rect.top}, R{rect.right}, B{rect.bottom})",
+                'posicion': f"Left={rect.left}, Top={rect.top}, Right={rect.right}, Bottom={rect.bottom}",
+                'nodos': []
+            }
+            
+            self.logger.info(f"📋 TEXTO: {texto}")
+            self.logger.info(f"🔢 AUTO_ID: {auto_id}")
+            self.logger.info(f"📝 CLASS_NAME: {class_name}")
+            self.logger.info(f"📐 RECTANGLE: {detalles['rectangle']}")
+            
+            # Buscar nodos TreeItem dentro del árbol
+            try:
+                tree_items = tree_control.descendants(control_type="TreeItem")
+                self.logger.info(f"🌿 {len(tree_items)} nodos encontrados:")
+                
+                for i, item in enumerate(tree_items[:10]):  # Limitar a 10 para evitar spam
+                    try:
+                        item_text = item.window_text()
+                        item_rect = item.rectangle()
+                        
+                        # Verificar si es un nodo de configuración
+                        es_configuracion = "Configuración" in item_text
+                        
+                        nodo_info = {
+                            'indice': i,
+                            'texto': item_text,
+                            'es_configuracion': es_configuracion,
+                            'rectangle': f"(L{item_rect.left}, T{item_rect.top}, R{item_rect.right}, B{item_rect.bottom})"
+                        }
+                        
+                        detalles['nodos'].append(nodo_info)
+                        
+                        # Log detallado para nodos de configuración
+                        if es_configuracion:
+                            self.logger.info(f"   ⭐ [{i}] CONFIGURACIÓN: {item_text}")
+                            self.logger.info(f"       📐 Pos: {nodo_info['rectangle']}")
+                        else:
+                            self.logger.info(f"   🌿 [{i}] {item_text}")
+                        
+                    except Exception as e:
+                        self.logger.debug(f"Error procesando nodo {i}: {e}")
+                
+                # Buscar específicamente "Configuración 1"
+                config1_encontrado = any("Configuración 1" in nodo['texto'] for nodo in detalles['nodos'])
+                detalles['tiene_configuracion_1'] = config1_encontrado
+                
+                if config1_encontrado:
+                    self.logger.info("🎯 ¡ENCONTRADO 'Configuración 1'!")
+                
+            except Exception as e:
+                self.logger.debug(f"Error analizando nodos del árbol: {e}")
+                detalles['nodos'] = []
+            
+            self.logger.info("="*60)
+            return detalles
+            
+        except Exception as e:
+            self.logger.error(f"Error en análisis detallado del árbol: {e}")
+            return None
+
+    def _analizar_tree_items(self, tree_items):
+        """Analiza TreeItems encontrados de forma suelta"""
+        try:
+            items_info = {
+                'total_items': len(tree_items),
+                'items_configuracion': [],
+                'otros_items': []
+            }
+            
+            for i, item in enumerate(tree_items[:20]):  # Limitar para evitar spam
+                try:
+                    texto = item.window_text()
+                    rect = item.rectangle()
+                    
+                    item_data = {
+                        'indice': i,
+                        'texto': texto,
+                        'rectangle': f"(L{rect.left}, T{rect.top}, R{rect.right}, B{rect.bottom})"
+                    }
+                    
+                    if "Configuración" in texto:
+                        items_info['items_configuracion'].append(item_data)
+                        self.logger.info(f"   ⭐ ConfigItem[{i}]: {texto}")
+                    else:
+                        items_info['otros_items'].append(item_data)
+                        self.logger.info(f"   🌿 Item[{i}]: {texto}")
+                        
+                except Exception as e:
+                    self.logger.debug(f"Error procesando TreeItem {i}: {e}")
+            
+            return items_info
+            
+        except Exception as e:
+            self.logger.error(f"Error analizando TreeItems: {e}")
+            return None
+
+    def acceder_configuracion_1(self):
+        """Intenta acceder específicamente al nodo 'Configuración 1'"""
+        try:
+            self.logger.info("\n🎯 === ACCESO ESPECÍFICO A 'CONFIGURACIÓN 1' ===")
+            
+            if not self.analysis_window:
+                self.logger.error("❌ No hay ventana de análisis disponible")
+                return False
+            
+            # Método 1: Buscar TreeItem con texto exacto
+            try:
+                config1_item = self.analysis_window.child_window(title="Configuración 1", control_type="TreeItem")
+                if config1_item.exists():
+                    self.logger.info("✅ Método 1: Encontrado por título exacto")
+                    config1_item.click_input()
+                    time.sleep(1)
+                    self.logger.info("🖱️ Click realizado en 'Configuración 1'")
+                    return True
+            except Exception as e:
+                self.logger.debug(f"Método 1 falló: {e}")
+            
+            # Método 2: Buscar en todos los TreeItems
+            try:
+                tree_items = self.analysis_window.descendants(control_type="TreeItem")
+                for i, item in enumerate(tree_items):
+                    texto = item.window_text()
+                    if "Configuración 1" in texto:
+                        self.logger.info(f"✅ Método 2: Encontrado en TreeItem {i}")
+                        item.click_input()
+                        time.sleep(1)
+                        self.logger.info("🖱️ Click realizado en 'Configuración 1'")
+                        return True
+            except Exception as e:
+                self.logger.debug(f"Método 2 falló: {e}")
+            
+            # Método 3: Usar coordenadas si se conoce la posición
+            self.logger.info("⚠️ Métodos directos fallaron, intentando por coordenadas...")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error accediendo a 'Configuración 1': {e}")
+            return False
+
+    def ejecutar_analisis_completo(self):
+        """Ejecuta el análisis completo del árbol de configuración"""
+        try:
+            self.logger.info("🎯 === INICIANDO ANÁLISIS COMPLETO DEL ÁRBOL ===")
+            
+            # 1. Conectar con ventana secundaria
+            if not self.conectar_ventana_analisis_secundaria():
+                return False
+            
+            # 2. Extraer información del árbol
+            resultados_arbol = self.extraer_arbol_configuracion()
+            
+            # 3. Intentar acceder a 'Configuración 1'
+            acceso_config1 = self.acceder_configuracion_1()
+            
+            # Resumen final
+            self.logger.info("\n" + "="*80)
+            self.logger.info("📊 === RESUMEN ANÁLISIS COMPLETO ===")
+            self.logger.info(f"🌳 Árboles encontrados: {len(resultados_arbol)}")
+            self.logger.info(f"🎯 Acceso a 'Configuración 1': {'✅ Exitoso' if acceso_config1 else '❌ Falló'}")
+            
+            # Mostrar nodos de configuración encontrados
+            config_nodes = 0
+            for arbol_key, arbol_data in resultados_arbol.items():
+                if isinstance(arbol_data, dict) and 'nodos' in arbol_data:
+                    config_nodes += len([n for n in arbol_data['nodos'] if n.get('es_configuracion', False)])
+            
+            self.logger.info(f"⭐ Nodos de configuración: {config_nodes}")
+            self.logger.info("="*80)
+            
+            self.logger.info(f"✅ Análisis completado. Detalles en: {self.log_filename}")
+            
+            return {
+                'arboles': resultados_arbol,
+                'acceso_configuracion_1': acceso_config1,
+                'ventana_analisis': self.analysis_window is not None
+            }
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en análisis completo: {e}")
+            return None
+        finally:
+            # No cerrar para permitir inspección manual
+            pass
 
 def main():
     # Configuración
     archivo_pqm = "/Universidad/8vo Semestre/Practicas/Sonel/data/archivos_pqm/9. Catiglata T 1225 C 0100234196.pqm702"
     
-    # Crear y ejecutar automatizador
-    automatizador = SonelAnalysisAutomator(archivo_pqm)
-    exito = automatizador.ejecutar_automatizacion_completa()
+    # Crear y ejecutar extractor optimizado
+    extractor = SonelTreeExtractor(archivo_pqm)
+    resultados = extractor.ejecutar_analisis_completo()
     
-    if exito:
-        print(f"\n✅ Proceso completado exitosamente")
-        print(f"📄 Revisa el archivo: {automatizador.log_filename}")
+    if resultados:
+        print(f"\n✅ Análisis completado exitosamente")
+        print(f"📄 Detalles completos en: {extractor.log_filename}")
+        
+        # Mostrar resumen en consola
+        print("\n🎯 === RESUMEN RÁPIDO ===")
+        print(f"🌳 Árboles encontrados: {len(resultados['arboles'])}")
+        print(f"🎯 Ventana de análisis: {'✅' if resultados['ventana_analisis'] else '❌'}")
+        print(f"⭐ Acceso a Configuración 1: {'✅' if resultados['acceso_configuracion_1'] else '❌'}")
+        
+        # Listar árboles encontrados
+        if resultados['arboles']:
+            print("\n📋 Árboles detectados:")
+            for key, data in resultados['arboles'].items():
+                if isinstance(data, dict):
+                    nodos = len(data.get('nodos', []))
+                    print(f"   • {key}: {nodos} nodos")
     else:
-        print(f"\n❌ Proceso falló")
-        print(f"📄 Revisa los errores en: {automatizador.log_filename}")
+        print(f"\n❌ Análisis falló")
+        print(f"📄 Revisa errores en: {extractor.log_filename}")
 
 if __name__ == "__main__":
     main()

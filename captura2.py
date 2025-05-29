@@ -305,6 +305,27 @@ class SonelComponentExtractor:
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo opciones de filtro: {e}")
             return {}
+        
+    # OPCIÓN 2: Agregar como método separado (más seguro)
+    def extraer_menu_contextual_informe_csv(self):
+        """
+        Método específico para detectar el menú contextual "Informe CSV"
+        """
+        try:
+            self.logger.info("\n🎯 === DETECCIÓN ESPECÍFICA: MENÚ CONTEXTUAL INFORME CSV ===")
+            
+            # Importar la clase detector
+            from captura3 import MenuContextualDetector  # Ajusta la importación
+            
+            detector = MenuContextualDetector(self)
+            resultados = detector.detectar_informe_csv_completo()
+            
+            self.logger.info(f"✅ Detección de menú contextual completada: {len(resultados)} elementos encontrados")
+            return resultados
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en detección de menú contextual: {e}")
+            return {}
 
     def extraer_informes_graficos(self):
         """Extrae información específica de la sección 'Informes y gráficos'"""
@@ -668,6 +689,9 @@ class SonelComponentExtractor:
             resultados['informes_graficos'] = self.extraer_informes_graficos()
             resultados['tabla_mediciones'] = self.extraer_tabla_mediciones()
             
+            # NUEVO: Extraer menús contextuales
+            resultados['menu_contextual'] = self.extraer_menu_contextual_informe_csv()
+
             # Resumen final
             self.logger.info("\n" + "="*80)
             self.logger.info("📊 === RESUMEN FINAL DE EXTRACCIÓN ===")
@@ -675,6 +699,7 @@ class SonelComponentExtractor:
             self.logger.info(f"📊 Mostrar datos: {len(resultados['mostrar_datos'])} elementos")
             self.logger.info(f"📈 Informes: {len(resultados['informes_graficos'])} componentes")
             self.logger.info(f"📋 Tablas: {len(resultados['tabla_mediciones'])} tablas")
+            self.logger.info(f"🎯 Menús contextuales: {len(resultados['menu_contextual'])} elementos")
             self.logger.info("="*80)
             
             self.logger.info(f"✅ Extracción completada. Resultados en: {self.log_filename}")
