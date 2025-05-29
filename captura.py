@@ -1,11 +1,3 @@
-#import pyautogui
-#import time
-
-#print("Coloca el mouse donde desees capturar la coordenada...")
-#time.sleep(5)
-#x, y = pyautogui.position()
-#print(f"Coordenadas capturadas: ({x}, {y})")
-
 import time
 import logging
 from pywinauto import Application
@@ -439,47 +431,32 @@ class SonelAnalysisAutomator:
             return f"sonel_export_{timestamp}"
     
     def _extraer_info_paso(self, paso):
-        """Extrae información COMPLETA después de cada paso de navegación"""
+        """🚀 VERSIÓN OPTIMIZADA - SOLO DETECTA TABLAS SIN ANÁLISIS EXHAUSTIVO"""
         try:
-            self.logger.info(f"📋 === INFORMACIÓN COMPLETA DESPUÉS DE: {paso} ===")
+            self.logger.info(f"📋 === INFORMACIÓN DESPUÉS DE: {paso} ===")
             
-            # ✅ INDICADOR DE PROGRESO ESPECÍFICO
-            if paso == "Mediciones":
-                self.logger.info("⚠️ EXTRAYENDO INFORMACIÓN DE MEDICIONES - PASO CRÍTICO")
-            
-            # Extraer estructura COMPLETA de controles
+            # Extraer estructura completa de controles (esto es rápido)
             try:
                 self.logger.info("🔍 === ESTRUCTURA COMPLETA DE CONTROLES ===")
                 self.main_window.print_control_identifiers()
             except Exception as e:
                 self.logger.error(f"❌ Error imprimiendo estructura: {e}")
             
-            # ✅ REDUCIR CARGA EN MEDICIONES - Solo controles esenciales
-            if paso == "Mediciones":
-                self.logger.info("🔄 Modo reducido para Mediciones - Solo controles críticos")
-                control_types_reduced = [
-                    ("Table", "Table"),
-                    ("DataGrid", "DataGrid"),
-                    ("Text", "Text"),
-                    ("Button", "Button")
-                ]
-                control_types_to_process = control_types_reduced
-            else:
-                # Lista completa para otros pasos
-                control_types_to_process = [
-                    ("Window", "Window"),
-                    ("Dialog", "Window"), 
-                    ("Table", "Table"),
-                    ("DataGrid", "DataGrid"),
-                    ("Text", "Text"),
-                    ("Edit", "Edit"),
-                    ("Button", "Button"),
-                    ("Tree", "Tree"),
-                    ("List", "List"),
-                    ("MenuItem", "MenuItem"),
-                    ("CheckBox", "CheckBox"),
-                    ("ComboBox", "ComboBox")
-                ]
+            # ✅ PROCESAMIENTO OPTIMIZADO - SIN ANÁLISIS EXHAUSTIVO DE TABLAS
+            control_types_to_process = [
+                ("Window", "Window"),
+                ("Dialog", "Window"), 
+                ("Table", "Table"),      # ✅ OPTIMIZADO: Solo info básica
+                ("DataGrid", "DataGrid"), # ✅ OPTIMIZADO: Solo info básica
+                ("Text", "Text"),
+                ("Edit", "Edit"),
+                ("Button", "Button"),
+                ("Tree", "Tree"),
+                ("List", "List"),
+                ("MenuItem", "MenuItem"),
+                ("CheckBox", "CheckBox"),
+                ("ComboBox", "ComboBox")
+            ]
             
             for control_name, control_type in control_types_to_process:
                 try:
@@ -487,10 +464,7 @@ class SonelAnalysisAutomator:
                     if controls:
                         self.logger.info(f"\n🔍 === {control_name.upper()} - {len(controls)} ENCONTRADOS ===")
                         
-                        # ✅ LIMITAR PROCESAMIENTO EN MEDICIONES
-                        max_controls = 5 if paso == "Mediciones" else len(controls)
-                        
-                        for i, control in enumerate(controls[:max_controls]):
+                        for i, control in enumerate(controls):
                             try:
                                 # Extraer información básica
                                 text = control.window_text()
@@ -506,21 +480,42 @@ class SonelAnalysisAutomator:
                                 self.logger.info(f"TYPE: {control_type_info}")
                                 self.logger.info(f"POS: {rect}")
                                 
-                                # ✅ PROCESAMIENTO LIMITADO PARA MEDICIONES
-                                if paso != "Mediciones":
-                                    # Para controles específicos, extraer más información (solo si NO es Mediciones)
-                                    if control_type == "Table" or control_type == "DataGrid":
+                                # ✅ OPTIMIZACIÓN CLAVE: TABLAS SIN ANÁLISIS EXHAUSTIVO
+                                if control_type == "Table" or control_type == "DataGrid":
+                                    try:
+                                        self.logger.info("=== 📊 TABLA DETECTADA - INFO BÁSICA SOLAMENTE ===")
+                                        
+                                        # ✅ SOLO CONTAR ELEMENTOS, NO PROCESARLOS UNO POR UNO
                                         try:
-                                            self.logger.info("=== TABLA INFO ===")
                                             rows = control.descendants(control_type="DataItem")
-                                            self.logger.info(f"FILAS: {len(rows)}")
+                                            headers = control.descendants(control_type="Header")
+                                            cells = control.descendants(control_type="Custom")
                                             
-                                            for row_idx, row in enumerate(rows[:3]):  # Solo 3 filas
-                                                row_text = row.window_text()
-                                                self.logger.info(f"FILA[{row_idx}]: {row_text}")
+                                            self.logger.info(f"📊 TABLA RESUMEN:")
+                                            self.logger.info(f"   🔢 TOTAL FILAS: {len(rows)}")
+                                            self.logger.info(f"   📋 TOTAL HEADERS: {len(headers)}")
+                                            self.logger.info(f"   📦 TOTAL CELDAS: {len(cells)}")
+                                            self.logger.info(f"   ✅ TABLA DETECTADA Y CONTABILIZADA")
+                                            
+                                            # ✅ SOLO MOSTRAR ALGUNOS HEADERS (NO TODOS)
+                                            if headers and len(headers) > 0:
+                                                self.logger.info("📋 ALGUNOS HEADERS ENCONTRADOS:")
+                                                for h_idx, header in enumerate(headers[:5]):  # ✅ SOLO LOS PRIMEROS 5
+                                                    header_text = header.window_text()
+                                                    self.logger.info(f"   HEADER[{h_idx}]: {header_text}")
                                                 
-                                        except Exception as table_error:
-                                            self.logger.info(f"Info tabla - Error: {table_error}")
+                                                if len(headers) > 5:
+                                                    self.logger.info(f"   ... y {len(headers) - 5} headers más")
+                                            
+                                        except Exception as count_error:
+                                            self.logger.info(f"Info conteo tabla - Error: {count_error}")
+                                            self.logger.info("✅ TABLA DETECTADA (conteo no disponible)")
+                                        
+                                        self.logger.info("=== FIN INFO TABLA ===")
+                                        
+                                    except Exception as table_error:
+                                        self.logger.info(f"Info tabla básica - Error: {table_error}")
+                                        self.logger.info("✅ TABLA DETECTADA (info básica no disponible)")
                                 
                                 self.logger.info("=" * 30)
                                 
@@ -534,10 +529,10 @@ class SonelAnalysisAutomator:
             self.logger.error(f"❌ Error en extracción paso {paso}: {e}")
     
     def extraer_datos_completos_final(self):
-        """Extrae TODOS los datos disponibles en la aplicación - ANÁLISIS FINAL"""
+        """Extrae TODOS los datos disponibles en la aplicación - ANÁLISIS FINAL OPTIMIZADO"""
         try:
-            self.progress.start("Extracción final completa de datos")
-            self.logger.info("📊 === EXTRACCIÓN FINAL COMPLETA DE TODOS LOS DATOS ===")
+            self.progress.start("Extracción final optimizada de datos")
+            self.logger.info("📊 === EXTRACCIÓN FINAL OPTIMIZADA ===")
             
             # Estructura COMPLETA final
             self.logger.info("🔍 === ESTRUCTURA COMPLETA FINAL ===")
@@ -546,14 +541,14 @@ class SonelAnalysisAutomator:
             except Exception as e:
                 self.logger.error(f"Error imprimiendo estructura final: {e}")
             
-            # Solo extraer controles más importantes para evitar cuelgue
+            # ✅ SOLO CONTROLES IMPORTANTES Y PROCESAMIENTO MÍNIMO
             important_control_types = [
                 "Table", "DataGrid", "Text", "Button", "Tree", "List"
             ]
             
             self.progress.stop()
             print()
-            self.logger.info("🔍 === EXTRACCIÓN DE CONTROLES IMPORTANTES ===")
+            self.logger.info("🔍 === EXTRACCIÓN OPTIMIZADA DE CONTROLES IMPORTANTES ===")
             
             for control_type in important_control_types:
                 try:
@@ -565,7 +560,7 @@ class SonelAnalysisAutomator:
                         self.logger.info(f"🔍 TIPO: {control_type.upper()} - TOTAL: {len(controls)}")
                         self.logger.info(f"{'='*60}")
                         
-                        # Procesar solo los primeros 3 controles para evitar cuelgue
+                        # ✅ PROCESAMIENTO MÍNIMO - SOLO PRIMEROS 3 CONTROLES
                         for i, control in enumerate(controls[:3]):
                             try:
                                 self.logger.info(f"\n--- [{control_type}][{i}] ---")
@@ -578,6 +573,15 @@ class SonelAnalysisAutomator:
                                 self.logger.info(f"TEXT: {repr(text)}")
                                 self.logger.info(f"AUTO_ID: {repr(auto_id)}")
                                 self.logger.info(f"RECT: {rect}")
+                                
+                                # ✅ PARA TABLAS: SOLO INFO BÁSICA
+                                if control_type in ["Table", "DataGrid"]:
+                                    try:
+                                        descendants_count = len(control.descendants())
+                                        self.logger.info(f"TABLA INFO: {descendants_count} elementos internos total")
+                                        self.logger.info("✅ TABLA PROCESADA BÁSICAMENTE")
+                                    except:
+                                        self.logger.info("✅ TABLA DETECTADA")
                                 
                             except Exception as control_error:
                                 self.logger.error(f"ERROR {control_type}[{i}]: {control_error}")
@@ -592,7 +596,7 @@ class SonelAnalysisAutomator:
                         self.logger.info(f"INFO - No {control_type}: {type_error}")
             
             self.logger.info("\n" + "="*60)
-            self.logger.info("✅ EXTRACCIÓN COMPLETA FINALIZADA")
+            self.logger.info("✅ EXTRACCIÓN OPTIMIZADA FINALIZADA")
             self.logger.info("="*60)
                     
         except Exception as e:
