@@ -1,72 +1,80 @@
 import os
-import time
-import pyautogui
+import datetime
+from pathlib import Path
 from config.logger import logger
 
 
-class GUIHelpers:
+class FileHelpers:
     @staticmethod
-    def debug_log(message, debug_mode=None):
-        if debug_mode is None:
-            debug_mode = os.getenv('DEBUG_MODE', 'False').lower() == 'true'
-        
-        if debug_mode:
-            print(f"[DEBUG] {message}")
-            logger.debug(message)
-
-    @staticmethod
-    def safe_click(x, y, description="", delay_after=None, default_delay=0.5, debug_mode=None):
+    def generate_csv_filename(pqm_file_path, cleanup_enabled=True):
         try:
-            GUIHelpers.debug_log(f"Haciendo clic en ({x}, {y}) - {description}", debug_mode)
+            base_name = Path(pqm_file_path).stem
             
-            pyautogui.moveTo(x, y, duration=0.2)
-            pyautogui.click(x, y)
+            if cleanup_enabled:
+                clean_name = "".join(c for c in base_name if c.isalnum() or c in ('-', '_', ' '))
+                clean_name = clean_name.strip()
+                if clean_name:
+                    base_name = clean_name
             
-            wait_time = delay_after if delay_after is not None else default_delay
-            time.sleep(wait_time)
-            
-            return True
+            return base_name
             
         except Exception as e:
-            logger.error(f"❌ Error haciendo clic en ({x}, {y}) - {description}: {e}")
+            logger.error(f"Error generando nombre CSV: {e}")
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            return f"export_{timestamp}"
+
+    @staticmethod
+    def ensure_directory_exists(directory_path):
+        try:
+            os.makedirs(directory_path, exist_ok=True)
+            return True
+        except Exception as e:
+            logger.error(f"Error creando directorio {directory_path}: {e}")
             return False
 
     @staticmethod
-    def stabilization_pause(delay_seconds, file_number=None, total_files=None):
-        if file_number is not None and total_files is not None:
-            if file_number < total_files:
-                time.sleep(delay_seconds)
-        else:
-            time.sleep(delay_seconds)
+    def get_file_size_formatted(file_path):
+        try:
+            if os.path.exists(file_path):
+                size_bytes = os.path.getsize(file_path)
+                return f"{size_bytes:,} bytes"
+            return "0 bytes"
+        except Exception:
+            return "Unknown size"
 
     @staticmethod
-    def write_text_safely(text, clear_first=True, delay_after=0.5):
+    def validate_file_exists(file_path, min_size_bytes=0):
         try:
-            if clear_first:
-                pyautogui.hotkey('ctrl', 'a')
-                time.sleep(0.3)
+            if not os.path.exists(file_path):
+                return False, f"Archivo no encontrado: {file_path}"
             
-            pyautogui.write(text)
-            time.sleep(delay_after)
-            return True
+            if min_size_bytes > 0:
+                size = os.path.getsize(file_path)
+                if size < min_size_bytes:
+                    return False, f"Archivo muy pequeño ({size} bytes, mínimo {min_size_bytes})"
+            
+            return True, "Archivo válido"
             
         except Exception as e:
-            logger.error(f"❌ Error escribiendo texto '{text}': {e}")
-            return False
+            return False, f"Error validando archivo: {e}"
 
     @staticmethod
-    def send_hotkey(key_combination, delay_after=0.5):
+    def get_files_by_extension(directory, extension, sort_files=True):
         try:
-            if isinstance(key_combination, str):
-                pyautogui.press(key_combination)
-            elif isinstance(key_combination, (list, tuple)):
-                pyautogui.hotkey(*key_combination)
-            else:
-                raise ValueError("key_combination debe ser string o lista/tupla")
+            if not os.path.exists(directory):
+                logger.error(f"Directorio no existe: {directory}")
+                return []
             
-            time.sleep(delay_after)
-            return True
+            files = []
+            for file in os.listdir(directory):
+                if file.lower().endswith(extension.lower()):
+                    files.append(os.path.join(directory, file))
+            
+            if sort_files:
+                files.sort()
+            
+            return files
             
         except Exception as e:
-            logger.error(f"❌ Error enviando tecla(s) {key_combination}: {e}")
-            return False
+            logger.error(f"Error obteniendo archivos {extension} de {directory}: {e}")
+            return []
