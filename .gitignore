@@ -5,3 +5,4 @@
 .env
 config.ini
 *.txt
+*.pyc\n__pycache__/
