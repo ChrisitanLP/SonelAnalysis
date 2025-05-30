@@ -2,14 +2,12 @@ import os
 import time
 from pathlib import Path
 from config.logger import logger
-from config.settings import get_coordinates, get_delays, DEFAULT_EXPORT_DIR, DEFAULT_INPUT_DIR, DEFAULT_SONEL_EXE_PATH
-
+from config.settings import get_coordinates, get_delays
 from extractors.base import BaseExtractor
 from extractors.gui_automation.process_manager import ProcessManager
 from extractors.gui_automation.window_controller import WindowController
 from extractors.gui_automation.file_tracker import FileTracker
 from extractors.gui_automation.export_controller import ExportController
-from utils.gui_helpers import debug_log
 
 class GUIExtractor(BaseExtractor):
     """Orquestador principal para extraer datos mediante automatización de GUI"""
@@ -113,11 +111,11 @@ class GUIExtractor(BaseExtractor):
             
         except KeyboardInterrupt:
             logger.info("\n⛔ PROCESO INTERRUMPIDO POR EL USUARIO")
-            self.process_manager.close_sonel_analysis_safely()
+            self.process_manager.close_sonel_analysis_force()
             return processed_files if 'processed_files' in locals() else []
         except Exception as e:
             logger.error(f"\n💥 ERROR CRÍTICO DURANTE LA AUTOMATIZACIÓN: {e}")
-            self.process_manager.close_sonel_analysis_safely()
+            self.process_manager.close_sonel_analysis_force()
             return processed_files if 'processed_files' in locals() else []
         finally:
             try:
