@@ -5,7 +5,7 @@ import psutil
 import pygetwindow as gw
 import pyautogui
 from config.logger import logger
-from utils.gui_helpers import debug_log
+from utils.gui_helpers import GUIHelpers
 
 class ProcessManager:
     """Maneja procesos y subprocesos de Sonel Analysis"""
@@ -33,11 +33,11 @@ class ProcessManager:
         Limpia procesos de Sonel de forma segura para evitar crashes
         """
         if not self.auto_close_enabled:
-            debug_log(self.debug_mode, "Cleanup de procesos deshabilitado por configuración")
+            GUIHelpers.debug_log(self.debug_mode, "Cleanup de procesos deshabilitado por configuración")
             return
         
         try:
-            debug_log(self.debug_mode, "Limpiando procesos de Sonel...")
+            GUIHelpers.debug_log(self.debug_mode, "Limpiando procesos de Sonel...")
             
             # Buscar procesos de Sonel
             sonel_processes = []
@@ -53,7 +53,7 @@ class ProcessManager:
             # Terminar procesos de forma ordenada
             for proc in sonel_processes:
                 try:
-                    debug_log(self.debug_mode, f"Terminando proceso: {proc.info['name']} (PID: {proc.pid})")
+                    GUIHelpers.debug_log(self.debug_mode, f"Terminando proceso: {proc.info['name']} (PID: {proc.pid})")
                     proc.terminate()
                     proc.wait(timeout=self.process_config.get('force_kill_timeout', 10))
                 except (psutil.NoSuchProcess, psutil.TimeoutExpired):
@@ -94,7 +94,7 @@ class ProcessManager:
             try:
                 # Abrir archivo con el programa
                 cmd = [self.sonel_exe_path, pqm_file_path]
-                debug_log(self.debug_mode, f"Ejecutando comando: {' '.join(cmd)}")
+                GUIHelpers.debug_log(self.debug_mode, f"Ejecutando comando: {' '.join(cmd)}")
                 
                 # Usar subprocess con configuración más segura
                 self.current_process = subprocess.Popen(
@@ -104,7 +104,7 @@ class ProcessManager:
                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
                 )
                 
-                debug_log(self.debug_mode, f"Proceso iniciado con PID: {self.current_process.pid}")
+                GUIHelpers.debug_log(self.debug_mode, f"Proceso iniciado con PID: {self.current_process.pid}")
                 
             except Exception as e:
                 logger.warning(f"Fallo subprocess, intentando con os.startfile: {e}")
@@ -140,12 +140,12 @@ class ProcessManager:
             sonel_windows = [w for w in all_windows if w.title and "sonel" in w.title.lower()]
 
             if not sonel_windows:
-                debug_log(self.debug_mode, "No se encontraron ventanas de Sonel para cerrar")
+                GUIHelpers.debug_log(self.debug_mode, "No se encontraron ventanas de Sonel para cerrar")
                 return True
 
             for window in sonel_windows:
                 try:
-                    debug_log(self.debug_mode, f"Cerrando ventana: {window.title}")
+                    GUIHelpers.debug_log(self.debug_mode, f"Cerrando ventana: {window.title}")
                     window.activate()
                     time.sleep(0.5)
                     pyautogui.hotkey('alt', 'f4')
@@ -183,7 +183,7 @@ class ProcessManager:
             all_windows = gw.getAllWindows()
             sonel_windows = [w for w in all_windows if w.title and "sonel" in w.title.lower()]
             count = len(sonel_windows)
-            debug_log(self.debug_mode, f"Ventanas de Sonel detectadas: {count}")
+            GUIHelpers.debug_log(self.debug_mode, f"Ventanas de Sonel detectadas: {count}")
             return count
         except Exception as e:
             logger.error(f"Error contando ventanas de Sonel: {e}")
@@ -217,7 +217,7 @@ class ProcessManager:
                 
                 for window in sonel_windows:
                     try:
-                        debug_log(self.debug_mode, f"Cerrando ventana: {window.title}")
+                        GUIHelpers.debug_log(self.debug_mode, f"Cerrando ventana: {window.title}")
                         window.activate()
                         time.sleep(0.5)
                         pyautogui.hotkey('alt', 'f4')
@@ -239,3 +239,25 @@ class ProcessManager:
         except Exception as e:
             logger.error(f"Error en cierre manual de Sonel: {e}")
             return False
+
+    def close_sonel_analysis_force(self):
+        """
+        Cierra todos los procesos relacionados con Sonel Analysis de forma forzada.
+        """
+        sonel_keywords = ['SonelAnalysis.exe', 'sonelanalysis.exe'] # Ajusta según el nombre real del proceso
+        closed = 0
+
+        for proc in psutil.process_iter(['pid', 'name']):
+            try:
+                proc_name = proc.info['name'].lower()
+                if any(keyword in proc_name for keyword in sonel_keywords):
+                    proc.kill()
+                    logger.info(f"💀 Proceso Sonel terminado: {proc.info['name']} (PID: {proc.info['pid']})")
+                    closed += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
+        if closed == 0:
+            logger.info("✅ No se encontraron procesos de Sonel para cerrar.")
+        else:
+            logger.info(f"✅ Se cerraron {closed} procesos de Sonel.")
