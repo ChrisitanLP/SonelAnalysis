@@ -4,7 +4,7 @@ import os
 import argparse
 from config.logger import logger
 from config.settings import load_config
-from sonel_etl import SonelETL
+from etl.sonel_etl import SonelETL
 from database.connection import DatabaseConnection
 
 def parse_arguments():
