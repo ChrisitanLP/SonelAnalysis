@@ -23,6 +23,7 @@ class GUIExtractor(BaseExtractor):
         self.config = config
         
         # Configuración de rutas
+        self.process_file_dir = config['PATHS'].get('export_dir', 'D:/Universidad/8vo Semestre/Practicas/Sonel/data/archivos_pqm')
         self.export_dir = config['PATHS'].get('export_dir', 'D:/Universidad/8vo Semestre/Practicas/Sonel/data/archivos_csv')
         self.input_dir = config['PATHS'].get('input_dir', './data/archivos_pqm/')
         self.sonel_exe_path = config['PATHS'].get('sonel_exe_path', 'D:/Wolfly/Sonel/SonelAnalysis.exe')

@@ -16,12 +16,13 @@ class FileTracker:
         """
         self.parent = parent_extractor
         self.config = parent_extractor.config
+        self.process_file_dir = parent_extractor.process_file_dir
         self.export_dir = parent_extractor.export_dir
         self.input_dir = parent_extractor.input_dir
         self.debug_mode = parent_extractor.debug_mode
         
         self.processed_files_json = os.path.join(
-            self.export_dir,
+            self.process_file_dir,
             'procesados.json'
         )
 
