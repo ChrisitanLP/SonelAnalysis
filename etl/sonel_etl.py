@@ -9,7 +9,7 @@ from extractors.file_extractor import FileExtractor
 from extractors.gui_extractor import GUIExtractor
 from transformers.voltage_transformer import VoltageTransformer
 from utils.validators import extract_client_code
-from utils.processing_registry import ProcessingRegistry
+from utils.processing_registry import ProcessingRegistry, ProcessingStatus
 
 class SonelETL:
     """Clase orquestadora del proceso ETL completo con control de procesamiento"""
@@ -336,7 +336,7 @@ class SonelETL:
         
         # Mostrar archivos con errores recientes si los hay
         if stats['errors'] > 0:
-            error_files = self.registry.get_files_by_status(self.registry.ProcessingStatus.ERROR)
+            error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
             logger.info(f"❌ Archivos con errores recientes ({min(3, len(error_files))} de {len(error_files)}):")
             for file_path in error_files[:3]:
                 file_data = self.registry.registry_data["files"][file_path]
