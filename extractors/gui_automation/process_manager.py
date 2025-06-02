@@ -43,9 +43,9 @@ class ProcessManager:
             sonel_processes = []
             for proc in psutil.process_iter(['pid', 'name', 'exe']):
                 try:
-                    if proc.info['name'] and 'sonel' in proc.info['name'].lower():
+                    if proc.info['name'] and 'SonelAnalysis' in proc.info['name'].lower():
                         sonel_processes.append(proc)
-                    elif proc.info['exe'] and 'sonel' in proc.info['exe'].lower():
+                    elif proc.info['exe'] and 'SonelAnalysis' in proc.info['exe'].lower():
                         sonel_processes.append(proc)
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     continue
