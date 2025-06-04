@@ -22,7 +22,7 @@ project_dir = Path(__file__).parent
 sys.path.insert(0, str(project_dir))
 
 # Imports para extracción GUI
-from config.settings import get_config, create_directories, get_full_config
+from config.settings import create_directories, get_full_config
 from config.logger import logger
 from extractors.gui_extractor import GUIExtractor
 

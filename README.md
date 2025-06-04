@@ -123,3 +123,33 @@ Limitaciones
 La automatización GUI es frágil y puede fallar si la interfaz cambia
 El soporte para archivos MDB requiere configuración ODBC adicional
 El script está diseñado para extraer solo datos de voltaje según lo especificado
+
+Modos de Operación Flexibles
+
+# Flujo completo (extracción + procesamiento)
+python sonel_integrated_main.py
+
+# Solo extracción GUI
+python sonel_integrated_main.py --extract-only
+
+# Solo procesamiento ETL
+python sonel_integrated_main.py --process-only
+
+# Con modo debug
+python sonel_integrated_main.py --debug
+
+# Forzar reprocesamiento
+python sonel_integrated_main.py --force
+
+Opciones:
+    --extract-only        Solo ejecutar extracción GUI
+    --process-only        Solo ejecutar procesamiento ETL
+    --force               Forzar reprocesamiento de archivos
+    --debug               Activar modo debug
+    --help                Mostrar esta ayuda
+
+Flujo de trabajo:
+1. Extracción GUI: Procesa archivos .pqm702 → genera archivos CSV
+2. Validación: Verifica que los archivos CSV se hayan generado correctamente
+3. Procesamiento ETL: Carga los archivos CSV a la base de datos
+4. Limpieza: Opcionalmente mueve/archiva archivos procesados
