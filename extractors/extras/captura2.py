@@ -1,12 +1,10 @@
+import re
 import time
 import logging
-from pywinauto import Application
-from pywinauto.controls.uiawrapper import UIAWrapper
-import pyautogui
 import os
 from datetime import datetime
-import threading
-import sys
+from pywinauto import Desktop
+from pywinauto import Application
 
 class SonelComponentExtractor:
     def __init__(self, archivo_pqm, ruta_exe="D:/Wolfly/Sonel/SonelAnalysis.exe"):
@@ -203,7 +201,7 @@ class SonelComponentExtractor:
 
             # 2. Buscar CheckBoxes: "Prom.", "Min.", "Instant.", "Máx."
             self.logger.info("\n☑️ Buscando CheckBoxes de medición...")
-            checkboxes_medicion = ["Prom.", "Min.", "Instant.", "Máx."]
+            checkboxes_medicion = ["Prom.", "Mín.", "Instant.", "Máx."]
             checkboxes = self.analysis_window.descendants(control_type="CheckBox")
             for checkbox in checkboxes:
                 texto = checkbox.window_text().strip()
@@ -307,207 +305,20 @@ class SonelComponentExtractor:
             return {}
         
     # OPCIÓN 2: Agregar como método separado (más seguro)
-    def extraer_menu_contextual_informe_csv(self):
-        """
-        Método específico para detectar el menú contextual "Informe CSV"
-        """
-        try:
-            self.logger.info("\n🎯 === DETECCIÓN ESPECÍFICA: MENÚ CONTEXTUAL INFORME CSV ===")
-            
-            # Importar la clase detector
-            from captura3 import MenuContextualDetector  # Ajusta la importación
-            
-            detector = MenuContextualDetector(self)
-            resultados = detector.detectar_informe_csv_completo()
-            
-            self.logger.info(f"✅ Detección de menú contextual completada: {len(resultados)} elementos encontrados")
-            return resultados
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error en detección de menú contextual: {e}")
-            return {}
-
     def extraer_informes_graficos(self):
         """Extrae información específica de la sección 'Informes y gráficos'"""
         try:
             self.logger.info("\n📈 === EXTRACCIÓN: INFORMES Y GRÁFICOS ===")
-            
-            informes_encontrados = {}
+
             index = 0
-            
-            # 1. Buscar SplitButton "Informes" específicamente
-            self.logger.info("\n🔽 Buscando SplitButton 'Informes'...")
-            
-            # Método 1: Buscar por título exacto
-            try:
-                informes_combo = self.analysis_window.child_window(title="Informes", control_type="SplitButton")
-                if informes_combo.exists():
-                    detalles = self._log_control_details(informes_combo, index, "SplitButton")
-                    if detalles:
-                        # Obtener valor actual
-                        try:
-                            valor_actual = informes_combo.get_value()
-                        except:
-                            try:
-                                valor_actual = informes_combo.selected_text()
-                            except:
-                                valor_actual = "No disponible"
-                        
-                        # Obtener opciones disponibles
-                        try:
-                            items = informes_combo.item_texts()
-                        except:
-                            items = ["No disponibles"]
-                        
-                        detalles['valor_actual'] = valor_actual
-                        detalles['opciones_disponibles'] = items
-                        detalles['metodo_deteccion'] = "Por título exacto"
-                        
-                        # Verificar si contiene "Informes CSV"
-                        contiene_csv = any("CSV" in str(item).upper() for item in items)
-                        detalles['contiene_informes_csv'] = contiene_csv
-                        
-                        informes_encontrados[f"ComboBox_Informes_{index}"] = detalles
-                        index += 1
-                        
-                        self.logger.info(f"   ✅ ENCONTRADO por título exacto")
-                        self.logger.info(f"   💡 Valor actual: {valor_actual}")
-                        self.logger.info(f"   📝 Opciones: {items}")
-                        self.logger.info(f"   📊 Contiene 'Informes CSV': {contiene_csv}")
-                        
-            except Exception as e:
-                self.logger.debug(f"No se encontró ComboBox por título exacto: {e}")
-            
-            # Método 2: Buscar por contenido "Informes" en todos los ComboBox
-            self.logger.info("\n🔍 Buscando ComboBox que contenga 'Informes'...")
-            comboboxes = self.analysis_window.descendants(control_type="ComboBox")
-            
-            for i, combo in enumerate(comboboxes):
-                try:
-                    texto_combo = combo.window_text().strip()
-                    
-                    # Verificar si contiene "Informes" o si ya fue encontrado
-                    if "Informes" in texto_combo or "Informe" in texto_combo:
-                        # Evitar duplicados
-                        ya_encontrado = any("ComboBox_Informes" in key for key in informes_encontrados.keys())
-                        if not ya_encontrado:
-                            detalles = self._log_control_details(combo, index, "ComboBox")
-                            if detalles:
-                                # Obtener valor actual
-                                try:
-                                    valor_actual = combo.get_value()
-                                except:
-                                    try:
-                                        valor_actual = combo.selected_text()
-                                    except:
-                                        valor_actual = "No disponible"
-                                
-                                # Obtener opciones disponibles
-                                try:
-                                    items = combo.item_texts()
-                                except:
-                                    items = ["No disponibles"]
-                                
-                                detalles['valor_actual'] = valor_actual
-                                detalles['opciones_disponibles'] = items
-                                detalles['metodo_deteccion'] = "Por contenido de texto"
-                                
-                                # Verificar si contiene "Informes CSV"
-                                contiene_csv = any("CSV" in str(item).upper() for item in items)
-                                detalles['contiene_informes_csv'] = contiene_csv
-                                
-                                informes_encontrados[f"ComboBox_Informes_Contenido_{index}"] = detalles
-                                index += 1
-                                
-                                self.logger.info(f"   ✅ ENCONTRADO por contenido: {texto_combo}")
-                                self.logger.info(f"   💡 Valor actual: {valor_actual}")
-                                self.logger.info(f"   📝 Opciones: {items}")
-                                self.logger.info(f"   📊 Contiene 'Informes CSV': {contiene_csv}")
-                    
-                    # También verificar opciones internas del ComboBox
-                    else:
-                        try:
-                            items = combo.item_texts()
-                            contiene_informes = any("Informe" in str(item) for item in items)
-                            contiene_csv = any("CSV" in str(item).upper() for item in items)
-                            
-                            if contiene_informes or contiene_csv:
-                                # Evitar duplicados
-                                ya_encontrado = any("ComboBox_Informes" in key for key in informes_encontrados.keys())
-                                if not ya_encontrado:
-                                    detalles = self._log_control_details(combo, index, "ComboBox")
-                                    if detalles:
-                                        try:
-                                            valor_actual = combo.get_value()
-                                        except:
-                                            try:
-                                                valor_actual = combo.selected_text()
-                                            except:
-                                                valor_actual = "No disponible"
-                                        
-                                        detalles['valor_actual'] = valor_actual
-                                        detalles['opciones_disponibles'] = items
-                                        detalles['metodo_deteccion'] = "Por opciones internas"
-                                        detalles['contiene_informes_csv'] = contiene_csv
-                                        
-                                        informes_encontrados[f"ComboBox_ConOpciones_{index}"] = detalles
-                                        index += 1
-                                        
-                                        self.logger.info(f"   ✅ ENCONTRADO por opciones internas")
-                                        self.logger.info(f"   💡 Valor actual: {valor_actual}")
-                                        self.logger.info(f"   📝 Opciones relevantes: {[item for item in items if 'Informe' in str(item) or 'CSV' in str(item).upper()]}")
-                        except:
-                            pass
-                
-                except Exception as e:
-                    self.logger.debug(f"Error procesando ComboBox {i}: {e}")
-            
-            # Método 3: Buscar por contenido "Informes" en todos los Button
-            self.logger.info("\n🔘 Buscando botón 'Informes' y opción 'Informe CSV'...")
+            informes_encontrados = self._buscar_informes(index)
+            index += len(informes_encontrados)
 
+            # Buscar gráficos con lógica actual
+            self.logger.info("\n🎨 Buscando botones 'Gráficos'...")
             buttons = self.analysis_window.descendants(control_type="Button")
-            for index, button in enumerate(buttons):
-                try:
-                    texto_button = button.window_text().strip()
-                    if "Informe" in texto_button or "Informes" in texto_button:
-                        ya_encontrado = any("Button_Informes" in key for key in informes_encontrados.keys())
-                        if not ya_encontrado:
-                            detalles = self._log_control_details(button, index, "Button")
-                            if detalles:
-                                detalles['metodo_deteccion'] = "Por contenido de texto"
-                                informes_encontrados[f"Button_Informes_Contenido_{index}"] = detalles
-                                self.logger.info(f"   ✅ BUTTON encontrado por contenido: {texto_button}")
 
-                                # Hacer clic para desplegar las opciones
-                                button.click_input()
-                                time.sleep(1)
-
-                                # 🔍 Buscar por contenido el texto "Informe CSV" como hiciste antes
-                                posibles_opciones = self.analysis_window.descendants()
-                                for sub_index, opcion in enumerate(posibles_opciones):
-                                    try:
-                                        texto_opcion = opcion.window_text().strip()
-                                        if "Informe CSV" in texto_opcion:
-                                            self.logger.info(f"      ✅ Opción encontrada: {texto_opcion}")
-
-                                            informes_encontrados[f"Opcion_Informe_CSV_{sub_index}"] = {
-                                                "titulo": texto_opcion,
-                                                "indice": sub_index,
-                                                "rect": opcion.rectangle().dump() if hasattr(opcion, "rectangle") else None,
-                                                "control_type": opcion.friendly_class_name(),
-                                                "metodo_deteccion": "Por contenido de texto tras click en 'Informes'"
-                                            }
-
-                                            # (Opcional) Ejecutar la opción automáticamente:
-                                            # opcion.click_input()
-                                            break
-                                    except Exception as e:
-                                        self.logger.debug(f"Error evaluando opción: {e}")
-                except Exception as e:
-                    self.logger.debug(f"Error procesando Button: {e}")
-
-            
-            # Método 1: Buscar por título exacto
+            # Método 1: Título exacto
             try:
                 graficos_btn = self.analysis_window.child_window(title="Gráficos", control_type="Button")
                 if graficos_btn.exists():
@@ -515,163 +326,354 @@ class SonelComponentExtractor:
                     if detalles:
                         detalles['funcionalidad'] = "Abre vista gráfica del análisis"
                         detalles['metodo_deteccion'] = "Por título exacto"
-                        
                         informes_encontrados[f"Button_Graficos_{index}"] = detalles
                         index += 1
-                        
-                        self.logger.info(f"   ✅ BUTTON 'Gráficos' encontrado por título exacto")
-                        
+                        self.logger.info("   ✅ BUTTON 'Gráficos' encontrado por título exacto")
             except Exception as e:
-                self.logger.debug(f"No se encontró Button por título exacto: {e}")
-            
-            # Método 2: Buscar por contenido "Gráficos" en todos los Button
-            buttons = self.analysis_window.descendants(control_type="Button")
+                self.logger.debug(f"No se encontró botón 'Gráficos': {e}")
+
+            # Método 2: Por contenido textual
             for button in buttons:
                 try:
                     texto_button = button.window_text().strip()
-                    if "Gráfico" in texto_button or "Grafico" in texto_button:
-                        # Evitar duplicados
-                        ya_encontrado = any("Button_Graficos" in key for key in informes_encontrados.keys())
+                    if "Gráfico" in texto_button or "Gráficos" in texto_button:
+                        ya_encontrado = any("Button_Graficos" in k for k in informes_encontrados)
                         if not ya_encontrado:
                             detalles = self._log_control_details(button, index, "Button")
                             if detalles:
                                 detalles['funcionalidad'] = "Abre vista gráfica del análisis"
                                 detalles['metodo_deteccion'] = "Por contenido de texto"
-                                
                                 informes_encontrados[f"Button_Graficos_Contenido_{index}"] = detalles
                                 index += 1
-                                
                                 self.logger.info(f"   ✅ BUTTON encontrado por contenido: {texto_button}")
-                
                 except Exception as e:
-                    self.logger.debug(f"Error procesando Button: {e}")
-            
-            # 3. Buscar elementos de texto relacionados con "Informes y gráficos"
+                    self.logger.debug(f"Error procesando botón: {e}")
+
+            # Buscar texto relacionado
             self.logger.info("\n📋 Buscando elementos de texto relacionados...")
             textos = self.analysis_window.descendants(control_type="Text")
             for texto in textos:
                 try:
                     texto_content = texto.window_text().strip()
-                    if any(keyword in texto_content for keyword in ["Informes y gráficos", "Informes", "Gráficos"]):
+                    if any(k in texto_content for k in ["Informes", "Gráficos", "Informes y gráficos"]):
                         detalles = self._log_control_details(texto, index, "Text")
                         if detalles:
                             detalles['contenido_relevante'] = texto_content
                             informes_encontrados[f"Text_Relacionado_{index}"] = detalles
                             index += 1
-                            
                             self.logger.info(f"   📋 TEXTO relacionado: {texto_content}")
-                
                 except Exception as e:
                     self.logger.debug(f"Error procesando texto: {e}")
-            
-            # Resumen final con información específica
+
+            # Resumen final
             self.logger.info("\n" + "="*60)
             self.logger.info("📊 RESUMEN ESPECÍFICO - INFORMES Y GRÁFICOS")
-            
-            combo_informes = len([k for k in informes_encontrados.keys() if "ComboBox" in k])
-            button_graficos = len([k for k in informes_encontrados.keys() if "Button" in k])
-            textos_relacionados = len([k for k in informes_encontrados.keys() if "Text" in k])
-            
-            self.logger.info(f"🔽 ComboBox 'Informes': {combo_informes} encontrados")
-            self.logger.info(f"🔘 Button 'Gráficos': {button_graficos} encontrados")  
-            self.logger.info(f"📋 Textos relacionados: {textos_relacionados} encontrados")
-            self.logger.info(f"📊 TOTAL ELEMENTOS: {len(informes_encontrados)}")
-            self.logger.info("="*60)
-            
+            combo_informes = len([k for k in informes_encontrados if "ComboBox" in k])
+            button_graficos = len([k for k in informes_encontrados if "Button_Graficos" in k])
+            textos_relacionados = len([k for k in informes_encontrados if "Text" in k])
+            self.logger.info(f"🔽 ComboBox/Button 'Informes': {combo_informes} encontrados")
+            self.logger.info(f"🔘 Botones 'Gráficos': {button_graficos} encontrados")
+            self.logger.info(f"📋 Textos relacionados: {textos_relacionados}")
+
             return informes_encontrados
             
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo informes y gráficos: {e}")
             return {}
+        
+    def extraer_componentes_arbol_mediciones(self):
+        """Extrae los componentes dentro del árbol de mediciones utilizando distintos métodos: por control, por título/nombre y por contenido.
+        También filtra por nombres clave como Tensión, Corriente, Potencia, Energía, etc.
+        """
+        try:
+            self.logger.info("\n🌳 === EXTRACCIÓN DE COMPONENTES DEL ÁRBOL DE MEDICIONES ===")
 
+            arbol_componentes = {}
+            index = 0
+
+            # Palabras clave que nos interesan extraer (normalizadas)
+            palabras_clave = [
+                "tension u", "tension ul-l", "tension u l-l",
+                "corriente i", "potencia p", "potencia q1", "potencia sn", "potencia s",
+                "energia p+", "energia p-"
+            ]
+
+            def normalizar_texto(texto):
+                """Quita etiquetas HTML y símbolos para comparación"""
+                texto = re.sub(r"<sub>(.*?)</sub>", r"\1", texto, flags=re.IGNORECASE)
+                texto = re.sub(r"[<>_/]", "", texto)  # Elimina restos de etiquetas o subíndices
+                return texto.lower().strip()
+
+            def contiene_palabra_clave(texto):
+                texto_normalizado = normalizar_texto(texto)
+                return any(clave in texto_normalizado for clave in palabras_clave)
+
+            # === FORMA 1: Por control directo (TreeItem) ===
+            tree_items = self.analysis_window.descendants(control_type="TreeItem")
+            self.logger.info(f"🔍 Forma 1: Detectados {len(tree_items)} TreeItem(s)")
+            
+            for item in tree_items:
+                texto = item.window_text().strip()
+                hijos = item.children()
+                detalles = self._log_control_details(item, index, "TreeItem")
+
+                if len(hijos) > 0:
+                    self.logger.info(f"📁 Nodo raíz detectado: '{texto}' con {len(hijos)} hijos")
+                    detalles['tipo'] = "Nodo raíz"
+                else:
+                    self.logger.info(f"📄 Item hijo: '{texto}'")
+                    detalles['tipo'] = "Item hijo"
+
+                if contiene_palabra_clave(texto):
+                    detalles['clave_detectada'] = True
+                    arbol_componentes[f"Clave_Forma1_{index}"] = detalles
+                    self.logger.info(f"✅ Coincidencia clave detectada en Forma 1: '{texto}'")
+                else:
+                    detalles['clave_detectada'] = False
+                    arbol_componentes[f"Forma1_TreeItem_{index}"] = detalles
+
+                index += 1
+
+            # === FORMA 2: Por nombre o título del control ===
+            self.logger.info(f"\n🔍 Forma 2: Búsqueda por nombre/título")
+            for item in self.analysis_window.descendants():
+                name = item.element_info.name or ""
+                texto = item.window_text().strip()
+                completo = f"{name} {texto}".strip()
+
+                if contiene_palabra_clave(completo):
+                    detalles = self._log_control_details(item, index, "Nombre/Título")
+                    detalles['tipo'] = "Título/Nombrado"
+                    detalles['clave_detectada'] = True
+                    arbol_componentes[f"Clave_Forma2_{index}"] = detalles
+                    self.logger.info(f"✅ Coincidencia clave detectada en Forma 2: '{completo}'")
+                    index += 1
+
+            # === FORMA 3: Por contenido profundo ===
+            self.logger.info(f"\n🔍 Forma 3: Búsqueda por contenido profundo")
+            for item in self.analysis_window.descendants():
+                textos = item.texts()
+                texto_visible = " ".join(textos).strip()
+
+                if contiene_palabra_clave(texto_visible):
+                    detalles = self._log_control_details(item, index, "Contenido")
+                    detalles['tipo'] = "Contenido relevante"
+                    detalles['clave_detectada'] = True
+                    arbol_componentes[f"Clave_Forma3_{index}"] = detalles
+                    self.logger.info(f"✅ Coincidencia clave detectada en Forma 3: '{texto_visible}'")
+                    index += 1
+
+            self.logger.info(f"\n🌳 Total elementos extraídos: {len(arbol_componentes)}")
+            return arbol_componentes
+
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo árbol de mediciones: {e}")
+            return {}
+
+    def _buscar_informes(self, index): 
+        informes_encontrados = {}
+
+        self.logger.info("\n🔘 Buscando botón 'Informes' y sus opciones...")
+
+        for i, button in enumerate(self.analysis_window.descendants(control_type="Button")):
+            try:
+                texto = button.window_text().strip()
+                if "Informe" in texto:
+                    detalles = self._log_control_details(button, index, "Button")
+                    if detalles:
+                        detalles['metodo_deteccion'] = "Por texto botón"
+
+                        try:
+                            button.click_input()
+                            time.sleep(1.2)  # Esperar menú emergente
+
+                            desktop = Desktop(backend="uia")
+                            popup_windows = desktop.windows(control_type="Window", visible_only=True)
+
+                            opciones = []
+                            contiene_csv = False
+                            encontrado_algo = False
+
+                            for win in popup_windows:
+                                try:
+                                    elementos = win.descendants(control_type="MenuItem") + \
+                                                win.descendants(control_type="Button") + \
+                                                win.descendants(control_type="Text")
+
+                                    for item in elementos:
+                                        try:
+                                            texto_item = item.window_text().strip()
+                                            if texto_item:
+                                                encontrado_algo = True
+                                                opciones.append(texto_item)
+                                                if "CSV" in texto_item.upper():
+                                                    contiene_csv = True
+                                                    detalles['opcion_prioritaria'] = texto_item
+                                        except Exception as e:
+                                            self.logger.debug(f"Error leyendo subelemento: {e}")
+                                except Exception as e:
+                                    self.logger.debug(f"Error accediendo a ventana emergente: {e}")
+
+                            if encontrado_algo:
+                                detalles['opciones_disponibles'] = opciones
+                                detalles['contiene_informes_csv'] = contiene_csv
+                            else:
+                                self.logger.warning("⚠️  No se encontraron opciones dentro de ninguna ventana emergente.")
+
+                        except Exception as submenu_err:
+                            self.logger.warning(f"⚠️  No se pudieron obtener los subelementos del botón 'Informes': {submenu_err}")
+
+                        informes_encontrados[f"Button_Informes_{index}"] = detalles
+                        index += 1
+            except Exception as e:
+                self.logger.debug(f"Error en botón 'Informes': {e}")
+
+        # Fallback: detectar por contenido visible
+        buttons = self.analysis_window.descendants(control_type="Button")
+        for button in buttons:
+            try:
+                texto_button = button.window_text().strip()
+                if "Informe" in texto_button or "Informes" in texto_button:
+                    ya_encontrado = any("Button_Informes" in k for k in informes_encontrados)
+                    if not ya_encontrado:
+                        detalles = self._log_control_details(button, index, "Button")
+                        if detalles:
+                            detalles['funcionalidad'] = "Abre vista gráfica del análisis"
+                            detalles['metodo_deteccion'] = "Por contenido de texto"
+                            detalles['opcion_prioritaria'] = "Informe CSV" if "CSV" in texto_button.upper() else None
+                            informes_encontrados[f"Button_Graficos_Contenido_{index}"] = detalles
+                            index += 1
+                            self.logger.info(f"   ✅ BUTTON encontrado por contenido: {texto_button}")
+            except Exception as e:
+                self.logger.debug(f"Error procesando botón: {e}")
+
+        return informes_encontrados
 
     def extraer_tabla_mediciones(self):
         """Extrae información de la tabla de mediciones inferior"""
         try:
             self.logger.info("\n📋 === EXTRACCIÓN: TABLA DE MEDICIONES ===")
-            
+
             tablas_encontradas = {}
             index = 0
-            
-            # Buscar DataGrid y Table
-            for tipo_tabla in ["DataGrid", "Table"]:
+
+            # Cabeceras esperadas
+            textos_esperados = ["Tiempo (UTC-5)", "f L1 instante. 10 s S [Hz]"]
+
+            # Buscar tipos de controles que podrían contener tablas
+            tipos_posibles = ["DataGrid", "Table", "Pane", "Group"]
+
+            for tipo_tabla in tipos_posibles:
                 try:
                     tablas = self.analysis_window.descendants(control_type=tipo_tabla)
-                    
+
                     for tabla in tablas:
                         try:
                             detalles = self._log_control_details(tabla, index, tipo_tabla)
                             if detalles:
-                                # Buscar headers/cabeceras
+                                # Buscar headers
                                 try:
                                     headers = tabla.descendants(control_type="Header")
-                                    if headers:
-                                        header_texts = []
-                                        for header in headers[:10]:  # Solo primeros 10
-                                            texto_header = header.window_text()
-                                            if texto_header:
-                                                header_texts.append(texto_header)
-                                        
-                                        detalles['cabeceras'] = header_texts
-                                        self.logger.info(f"   📋 CABECERAS: {header_texts}")
-                                    else:
-                                        detalles['cabeceras'] = []
-                                        
+                                    header_texts = [h.window_text() for h in headers if h.window_text().strip()]
+                                    detalles['cabeceras'] = header_texts
+                                    self.logger.info(f"   📋 CABECERAS: {header_texts}")
                                 except Exception as e:
                                     detalles['cabeceras'] = []
                                     self.logger.debug(f"Error obteniendo headers: {e}")
-                                
-                                # Contar elementos
+
+                                # Buscar filas y celdas
                                 try:
                                     filas = tabla.descendants(control_type="DataItem")
-                                    celdas = tabla.descendants(control_type="Custom")
-                                    
+                                    celdas = tabla.descendants(control_type="Text") + tabla.descendants(control_type="Custom")
                                     detalles['total_filas'] = len(filas)
                                     detalles['total_celdas'] = len(celdas)
-                                    
                                     self.logger.info(f"   🔢 Total filas: {len(filas)}")
                                     self.logger.info(f"   📦 Total celdas: {len(celdas)}")
-                                    
                                 except Exception as e:
                                     detalles['total_filas'] = 0
                                     detalles['total_celdas'] = 0
                                     self.logger.debug(f"Error contando elementos: {e}")
-                                
-                                # Extraer primera fila de datos (si existe)
+
+                                # Explorar primeras filas
                                 try:
-                                    primera_fila = []
-                                    filas = tabla.descendants(control_type="DataItem")
-                                    if filas:
-                                        primera_fila_celdas = filas[0].descendants(control_type="Custom")
-                                        for celda in primera_fila_celdas[:5]:  # Solo primeras 5 celdas
-                                            texto_celda = celda.window_text()
-                                            if texto_celda:
-                                                primera_fila.append(texto_celda)
-                                    
-                                    detalles['primera_fila'] = primera_fila
-                                    
-                                    if primera_fila:
-                                        self.logger.info(f"   📋 PRIMERA FILA: {primera_fila}")
-                                        
+                                    primeras_filas_info = []
+                                    coincidencias = []
+
+                                    for fila_index, fila in enumerate(filas[:3]):
+                                        fila.highlight()  # Para depuración visual, opcional
+                                        fila_celdas = fila.descendants(control_type="Text") or fila.descendants(control_type="Custom")
+                                        texto_fila = [c.window_text().strip() for c in fila_celdas if c.window_text().strip()]
+                                        primeras_filas_info.append(texto_fila)
+
+                                        for texto in texto_fila:
+                                            for esperado in textos_esperados:
+                                                if esperado.lower() in texto.lower():
+                                                    coincidencias.append(texto)
+
+                                    detalles['primeras_filas'] = primeras_filas_info
+                                    detalles['coincidencias_esperadas'] = coincidencias
+
+                                    self.logger.info("📄 Primeras filas detectadas:")
+                                    for idx, fila in enumerate(primeras_filas_info):
+                                        self.logger.info(f"   ▸ Fila {idx}: {fila}")
+                                    if coincidencias:
+                                        self.logger.info(f"   ✅ COINCIDENCIAS ENCONTRADAS: {coincidencias}")
                                 except Exception as e:
-                                    detalles['primera_fila'] = []
-                                    self.logger.debug(f"Error extrayendo primera fila: {e}")
-                                
+                                    detalles['primeras_filas'] = []
+                                    detalles['coincidencias_esperadas'] = []
+                                    self.logger.debug(f"Error extrayendo primeras filas: {e}")
+
+                                # Extraer la primera celda directamente
+                                try:
+                                    primera_celda_texto = self.extraer_primera_celda_tabla(tabla)
+                                    detalles['primera_celda'] = primera_celda_texto
+                                    if primera_celda_texto:
+                                        self.logger.info(f"   🔘 Primera celda directa: {primera_celda_texto}")
+                                except Exception as e:
+                                    detalles['primera_celda'] = None
+                                    self.logger.debug(f"Error extrayendo primera celda directa: {e}")
+
                                 tablas_encontradas[f"{tipo_tabla}_{index}"] = detalles
                                 index += 1
-                            
+
                         except Exception as e:
                             self.logger.debug(f"Error procesando tabla {tipo_tabla}[{index}]: {e}")
-                            
+
                 except Exception as e:
                     self.logger.debug(f"Tipo {tipo_tabla} no disponible: {e}")
-            
+
             self.logger.info(f"📊 RESUMEN TABLAS: {len(tablas_encontradas)} encontradas")
             return tablas_encontradas
-            
+
         except Exception as e:
             self.logger.error(f"❌ Error extrayendo tablas: {e}")
             return {}
+
+    def extraer_primera_celda_tabla(self, tabla):
+        """Extrae la primera celda de la primera fila de una tabla dada"""
+        try:
+            self.logger.info(f"\n🔎 Intentando extraer primera celda de tabla")
+
+            filas = tabla.descendants(control_type="DataItem")
+            if not filas:
+                self.logger.warning("⚠️ No se encontraron filas (DataItem) en la tabla.")
+                return None
+
+            fila_0 = filas[0]
+            fila_0.highlight()  # Para confirmar visualmente
+
+            primera_fila_celdas = fila_0.descendants(control_type="Text") or fila_0.descendants(control_type="Custom")
+            if not primera_fila_celdas:
+                self.logger.warning("⚠️ No se encontraron celdas (Text/Custom) en la primera fila.")
+                return None
+
+            primera_celda = primera_fila_celdas[0]
+            texto = primera_celda.window_text().strip()
+            self.logger.info(f"✅ Primera celda detectada: '{texto}'")
+            return texto
+        except Exception as e:
+            self.logger.error(f"❌ Error extrayendo primera celda: {e}")
+            return None
 
     def ejecutar_extraccion_completa(self):
         """Ejecuta la extracción completa de todos los componentes específicos"""
@@ -684,14 +686,17 @@ class SonelComponentExtractor:
             # Extraer cada componente específico
             resultados = {}
             
+            time.sleep(1)
             resultados['navegacion'] = self.extraer_navegacion_lateral()
+            time.sleep(1.5)
             resultados['mostrar_datos'] = self.extraer_mostrar_datos()
+            time.sleep(2.5)
             resultados['informes_graficos'] = self.extraer_informes_graficos()
+            time.sleep(2)
+            resultados['arbol_mediciones'] = self.extraer_componentes_arbol_mediciones()
+            time.sleep(1)
             resultados['tabla_mediciones'] = self.extraer_tabla_mediciones()
             
-            # NUEVO: Extraer menús contextuales
-            resultados['menu_contextual'] = self.extraer_menu_contextual_informe_csv()
-
             # Resumen final
             self.logger.info("\n" + "="*80)
             self.logger.info("📊 === RESUMEN FINAL DE EXTRACCIÓN ===")
@@ -699,7 +704,6 @@ class SonelComponentExtractor:
             self.logger.info(f"📊 Mostrar datos: {len(resultados['mostrar_datos'])} elementos")
             self.logger.info(f"📈 Informes: {len(resultados['informes_graficos'])} componentes")
             self.logger.info(f"📋 Tablas: {len(resultados['tabla_mediciones'])} tablas")
-            self.logger.info(f"🎯 Menús contextuales: {len(resultados['menu_contextual'])} elementos")
             self.logger.info("="*80)
             
             self.logger.info(f"✅ Extracción completada. Resultados en: {self.log_filename}")

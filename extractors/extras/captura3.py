@@ -394,7 +394,7 @@ def probar_deteccion_menu_contextual():
     """
     Función de prueba para el detector de menús contextuales
     """
-    from captura2 import SonelComponentExtractor
+    from extractors.extras.captura2 import SonelComponentExtractor
     # Usar tu extractor existente
     archivo_pqm = "/Universidad/8vo Semestre/Practicas/Sonel/data/archivos_pqm/9. Catiglata T 1225 C 0100234196.pqm702"
     extractor = SonelComponentExtractor(archivo_pqm)
