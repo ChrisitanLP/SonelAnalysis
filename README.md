@@ -1,8 +1,4 @@
-# SonelAnalysis# ⚡ Sonel Analysis Data Extractor
-
-[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://www.postgresql.org)
-
+# ⚡ Sonel Analysis Data Extractor
 
 Automatización para la extracción, transformación y carga (ETL) de datos eléctricos desde archivos generados por **Sonel Analysis 4.6.6** a una base de datos **PostgreSQL**. Este script permite procesar archivos exportados o, en su defecto, automatizar la interfaz gráfica de la aplicación para obtener datos estructurados, con un enfoque especial en mediciones de **voltaje**.
 
@@ -10,8 +6,46 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
 
 ## 📋 Tabla de Contenidos
 
-- [SonelAnalysis# ⚡ Sonel Analysis Data Extractor](#sonelanalysis--sonel-analysis-data-extractor)
+- [⚡ Sonel Analysis Data Extractor](#-sonel-analysis-data-extractor)
   - [📋 Tabla de Contenidos](#-tabla-de-contenidos)
+  - [📋 Tabla de Contenidos](#-tabla-de-contenidos-1)
+  - [📌 Características principales](#-características-principales)
+  - [🛠️ Requisitos previos](#️-requisitos-previos)
+  - [📦 Instalación](#-instalación)
+    - [1. Clonar o descargar el proyecto](#1-clonar-o-descargar-el-proyecto)
+    - [2. Instalar dependencias](#2-instalar-dependencias)
+    - [3. Crear estructura de directorios](#3-crear-estructura-de-directorios)
+  - [📁 Estructura del proyecto](#-estructura-del-proyecto)
+    - [📂 Descripción detallada de módulos](#-descripción-detallada-de-módulos)
+    - [🏗️ Principios de arquitectura](#️-principios-de-arquitectura)
+  - [⚙️ Configuración](#️-configuración)
+    - [Opción 1: Archivo `config.ini` (generado automáticamente)](#opción-1-archivo-configini-generado-automáticamente)
+    - [Opción 2: Archivo `.env` (tiene prioridad sobre config.ini)](#opción-2-archivo-env-tiene-prioridad-sobre-configini)
+  - [🗄️ Preparación de la base de datos](#️-preparación-de-la-base-de-datos)
+    - [1. Crear la base de datos](#1-crear-la-base-de-datos)
+  - [🚀 Uso](#-uso)
+    - [Método 1: Extracción desde archivos exportados](#método-1-extracción-desde-archivos-exportados)
+    - [Método 2: Automatización de la GUI](#método-2-automatización-de-la-gui)
+  - [🔧 Personalización](#-personalización)
+  - [🛡️ Validación y formato de datos](#️-validación-y-formato-de-datos)
+  - [🔍 Solución de problemas](#-solución-de-problemas)
+    - [Error de conexión a la base de datos](#error-de-conexión-a-la-base-de-datos)
+    - [No se encuentran archivos de entrada](#no-se-encuentran-archivos-de-entrada)
+    - [Fallo en la automatización GUI](#fallo-en-la-automatización-gui)
+    - [Formato de archivo no reconocido](#formato-de-archivo-no-reconocido)
+  - [📊 Registro de logs](#-registro-de-logs)
+  - [⚠️ Limitaciones](#️-limitaciones)
+  - [🤝 Contribución](#-contribución)
+  - [📄 Licencia](#-licencia)
+- [SonelAnalysis](#sonelanalysis)
+
+---
+
+## 📋 Tabla de Contenidos
+
+- [⚡ Sonel Analysis Data Extractor](#-sonel-analysis-data-extractor)
+  - [📋 Tabla de Contenidos](#-tabla-de-contenidos)
+  - [� Tabla de Contenidos](#-tabla-de-contenidos-1)
   - [📌 Características principales](#-características-principales)
   - [🛠️ Requisitos previos](#️-requisitos-previos)
   - [📦 Instalación](#-instalación)
@@ -294,6 +328,12 @@ Este proyecto está disponible bajo la licencia que consideres apropiada para tu
 ---
 
 **Desarrollado para automatizar el procesamiento de datos eléctricos con Sonel Analysis** ⚡
+
+<div align="center">
+
+**[⬆ Volver al inicio](#-sonel-analysis-data-extractor)**
+
+</div>
 
 <div align="center">
 
