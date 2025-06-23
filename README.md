@@ -1,9 +1,14 @@
+<<<<<<< HEAD
 # SonelAnalysis# ⚡ Sonel Analysis Data Extractor
+=======
+# ⚡ Sonel Analysis Data Extractor
+>>>>>>> 2b9689a (Update README.md)
 
 Automatización para la extracción, transformación y carga (ETL) de datos eléctricos desde archivos generados por **Sonel Analysis 4.6.6** a una base de datos **PostgreSQL**. Este script permite procesar archivos exportados o, en su defecto, automatizar la interfaz gráfica de la aplicación para obtener datos estructurados, con un enfoque especial en mediciones de **voltaje**.
 
 ---
 
+<<<<<<< HEAD
 ## 📋 Tabla de Contenidos
 
 - [SonelAnalysis# ⚡ Sonel Analysis Data Extractor](#sonelanalysis--sonel-analysis-data-extractor)
@@ -76,6 +81,8 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
 
 ---
 
+=======
+>>>>>>> 2b9689a (Update README.md)
 ## 📌 Características principales
 
 - ✅ Extracción de datos desde archivos exportados (CSV, Excel, XML, MDB, DAT)
@@ -117,6 +124,7 @@ mkdir -p data exports
 
 ## 📁 Estructura del proyecto
 
+<<<<<<< HEAD
 El proyecto está organizado en módulos especializados que permiten mantener una arquitectura clara, escalable y de fácil mantenimiento. A continuación se describe la jerarquía principal de carpetas:
 
 ```
@@ -183,6 +191,19 @@ Esta estructura sigue los principios de:
 - **📈 Escalabilidad**: Estructura que permite agregar nuevos extractors y transformers fácilmente
 
 
+=======
+```
+sonel_extraction/
+├── extract_sonel_data.py       # Script principal
+├── config.ini                  # Configuración base (generado automáticamente)
+├── .env                        # Variables de entorno (opcional)
+├── data/                       # Archivos de entrada (exportados)
+├── exports/                    # Archivos generados por GUI automatizada
+├── sonel_extraction.log        # Archivo de logs
+└── README.md                   # Este archivo
+```
+
+>>>>>>> 2b9689a (Update README.md)
 ---
 
 ## ⚙️ Configuración
@@ -252,7 +273,11 @@ python extract_sonel_data.py gui
 
 ---
 
+<<<<<<< HEAD
 ## 🔧 Personalización
+=======
+## 🔧 Personalización avanzada
+>>>>>>> 2b9689a (Update README.md)
 
 Puedes modificar el script para adaptarlo a necesidades específicas:
 
@@ -264,7 +289,11 @@ Puedes modificar el script para adaptarlo a necesidades específicas:
 
 ---
 
+<<<<<<< HEAD
 ## 🛡️ Validación y formato de datos
+=======
+## 🧪 Formato de datos y validación
+>>>>>>> 2b9689a (Update README.md)
 
 - El script detecta nombres de columnas relevantes de forma flexible
 - Se enfoca en la vista de voltaje
@@ -272,7 +301,11 @@ Puedes modificar el script para adaptarlo a necesidades específicas:
 
 ---
 
+<<<<<<< HEAD
 ## 🔍 Solución de problemas
+=======
+## 🐞 Solución de problemas
+>>>>>>> 2b9689a (Update README.md)
 
 ### Error de conexión a la base de datos
 - ✅ Verifica que PostgreSQL esté corriendo
@@ -294,12 +327,111 @@ Puedes modificar el script para adaptarlo a necesidades específicas:
 
 ---
 
+<<<<<<< HEAD
 ## 📊 Registro de logs
+=======
+## 📄 Registro de logs
+>>>>>>> 2b9689a (Update README.md)
 
 El script genera logs tanto en consola como en el archivo `sonel_extraction.log`. Revisa este archivo si deseas rastrear errores o auditorías de ejecución.
 
 ---
 
+<<<<<<< HEAD
+=======
+## 📁 Estructura del proyecto
+
+El proyecto está organizado en módulos especializados que permiten mantener una arquitectura clara, escalable y de fácil mantenimiento. A continuación se describe la jerarquía principal de carpetas:
+
+```
+D:.
+├───config/
+│   └───__pycache__/
+├───data/
+│   ├───archivos_csv/
+│   └───archivos_pqm/
+├───database/
+│   └───__pycache__/
+├───etl/
+│   └───__pycache__/
+├───extractors/
+│   ├───extras/
+│   ├───pyautogui_extractor/
+│   │   └───__pycache__/
+│   ├───pywinauto_extractor/
+│   │   └───__pycache__/
+│   └───__pycache__/
+├───logs/
+│   └───components/
+├───parser/
+│   └───__pycache__/
+├───temp/
+├───transformers/
+│   └───__pycache__/
+└───utils/
+    └───__pycache__/
+```
+
+---
+
+### 📂 Descripción detallada de módulos
+
+#### 🔧 **config/**
+Contiene archivos de configuración del sistema y parámetros globales utilizados en distintas fases del ETL.
+
+#### 📊 **data/**
+Directorio central para los datos de entrada, organizado en subdirectorios especializados:
+
+- **`archivos_csv/`**: Almacena archivos CSV exportados manual o automáticamente
+- **`archivos_pqm/`**: Contiene archivos en formato `.pqm702` generados por Sonel Analysis
+
+#### 🗄️ **database/**
+Módulo encargado de la conexión con la base de datos PostgreSQL y la ejecución de operaciones SQL.
+
+#### 🔄 **etl/**
+Contiene la lógica general de orquestación del proceso de **Extracción, Transformación y Carga (ETL)**.
+
+#### 🔌 **extractors/**
+Módulo que agrupa distintos métodos de extracción de datos:
+
+- **`pyautogui_extractor/`**: Lógica basada en PyAutoGUI para exportación automática
+- **`pywinauto_extractor/`**: Extracción mediante automatización estructurada con Pywinauto
+- **`extras/`**: Funciones auxiliares para extracción no convencional
+
+#### 📝 **logs/**
+Sistema de logging para trazabilidad del proceso y depuración:
+
+- **`components/`**: Submódulos de logging especializados por componente del sistema
+
+#### 🔍 **parser/**
+Encargado de analizar el contenido bruto de los archivos y estructurarlo para su transformación.
+
+#### ⏳ **temp/**
+Directorio temporal utilizado durante la ejecución del flujo ETL. Puede contener archivos intermedios o de trabajo.
+
+#### 🔄 **transformers/**
+Contiene las funciones de transformación de datos: limpieza, normalización y adaptación al esquema destino.
+
+#### 🛠️ **utils/**
+Funciones de utilidad reutilizables en distintas partes del sistema.
+
+
+> **⚠️ Importante:** Las carpetas **`__pycache__`** se generan automáticamente al compilar módulos Python y **no deben modificarse manualmente**. Estas carpetas contienen bytecode compilado que mejora el rendimiento de ejecución.
+
+---
+
+### 🏗️ Principios de arquitectura
+
+Esta estructura sigue los principios de:
+
+- **📦 Separación de responsabilidades**: Cada módulo tiene una función específica
+- **🔄 Reutilización de código**: Componentes modulares y utilities compartidas
+- **🛡️ Mantenibilidad**: Organización clara que facilita actualizaciones y debugging
+- **📈 Escalabilidad**: Estructura que permite agregar nuevos extractors y transformers fácilmente
+
+---
+
+>>>>>>> 2b9689a (Update README.md)
 ## ⚠️ Limitaciones
 
 - La automatización GUI puede ser frágil ante cambios en la interfaz
@@ -308,7 +440,11 @@ El script genera logs tanto en consola como en el archivo `sonel_extraction.log`
 
 ---
 
+<<<<<<< HEAD
 ## 🤝 Contribución
+=======
+## 🤝 Contribución y soporte
+>>>>>>> 2b9689a (Update README.md)
 
 Este script fue desarrollado con el objetivo de facilitar tareas repetitivas en la gestión y análisis de datos eléctricos. Puedes adaptarlo libremente para tus necesidades.
 
@@ -326,6 +462,7 @@ Este proyecto está disponible bajo la licencia que consideres apropiada para tu
 ---
 
 **Desarrollado para automatizar el procesamiento de datos eléctricos con Sonel Analysis** ⚡
+<<<<<<< HEAD
 
 <div align="center">
 
@@ -338,3 +475,5 @@ Este proyecto está disponible bajo la licencia que consideres apropiada para tu
 **[⬆ Volver al inicio](#-sonel-analysis-data-extractor)**
 
 </div>
+=======
+>>>>>>> 2b9689a (Update README.md)
