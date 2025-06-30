@@ -6,7 +6,7 @@ from config.settings import load_config
 from database.connection import DatabaseConnection
 from database.operations import DataHandler
 from extractors.file_extractor import FileExtractor
-from extractors.gui_extractor import GUIExtractor
+from extractors.pygui_extractor import GUIExtractor
 from transformers.voltage_transformer import VoltageTransformer
 from utils.validators import extract_client_code
 from utils.processing_registry import ProcessingRegistry, ProcessingStatus
