@@ -7,7 +7,8 @@ from config.settings import (
     CREATE_CODIGO_TABLE_QUERY, CREATE_MEDICIONES_TABLE_QUERY, 
     CREATE_VOLTAJE_MEDICIONES_TABLE_QUERY, CREATE_CORRIENTE_MEDICIONES_TABLE_QUERY, 
     CREATE_POTENCIA_MEDICIONES_TABLE_QUERY, INSERT_CODIGO_QUERY, GET_CODIGO_ID_QUERY,
-    INSERT_MEDICION_QUERY, INSERT_VOLTAJE_QUERY, INSERT_CORRIENTE_QUERY, INSERT_POTENCIA_QUERY
+    INSERT_MEDICION_QUERY, INSERT_VOLTAJE_QUERY, INSERT_CORRIENTE_QUERY, INSERT_POTENCIA_QUERY, 
+    CREATE_TABLA_UNICA_QUERY, INSERT_TABLA_UNICA_QUERY
 )
 from utils.validators import extract_client_code
 
@@ -36,7 +37,8 @@ class DataHandler:
             CREATE_MEDICIONES_TABLE_QUERY,
             CREATE_VOLTAJE_MEDICIONES_TABLE_QUERY,
             CREATE_CORRIENTE_MEDICIONES_TABLE_QUERY,
-            CREATE_POTENCIA_MEDICIONES_TABLE_QUERY
+            CREATE_POTENCIA_MEDICIONES_TABLE_QUERY,
+            CREATE_TABLA_UNICA_QUERY
         ]
         
         success = True
@@ -278,7 +280,42 @@ class DataHandler:
                     continue
                 
                 potencia_cursor.close()
+
+                cursor = self.db_connection.execute_query(
+                    INSERT_TABLA_UNICA_QUERY,
+                    params=(
+                        codigo_id,
+                        row.get('tiempo_utc'),
+                        row.get('u_l1_avg_10min'),
+                        row.get('u_l2_avg_10min'),
+                        row.get('u_l3_avg_10min'),
+                        row.get('u_l12_avg_10min'),
+                        row.get('i_l1_avg'),
+                        row.get('i_l2_avg'),
+                        row.get('p_l1_avg'),
+                        row.get('p_l2_avg'),
+                        row.get('p_l3_avg'),
+                        row.get('p_e_avg'),
+                        row.get('q1_l1_avg'),
+                        row.get('q1_l2_avg'),
+                        row.get('q1_e_avg'),
+                        row.get('sn_l1_avg'),
+                        row.get('sn_l2_avg'),
+                        row.get('sn_e_avg'),
+                        row.get('s_l1_avg'),
+                        row.get('s_l2_avg'),
+                        row.get('s_e_avg')
+                    ),
+                    commit=True
+                )
+
+                if not cursor:
+                    logger.error(f"Fallo al insertar fila {index} en tabla única")
+                    self.db_connection.connection.rollback()
+                    continue
                 
+                cursor.close()
+
                 # Hacer commit de toda la transacción para esta fila
                 self.db_connection.connection.commit()
                 successful_rows += 1
