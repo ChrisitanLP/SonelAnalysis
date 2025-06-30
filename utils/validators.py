@@ -34,7 +34,7 @@ def validate_voltage_columns(df):
             logger.debug(f"No se encontró columna que coincida con patrón: {pattern}")
 
     # Verificar columnas requeridas mínimas (tiempo y al menos dos voltajes)
-    required_minimum = ['time', 'u_l1', 'u_l2', 'i_l1', 'i_l2', 'p_l1', 'p_l2']
+    required_minimum = ['time', 'u_l1', 'u_l2', 'p_l1', 'p_l2']
     if all(req in column_mapping for req in required_minimum):
         logger.info(f"Se encontraron las columnas mínimas requeridas: {[column_mapping[req] for req in required_minimum]}")
         return True, column_mapping
@@ -214,3 +214,40 @@ def has_valid_client_code(file_path):
     except Exception as e:
         logger.error(f"Error al verificar código de cliente en {file_path}: {e}")
         return True  # En caso de error, consideramos válido y generaremos un código único
+    
+
+def _get_search_variants(original_name):
+        """
+        Genera variantes de búsqueda para un nombre dado
+        
+        Args:
+            original_name: Nombre original
+            
+        Returns:
+            list: Lista de variantes para buscar
+        """
+        variants = [original_name]
+        
+        # Variantes específicas basadas en tu análisis
+        name_mappings = {
+            "Usuario": ["Usuario", "User"],
+            "Máx.": ["Máx.", "Max.", "Máx", "Max"],
+            "Mín.": ["Mín.", "Min.", "Mín", "Min"],
+            "Instant.": ["Instant.", "Instant", "Instantáneo"],
+            "Prom.": ["Prom.", "Prom", "Promedio"]
+        }
+        
+        if original_name in name_mappings:
+            variants.extend(name_mappings[original_name])
+        
+        # Agregar variantes sin puntos y con puntos
+        base_name = original_name.replace(".", "").replace("/", "").strip()
+        if base_name not in variants:
+            variants.append(base_name)
+        
+        # Agregar variante con punto si no la tiene
+        if not original_name.endswith(".") and f"{original_name}." not in variants:
+            variants.append(f"{original_name}.")
+        
+        return list(set(variants))  # Eliminar duplicados
+        
