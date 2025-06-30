@@ -1,155 +1,301 @@
-Configuración y uso del script de extracción de datos Sonel Analysis
-Este archivo README proporciona instrucciones para configurar y ejecutar el script de extracción de datos de Sonel Analysis 4.6.6.
-Requisitos previos
+# ⚡ Sonel Analysis Data Extractor
 
-Python 3.7 o superior
-PostgreSQL 10 o superior
-Sonel Analysis 4.6.6 instalado (opcional si se tienen archivos de datos)
+[![Python](https://img.shields.io/badge/Python-3.8%2B-blue.svg)](https://python.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://www.postgresql.org)
 
-Instalación de dependencias
-bashpip install pandas psycopg2-binary python-dotenv pyautogui pywinauto
-Estructura de archivos
-El script requiere la siguiente estructura de directorios:
-sonel_extraction/
-├── extract_sonel_data.py  # Script principal
-├── config.ini            # Archivo de configuración
-├── .env                  # Variables de entorno (opcional)
-├── data/                 # Directorio para archivos de datos
-└── exports/              # Directorio para exportaciones de la GUI
-Cree los directorios necesarios:
-bashmkdir -p data exports
-Configuración
-Archivo config.ini
-El script generará automáticamente un archivo config.ini con valores predeterminados si no existe. Puede modificar este archivo según sus necesidades:
-ini[DATABASE]
+
+Automatización para la extracción, transformación y carga (ETL) de datos eléctricos desde archivos generados por **Sonel Analysis 4.6.6** a una base de datos **PostgreSQL**. Este script permite procesar archivos exportados o, en su defecto, automatizar la interfaz gráfica de la aplicación para obtener datos estructurados, con un enfoque especial en mediciones de **voltaje**.
+
+---
+
+## 📋 Tabla de Contenidos
+
+- [⚡ Sonel Analysis Data Extractor](#-sonel-analysis-data-extractor)
+  - [📋 Tabla de Contenidos](#-tabla-de-contenidos)
+  - [📌 Características principales](#-características-principales)
+  - [🛠️ Requisitos previos](#️-requisitos-previos)
+  - [📦 Instalación](#-instalación)
+    - [1. Clonar o descargar el proyecto](#1-clonar-o-descargar-el-proyecto)
+    - [2. Instalar dependencias](#2-instalar-dependencias)
+    - [3. Crear estructura de directorios](#3-crear-estructura-de-directorios)
+  - [📁 Estructura del proyecto](#-estructura-del-proyecto)
+    - [📂 Descripción detallada de módulos](#-descripción-detallada-de-módulos)
+    - [🏗️ Principios de arquitectura](#️-principios-de-arquitectura)
+  - [⚙️ Configuración](#️-configuración)
+    - [Opción 1: Archivo `config.ini` (generado automáticamente)](#opción-1-archivo-configini-generado-automáticamente)
+    - [Opción 2: Archivo `.env` (tiene prioridad sobre config.ini)](#opción-2-archivo-env-tiene-prioridad-sobre-configini)
+  - [🗄️ Preparación de la base de datos](#️-preparación-de-la-base-de-datos)
+    - [1. Crear la base de datos](#1-crear-la-base-de-datos)
+  - [🚀 Uso](#-uso)
+    - [Método 1: Extracción desde archivos exportados](#método-1-extracción-desde-archivos-exportados)
+    - [Método 2: Automatización de la GUI](#método-2-automatización-de-la-gui)
+  - [🔧 Personalización](#-personalización)
+  - [🛡️ Validación y formato de datos](#️-validación-y-formato-de-datos)
+  - [🔍 Solución de problemas](#-solución-de-problemas)
+    - [Error de conexión a la base de datos](#error-de-conexión-a-la-base-de-datos)
+    - [No se encuentran archivos de entrada](#no-se-encuentran-archivos-de-entrada)
+    - [Fallo en la automatización GUI](#fallo-en-la-automatización-gui)
+    - [Formato de archivo no reconocido](#formato-de-archivo-no-reconocido)
+  - [📊 Registro de logs](#-registro-de-logs)
+  - [⚠️ Limitaciones](#️-limitaciones)
+  - [🤝 Contribución](#-contribución)
+  - [📄 Licencia](#-licencia)
+
+---
+
+## 📌 Características principales
+
+- ✅ Extracción de datos desde archivos exportados (CSV, Excel, XML, MDB, DAT)
+- 🖥️ Automatización de la GUI de **Sonel Analysis** para exportar mediciones
+- 🔄 Transformación y validación automática de columnas relevantes
+- 🗄️ Carga estructurada a base de datos PostgreSQL
+- ⚙️ Configuración flexible mediante `.env` y `config.ini`
+- 📊 Registro de logs para monitoreo y diagnóstico
+
+---
+
+## 🛠️ Requisitos previos
+
+- **Python** 3.7 o superior  
+- **PostgreSQL** 10 o superior  
+- **Sonel Analysis** 4.6.6 instalado (solo si se usará la extracción GUI)  
+
+---
+
+## 📦 Instalación
+
+### 1. Clonar o descargar el proyecto
+```bash
+git clone <repository-url>
+cd sonel-data-extractor
+```
+
+### 2. Instalar dependencias
+```bash
+pip install pandas psycopg2-binary python-dotenv pyautogui pywinauto
+```
+
+### 3. Crear estructura de directorios
+```bash
+mkdir -p data exports
+```
+
+---
+
+## 📁 Estructura del proyecto
+
+El proyecto está organizado en módulos especializados que permiten mantener una arquitectura clara, escalable y de fácil mantenimiento. A continuación se describe la jerarquía principal de carpetas:
+
+```
+sonel:.
+├───config/
+│   └───__pycache__/
+├───data/
+│   ├───archivos_csv/
+│   └───archivos_pqm/
+├───database/
+│   └───__pycache__/
+├───etl/
+│   └───__pycache__/
+├───extractors/
+│   ├───extras/
+│   ├───pyautogui_extractor/
+│   │   └───__pycache__/
+│   ├───pywinauto_extractor/
+│   │   └───__pycache__/
+│   └───__pycache__/
+├───logs/
+│   └───components/
+├───parser/
+│   └───__pycache__/
+├───temp/
+├───transformers/
+│   └───__pycache__/
+└───utils/
+    └───__pycache__/
+```
+
+### 📂 Descripción detallada de módulos
+
+| 📁 Carpeta                 | Descripción                                                                                                                                       |
+|---------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
+| 🔧 `config/`              | Contiene archivos de configuración del sistema y parámetros globales utilizados en distintas fases del ETL.                                      |
+| 📊 `data/`                | Directorio central para los datos de entrada, organizado en subdirectorios:                                                                      |
+|                           | ├── `archivos_csv/`: Almacena archivos CSV exportados manual o automáticamente.                                                                  |
+|                           | └── `archivos_pqm/`: Contiene archivos `.pqm702` generados por Sonel Analysis.                                                                   |
+| 🗄️ `database/`            | Módulo encargado de la conexión con la base de datos PostgreSQL y la ejecución de operaciones SQL.                                                |
+| 🔄 `etl/`                 | Lógica de orquestación del proceso de Extracción, Transformación y Carga (ETL).                                                                  |
+| 🔌 `extractors/`          | Agrupa métodos de extracción de datos:                                                                                                            |
+|                           | ├── `pyautogui_extractor/`: Automatización con PyAutoGUI.                                                                                         |
+|                           | ├── `pywinauto_extractor/`: Automatización estructurada con Pywinauto.                                                                           |
+|                           | └── `extras/`: Funciones auxiliares para extracción no convencional.                                                                              |
+| 📝 `logs/`                | Sistema de logging del proceso y depuración.                                                                                                     |
+|                           | └── `components/`: Submódulos de logging especializados.                                                                                          |
+| 🔍 `parser/`              | Analiza el contenido bruto de los archivos y lo estructura para su transformación.                                                               |
+| ⏳ `temp/`                | Directorio temporal para archivos intermedios generados durante la ejecución.                                                                    |
+| 🔄 `transformers/`        | Funciones de transformación: limpieza, normalización y adaptación al esquema destino.                                                            |
+| 🛠️ `utils/`              | Funciones de utilidad reutilizables en distintas partes del sistema.                                                                             |
+
+> ⚠️ **Importante:** Las carpetas `__pycache__/` son generadas automáticamente por Python para almacenar bytecode compilado y **no deben modificarse manualmente**.
+
+
+
+### 🏗️ Principios de arquitectura
+
+Esta estructura sigue los principios de:
+
+- **📦 Separación de responsabilidades**: Cada módulo tiene una función específica
+- **🔄 Reutilización de código**: Componentes modulares y utilities compartidas
+- **🛡️ Mantenibilidad**: Organización clara que facilita actualizaciones y debugging
+- **📈 Escalabilidad**: Estructura que permite agregar nuevos extractors y transformers fácilmente
+
+
+---
+
+## ⚙️ Configuración
+
+### Opción 1: Archivo `config.ini` (generado automáticamente)
+
+```ini
+[DATABASE]
 host = localhost
-port = 5432
-database = sonel_data
-user = postgres
-password = postgres
+port = ----
+database = sonel
+user = ****
+password = ****
 
 [PATHS]
 data_dir = ./data
 export_dir = ./exports
-Variables de entorno (opcional)
-Alternativamente, puede crear un archivo .env con las siguientes variables:
+```
+
+### Opción 2: Archivo `.env` (tiene prioridad sobre config.ini)
+
+```env
 DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=sonel_data
+DB_PORT=----
+DB_NAME=sonel
 DB_USER=postgres
-DB_PASSWORD=micontraseña
+DB_PASSWORD=*******
 DATA_DIR=./data
 EXPORT_DIR=./exports
-Las variables de entorno tienen prioridad sobre la configuración en config.ini.
-Preparación de la base de datos
+```
 
-Cree una base de datos en PostgreSQL:
+---
 
-sqlCREATE DATABASE sonel_data;
+## 🗄️ Preparación de la base de datos
 
-El script creará automáticamente la tabla voltaje_mediciones si no existe.
+### 1. Crear la base de datos
 
-Métodos de extracción
-El script puede extraer datos de dos formas:
-1. Extracción desde archivos
-Coloque los archivos de datos exportados de Sonel Analysis en el directorio data/. El script intentará detectar y leer archivos en los siguientes formatos:
+```sql
+CREATE DATABASE sonel_data;
+```
 
-CSV
-Excel (.xlsx)
-XML
-MDB (Microsoft Access)
-DAT
+> **Nota:** La tabla `voltaje_mediciones` se creará automáticamente al ejecutar el script si no existe.
 
-2. Automatización de GUI
-Si no dispone de archivos exportados, el script puede automatizar la interfaz de usuario de Sonel Analysis para exportar los datos. Este método:
+---
 
-Conecta con la aplicación Sonel Analysis
-Navega a la sección "Measurements"
-Selecciona la vista de voltaje
-Exporta los datos a CSV
-Lee el archivo exportado
+## 🚀 Uso
 
-Ejecución del script
-Para ejecutar el script con extracción desde archivos (método predeterminado):
-bashpython extract_sonel_data.py
-Para especificar el método de extracción mediante GUI:
-bashpython extract_sonel_data.py gui
-Solución de problemas
-Registros (Logs)
-El script genera registros en:
+### Método 1: Extracción desde archivos exportados
 
-La salida estándar (terminal)
-Un archivo sonel_extraction.log
+1. Coloca tus archivos (`.csv`, `.xlsx`, `.xml`, `.mdb`, `.dat`) en la carpeta `data/`
+2. Ejecuta el script:
 
-Consulte estos registros para diagnosticar problemas.
-Problemas comunes
+```bash
+python extract_sonel_data.py
+```
 
-Error de conexión a la base de datos:
+### Método 2: Automatización de la GUI
 
-Verifique que PostgreSQL esté en ejecución
-Confirme las credenciales en config.ini o .env
-Asegúrese de que la base de datos sonel_data exista
+1. Asegúrate de que **Sonel Analysis** esté abierto
+2. Ejecuta el script en modo GUI:
 
+```bash
+python extract_sonel_data.py gui
+```
 
-No se encuentran archivos de datos:
+> **⚠️ Importante:** La aplicación Sonel Analysis debe estar abierta y visible antes de ejecutar el modo GUI.
 
-Verifique que los archivos estén en la ruta configurada en data_dir
-Confirme que los archivos tienen un formato soportado
+---
 
+## 🔧 Personalización
 
-Errores en la automatización GUI:
+Puedes modificar el script para adaptarlo a necesidades específicas:
 
-Asegúrese de que Sonel Analysis esté abierto antes de ejecutar el script
-Verifique que la interfaz no haya cambiado (las automatizaciones GUI son frágiles)
-Ajuste los tiempos de espera si es necesario
+| Componente | Función |
+|------------|---------|
+| `_validate_columns()` | Ajustar patrones de búsqueda de columnas relevantes |
+| `transform_voltage_data()` | Modificar estructura o cálculos |
+| `_extract_using_gui()` | Cambiar comportamiento de automatización de interfaz |
 
+---
 
-Formato de datos inesperado:
+## 🛡️ Validación y formato de datos
 
-El script intenta manejar diferentes formatos, pero puede requerir ajustes según el formato específico de sus datos
-Revise los registros para identificar problemas específicos
+- El script detecta nombres de columnas relevantes de forma flexible
+- Se enfoca en la vista de voltaje
+- Puedes personalizar los patrones de validación y transformación si tus archivos tienen variantes
 
+---
 
+## 🔍 Solución de problemas
 
-Personalización
-Puede modificar el script para adaptarlo a sus necesidades específicas:
+### Error de conexión a la base de datos
+- ✅ Verifica que PostgreSQL esté corriendo
+- ✅ Confirma credenciales en `.env` o `config.ini`
+- ✅ Asegúrate de que la base de datos `sonel_data` exista
 
-Ajustar los patrones de búsqueda de columnas en el método _validate_columns()
-Modificar la lógica de transformación en transform_voltage_data()
-Ajustar la secuencia de automatización GUI en _extract_using_gui()
+### No se encuentran archivos de entrada
+- ✅ Confirma que los archivos están en `./data`
+- ✅ Verifica que el formato sea compatible
 
-Limitaciones
+### Fallo en la automatización GUI
+- ✅ Asegúrate de tener abierta la aplicación Sonel Analysis
+- ✅ Verifica que la interfaz gráfica no haya cambiado
+- ✅ Ajusta los tiempos de espera si es necesario
 
-La automatización GUI es frágil y puede fallar si la interfaz cambia
-El soporte para archivos MDB requiere configuración ODBC adicional
-El script está diseñado para extraer solo datos de voltaje según lo especificado
+### Formato de archivo no reconocido
+- ✅ Revisa los logs generados para más detalles
+- ✅ Considera adaptar la lógica de lectura para tu formato específico
 
-Modos de Operación Flexibles
+---
 
-# Flujo completo (extracción + procesamiento)
-python sonel_integrated_main.py
+## 📊 Registro de logs
 
-# Solo extracción GUI
-python sonel_integrated_main.py --extract-only
+El script genera logs tanto en consola como en el archivo `sonel_extraction.log`. Revisa este archivo si deseas rastrear errores o auditorías de ejecución.
 
-# Solo procesamiento ETL
-python sonel_integrated_main.py --process-only
+---
 
-# Con modo debug
-python sonel_integrated_main.py --debug
+## ⚠️ Limitaciones
 
-# Forzar reprocesamiento
-python sonel_integrated_main.py --force
+- La automatización GUI puede ser frágil ante cambios en la interfaz
+- El soporte para archivos `.mdb` puede requerir configuración ODBC adicional
+- Actualmente el script está optimizado para procesar solo datos de voltaje
 
-Opciones:
-    --extract-only        Solo ejecutar extracción GUI
-    --process-only        Solo ejecutar procesamiento ETL
-    --force               Forzar reprocesamiento de archivos
-    --debug               Activar modo debug
-    --help                Mostrar esta ayuda
+---
 
-Flujo de trabajo:
-1. Extracción GUI: Procesa archivos .pqm702 → genera archivos CSV
-2. Validación: Verifica que los archivos CSV se hayan generado correctamente
-3. Procesamiento ETL: Carga los archivos CSV a la base de datos
-4. Limpieza: Opcionalmente mueve/archiva archivos procesados
+## 🤝 Contribución
+
+Este script fue desarrollado con el objetivo de facilitar tareas repetitivas en la gestión y análisis de datos eléctricos. Puedes adaptarlo libremente para tus necesidades.
+
+Si deseas colaborar o tienes sugerencias:
+- 🐛 Reporta bugs abriendo un issue
+- 💡 Propón mejoras
+- 🔧 Envía pull requests
+
+---
+
+## 📄 Licencia
+
+Este proyecto está disponible bajo la licencia que consideres apropiada para tu caso de uso.
+
+---
+
+**Desarrollado para automatizar el procesamiento de datos eléctricos con Sonel Analysis** ⚡
+
+<div align="center">
+
+**[⬆ Volver al inicio](#-sonel-analysis-data-extractor)**
+
+</div>
