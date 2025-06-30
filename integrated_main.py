@@ -1,15 +1,4 @@
 #!/usr/bin/env python3
-"""
-Script principal unificado para extracción GUI y procesamiento ETL de Sonel Analysis
-
-Este script integra dos flujos de trabajo:
-1. Extracción de archivos CSV desde Sonel Analysis usando automatización GUI
-2. Procesamiento ETL de los archivos CSV extraídos hacia base de datos
-
-Autor: Sistema Integrado Sonel
-Fecha: 2025
-"""
-
 import sys
 import os
 import time
@@ -24,7 +13,7 @@ sys.path.insert(0, str(project_dir))
 # Imports para extracción GUI
 from config.settings import create_directories, get_full_config
 from config.logger import logger
-from extractors.gui_extractor import GUIExtractor
+from extractors.pygui_extractor import GUIExtractor
 
 # Imports para ETL
 from config.settings import load_config
