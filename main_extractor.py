@@ -9,7 +9,7 @@ sys.path.insert(0, str(project_dir))
 
 from config.settings import get_config, create_directories, get_full_config
 from config.logger import logger
-from extractors.gui_extractor import GUIExtractor
+from extractors.pygui_extractor import GUIExtractor
 
 def main():
     """Función principal"""
