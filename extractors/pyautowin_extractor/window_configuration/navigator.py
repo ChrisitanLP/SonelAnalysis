@@ -1,5 +1,7 @@
 import time
 import logging
+from config.logger import get_logger
+from config.settings import get_full_config, get_all_possible_translations, CHECKBOXES_CONFIG
 
 class SonelNavigator:
     """Maneja la navegación y filtros de la interfaz"""
@@ -8,20 +10,36 @@ class SonelNavigator:
         self.ventana_configuracion = ventana_configuracion
         
         # Configurar logger
-        self.logger = logging.getLogger(f"{__name__}_navigator")
-        self.logger.setLevel(logging.INFO)
-
-        if not self.logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter('%(asctime)s - [NAVIGATOR] %(levelname)s: %(message)s')
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
+        config = get_full_config()
+        self.logger = get_logger("pywinauto", f"{__name__}_pywinauto")
+        self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
 
     def extraer_navegacion_lateral(self):
         """Extrae y activa elementos de navegación lateral (Mediciones)"""
         try:
             self.logger.info("🧭 Extrayendo navegación lateral...")
+
+            measurements = get_all_possible_translations('ui_controls', 'measurements')
+            self.logger.info(f"🌐 Buscando 'Meciciones' en: {measurements}")
+
+            def normalizar_texto_nav(texto):
+                """Normaliza texto para comparación multiidioma"""
+                if not texto:
+                    return ""
+                import re
+                texto = texto.lower().strip()
+                # Eliminar acentos y caracteres especiales
+                texto = re.sub(r'[^\w\s]', '', texto)
+                return texto
+
+            # Función para verificar coincidencia
+            def texto_coincide_measurements(texto_control, lista_traducciones):
+                """Verifica si el texto del control coincide con alguna traducción"""
+                texto_normalizado = normalizar_texto_nav(texto_control)
+                for traduccion in lista_traducciones:
+                    if normalizar_texto_nav(traduccion) in texto_normalizado:
+                        return True
+                return False
             
             mediciones_encontradas = {}
             index = 0
@@ -33,7 +51,7 @@ class SonelNavigator:
                     for control in controles:
                         texto = control.window_text().strip()
                         
-                        if "Mediciones" in texto:
+                        if texto_coincide_measurements(texto, measurements):
                             detalles = self._log_control_details(control, index, tipo_control)
                             if detalles:
                                 mediciones_encontradas[f"Mediciones_{index}"] = detalles
@@ -64,50 +82,66 @@ class SonelNavigator:
         """Configura filtros de datos (Usuario, Prom., etc.)"""
         try:
             self.logger.info("⚙️ Configurando filtros de datos...")
+
+            # 1. Seleccionar RadioButton "Usuario" (multiidioma)
+            user_translations = get_all_possible_translations('ui_controls', 'user')
+            self.logger.info(f"🌐 Buscando 'Usuario' en: {user_translations}")
+
             elementos_configurados = {}
+
+            def normalizar_texto_filtro(texto):
+                """Normaliza texto para comparación multiidioma"""
+                if not texto:
+                    return ""
+                import re
+                texto = texto.lower().strip()
+                texto = re.sub(r'[^\w\s]', '', texto)
+                return texto
             
             # 1. Seleccionar RadioButton "Usuario"
             radiobuttons = self.ventana_configuracion.descendants(control_type="RadioButton")
             for radio in radiobuttons:
                 texto = radio.window_text().strip()
-                if texto == "Usuario":
+                texto_norm = normalizar_texto_filtro(texto)
+                
+                # Verificar coincidencia multiidioma
+                if any(normalizar_texto_filtro(user_text) in texto_norm for user_text in user_translations):
                     try:
                         estado = radio.get_toggle_state()
                         if estado != 1:
                             radio.select()
-                            self.logger.info("✅ RadioButton 'Usuario' seleccionado")
-                        elementos_configurados["RadioButton_Usuario"] = "Seleccionado"
+                            self.logger.info(f"✅ RadioButton '{texto}' seleccionado")
+                        elementos_configurados[f"RadioButton_{texto}"] = "Seleccionado"
                     except Exception as e:
-                        self.logger.error(f"❌ Error seleccionando 'Usuario': {e}")
-            
-            # 2. Configurar CheckBoxes de medición
-            checkboxes_config = {
-                "Prom.": True,   # Activar
-                "Mín.": False,   # Desactivar
-                "Instant.": False,  # Desactivar
-                "Máx.": False    # Desactivar
-            }
+                        self.logger.error(f"❌ Error seleccionando '{texto}': {e}")
             
             checkboxes = self.ventana_configuracion.descendants(control_type="CheckBox")
             for checkbox in checkboxes:
                 texto = checkbox.window_text().strip()
                 
-                for medicion, debe_estar_activo in checkboxes_config.items():
-                    if medicion in texto or texto == medicion:
-                        try:
-                            estado_actual = checkbox.get_toggle_state()
-                            
-                            if debe_estar_activo and estado_actual != 1:
-                                checkbox.toggle()
-                                self.logger.info(f"✅ Activando '{texto}'")
-                            elif not debe_estar_activo and estado_actual == 1:
-                                checkbox.toggle()
-                                self.logger.info(f"🚫 Desactivando '{texto}'")
-                            
-                            elementos_configurados[f"CheckBox_{texto}"] = "Configurado"
-                            
-                        except Exception as e:
-                            self.logger.error(f"❌ Error configurando '{texto}': {e}")
+                # Buscar coincidencia en configuración multiidioma
+                debe_estar_activo = None
+                for config_text, estado_deseado in CHECKBOXES_CONFIG.items():
+                    if (config_text.lower() in texto.lower() or 
+                        normalizar_texto_filtro(config_text) == normalizar_texto_filtro(texto)):
+                        debe_estar_activo = estado_deseado
+                        break
+                
+                if debe_estar_activo is not None:
+                    try:
+                        estado_actual = checkbox.get_toggle_state()
+                        
+                        if debe_estar_activo and estado_actual != 1:
+                            checkbox.toggle()
+                            self.logger.info(f"✅ Activando '{texto}'")
+                        elif not debe_estar_activo and estado_actual == 1:
+                            checkbox.toggle()
+                            self.logger.info(f"🚫 Desactivando '{texto}'")
+                        
+                        elementos_configurados[f"CheckBox_{texto}"] = "Configurado"
+                        
+                    except Exception as e:
+                        self.logger.error(f"❌ Error configurando '{texto}': {e}")
             
             self.logger.info(f"📊 Filtros: {len(elementos_configurados)} elementos configurados")
             return elementos_configurados
