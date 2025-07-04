@@ -16,6 +16,8 @@ from pathlib import Path
 
 # Importar la clase principal del extractor
 from extractors.pywin_extractor import SonelExtractorCompleto
+from config.settings import get_full_config, validate_configuration, validate_screen_resolution ,PATHS, LOGGING_CONFIG
+
 
 
 def configurar_rutas():
@@ -27,11 +29,13 @@ def configurar_rutas():
         dict: Diccionario con las rutas configuradas
     """
 
+    config = get_full_config()
+    
     rutas = {
-        "input_directory": "D:\\Universidad\\8vo Semestre\\Practicas\\Sonel\\data\\archivos_pqm",
-        "register_file": "D:\\Universidad\\8vo Semestre\\Practicas\\Sonel\\data\\archivos_pqm",
-        "output_directory": "D:\\Universidad\\8vo Semestre\\Practicas\\Sonel\\data\\archivos_csv", 
-        "sonel_exe_path": "D:\\Wolfly\\Sonel\\SonelAnalysis.exe"
+        "input_directory": config['PATHS']['input_dir'],
+        "register_file": config['PATHS']['input_dir'],
+        "output_directory": config['PATHS']['export_dir'], 
+        "sonel_exe_path": config['PATHS']['sonel_exe_path']
     }
     
     return rutas
@@ -48,15 +52,8 @@ def verificar_requisitos(rutas):
         bool: True si todos los requisitos están cumplidos
     """
     print("🔍 Verificando requisitos del sistema...")
-    
-    # Verificar directorio de entrada
-    if not os.path.exists(rutas["input_directory"]):
-        print(f"❌ Directorio de entrada no existe: {rutas['input_directory']}")
-        return False
-    
-    # Verificar ejecutable de Sonel
-    if not os.path.exists(rutas["sonel_exe_path"]):
-        print(f"❌ Archivo ejecutable de Sonel no encontrado: {rutas['sonel_exe_path']}")
+
+    if not validate_configuration():
         return False
     
     # Crear directorio de salida si no existe
@@ -119,6 +116,9 @@ def main():
     try:
         print("🚀 INICIANDO EXTRACTOR SONEL ANALYSIS")
         print("="*60)
+
+        # Validar configuración antes de proceder
+        validate_screen_resolution()
         
         # Configurar rutas
         rutas = configurar_rutas()

@@ -3,6 +3,8 @@ Clase principal que coordina la ventana de análisis de Sonel
 """
 
 import logging
+from config.logger import get_logger
+from config.settings import PATHS, LOGGING_CONFIG, get_full_config
 from extractors.pyautowin_extractor.window_analysis.connector import SonelConnector
 from extractors.pyautowin_extractor.window_analysis.navigator import SonelNavigator
 from extractors.pyautowin_extractor.window_analysis.executor import SonelExecutor
@@ -10,20 +12,14 @@ from extractors.pyautowin_extractor.window_analysis.executor import SonelExecuto
 class SonelAnalisisInicial:
     """Clase especializada para manejar la vista inicial de análisis"""
     
-    def __init__(self, archivo_pqm, ruta_exe="D:/Wolfly/Sonel/SonelAnalysis.exe"):
+    def __init__(self, archivo_pqm, ruta_exe=None):
         self.archivo_pqm = archivo_pqm
-        self.ruta_exe = ruta_exe
+        self.ruta_exe = ruta_exe or PATHS['sonel_exe_path']
+        config = get_full_config()
         
-        # Configurar logger SOLO PARA CONSOLA
-        self.logger = logging.getLogger(f"{__name__}_inicial")
-        self.logger.setLevel(logging.INFO)
-
-        if not self.logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter('%(asctime)s - [INICIAL] %(levelname)s: %(message)s')
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
+        # Configurar logger usando configuración centralizada
+        self.logger = get_logger("pywinauto", f"{__name__}_pywinauto")
+        self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
         
         self.logger.info("="*60)
         self.logger.info("🎯 EXTRACTOR VISTA INICIAL - SONEL ANALYSIS")

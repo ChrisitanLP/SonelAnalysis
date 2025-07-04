@@ -5,10 +5,12 @@ import pyperclip
 import pyautogui
 from time import sleep
 from pywinauto.mouse import move
+from config.logger import get_logger
 from pywinauto.keyboard import send_keys
 from pyautogui import moveTo, click, position
 from pywinauto import Desktop, mouse, findwindows
 from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
+from config.settings import get_full_config, get_all_possible_translations
 
 class SonelExecutor:
     """Ejecuta acciones principales de extracción y configuración"""
@@ -19,69 +21,116 @@ class SonelExecutor:
         self.main_window = main_window
         
         # Configurar logger
-        self.logger = logging.getLogger(f"{__name__}_executor")
-        self.logger.setLevel(logging.INFO)
-
-        if not self.logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter('%(asctime)s - [EXECUTOR] %(levelname)s: %(message)s')
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
+        config = get_full_config()
+        self.logger = get_logger("pywinauto", f"{__name__}_pywinauto")
+        self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
 
     def extraer_configuracion_principal_mediciones(self):
         """
         Busca y desactiva el checkbox 'Seleccionar todo' si está activado,
         y hace clic en el botón 'Expandir todo'.
+        ✅ VERSIÓN MULTIIDIOMA
         """
         try:
-            self.logger.info("\n🔧 Buscando 'Seleccionar todo' y 'Expandir todo'...")
+            self.logger.info("\n🔧 Buscando 'Seleccionar todo' y 'Expandir todo' (multiidioma)...")
+            
+            # Obtener traducciones para todos los idiomas
+            select_all_texts = get_all_possible_translations('ui_controls', 'select_all')
+            expand_all_texts = get_all_possible_translations('ui_controls', 'expand_all')
+            
+            self.logger.info(f"🌐 Buscando 'Seleccionar todo' en: {select_all_texts}")
+            self.logger.info(f"🌐 Buscando 'Expandir todo' en: {expand_all_texts}")
 
-            componentes_clave = {
-                "Seleccionar todo": {
-                    "tipo": "CheckBox",
-                    "accion": "desactivar"
-                },
-                "Expandir todo": {
-                    "tipo": "Button",
-                    "accion": "click"
-                }
+            # Función auxiliar para normalizar texto
+            def normalizar_texto_ui(texto):
+                """Normaliza texto para comparación multiidioma"""
+                if not texto:
+                    return ""
+                texto = texto.lower().strip()
+                # Eliminar caracteres especiales comunes
+                texto = re.sub(r'[^\w\s]', '', texto)
+                return texto
+
+            # Función para verificar coincidencia
+            def texto_coincide(texto_control, lista_traducciones):
+                """Verifica si el texto del control coincide con alguna traducción"""
+                texto_normalizado = normalizar_texto_ui(texto_control)
+                for traduccion in lista_traducciones:
+                    if normalizar_texto_ui(traduccion) in texto_normalizado:
+                        return True
+                return False
+
+            componentes_encontrados = {
+                'select_all': None,
+                'expand_all': None
             }
 
+            # Buscar componentes con enfoque multiidioma
             for control in self.ventana_configuracion.descendants():
-                texto = control.window_text().strip()
-                if texto in componentes_clave:
-                    tipo_esperado = componentes_clave[texto]["tipo"]
-                    tipo_control = control.friendly_class_name()
-
-                    if tipo_control != tipo_esperado:
-                        self.logger.warning(f"⚠️ Tipo inesperado para '{texto}': {tipo_control} (esperado: {tipo_esperado})")
+                try:
+                    texto = control.window_text().strip()
+                    if not texto:
                         continue
 
-                    detalles = self._log_control_details(control, 0, tipo_control)
+                    tipo_control = control.friendly_class_name()
                     
-                    if tipo_control == "CheckBox":
-                        try:
-                            estado = control.get_toggle_state()
-                            detalles["estado_inicial"] = estado
+                    # Verificar 'Seleccionar todo'
+                    if not componentes_encontrados['select_all'] and texto_coincide(texto, select_all_texts):
+                        if tipo_control == "CheckBox":
+                            componentes_encontrados['select_all'] = control
+                            self.logger.info(f"✅ 'Seleccionar todo' encontrado: '{texto}' ({tipo_control})")
+                        else:
+                            self.logger.warning(f"⚠️ Texto coincide pero tipo incorrecto para 'Seleccionar todo': {tipo_control}")
 
-                            if estado == 1:  # Si está activado
-                                self.logger.info(f"🔄 Desactivando checkbox '{texto}'...")
-                                control.toggle()
-                            else:
-                                self.logger.info(f"✔️ Checkbox '{texto}' ya está desactivado.")
-                        except Exception as e:
-                            self.logger.error(f"❌ No se pudo obtener o cambiar el estado de '{texto}': {e}")
+                    # Verificar 'Expandir todo'
+                    elif not componentes_encontrados['expand_all'] and texto_coincide(texto, expand_all_texts):
+                        if tipo_control == "Button":
+                            componentes_encontrados['expand_all'] = control
+                            self.logger.info(f"✅ 'Expandir todo' encontrado: '{texto}' ({tipo_control})")
+                        else:
+                            self.logger.warning(f"⚠️ Texto coincide pero tipo incorrecto para 'Expandir todo': {tipo_control}")
 
-                    elif tipo_control == "Button":
-                        try:
-                            self.logger.info(f"🖱️ Clic en el botón '{texto}'...")
-                            control.click_input()
-                        except Exception as e:
-                            self.logger.error(f"❌ Error al hacer clic en el botón '{texto}': {e}")
+                    # Si ya encontramos ambos, podemos terminar la búsqueda
+                    if componentes_encontrados['select_all'] and componentes_encontrados['expand_all']:
+                        break
+
+                except Exception as e:
+                    self.logger.debug(f"Error procesando control: {e}")
+
+            # Procesar componentes encontrados
+            # Procesar 'Seleccionar todo'
+            if componentes_encontrados['select_all']:
+                control = componentes_encontrados['select_all']
+                try:
+                    estado = control.get_toggle_state()
+                    self.logger.info(f"🔍 Estado actual del checkbox: {estado}")
+
+                    if estado == 1:  # Si está activado
+                        self.logger.info("🔄 Desactivando checkbox 'Seleccionar todo'...")
+                        control.toggle()
+                        self.logger.info("✅ Checkbox desactivado")
+                    else:
+                        self.logger.info("✔️ Checkbox 'Seleccionar todo' ya está desactivado")
+                except Exception as e:
+                    self.logger.error(f"❌ Error manipulando checkbox 'Seleccionar todo': {e}")
+            else:
+                self.logger.warning("⚠️ No se encontró el checkbox 'Seleccionar todo' en ningún idioma")
+
+            # Procesar 'Expandir todo'
+            if componentes_encontrados['expand_all']:
+                control = componentes_encontrados['expand_all']
+                try:
+                    self.logger.info("🖱️ Haciendo clic en 'Expandir todo'...")
+                    control.click_input()
+                    self.logger.info("✅ Clic en 'Expandir todo' realizado")
+                except Exception as e:
+                    self.logger.error(f"❌ Error haciendo clic en 'Expandir todo': {e}")
+            else:
+                self.logger.warning("⚠️ No se encontró el botón 'Expandir todo' en ningún idioma")
 
         except Exception as e:
-            self.logger.error(f"❌ Error general en 'desactivar_seleccionar_todo_y_expandir': {e}")
+            self.logger.error(f"❌ Error general en 'extraer_configuracion_principal_mediciones': {e}")
+
 
     def extraer_componentes_arbol_mediciones(self):
         """
@@ -104,21 +153,38 @@ class SonelExecutor:
             elementos_seleccionados = 0
             elementos_no_seleccionables = 0
 
-            # Palabras clave que nos interesan extraer (normalizadas)
-            palabras_clave = [
-                "tensión u", "tensión ul-l", "tensión u l-l",
-                "potencia p", "potencia q1", "potencia sn", "potencia s"
-            ]
+            # Obtener palabras clave en todos los idiomas soportados
+            palabras_clave = get_all_possible_translations('measurement_keywords')
+            self.logger.info(f"🌐 Palabras clave multiidioma cargadas: {len(palabras_clave)} términos")
+            self.logger.debug(f"📝 Términos: {palabras_clave}")
 
             def normalizar_texto(texto):
-                """Quita etiquetas HTML y símbolos para comparación"""
+                """Quita etiquetas HTML y símbolos para comparación multiidioma"""
+                if not texto:
+                    return ""
+                
+                # Eliminar etiquetas HTML
                 texto = re.sub(r"<sub>(.*?)</sub>", r"\1", texto, flags=re.IGNORECASE)
-                texto = re.sub(r"[<>_/]", "", texto)  # Elimina restos de etiquetas o subíndices
+                texto = re.sub(r"<.*?>", "", texto)  # Eliminar cualquier etiqueta HTML
+                
+                # Eliminar símbolos y caracteres especiales
+                texto = re.sub(r"[<>_/\-\(\)\[\]{}]", " ", texto)
+                
+                # Normalizar espacios
+                texto = re.sub(r'\s+', ' ', texto)
+                
                 return texto.lower().strip()
 
             def contiene_palabra_clave(texto):
+                """Verifica si el texto contiene alguna palabra clave multiidioma"""
                 texto_normalizado = normalizar_texto(texto)
-                return any(clave in texto_normalizado for clave in palabras_clave)
+                
+                for clave in palabras_clave:
+                    clave_normalizada = normalizar_texto(clave)
+                    if clave_normalizada in texto_normalizado:
+                        return True
+                
+                return False
 
             def verificar_y_seleccionar_elemento(item, texto):
                 """
@@ -528,9 +594,32 @@ class SonelExecutor:
         try:
             self.logger.info("\n📈 === EXTRACCIÓN: INFORMES Y GRÁFICOS ===")
 
+            reports_texts = get_all_possible_translations('ui_controls', 'reports')
+            self.logger.info(f"🌐 Buscando elementos de texto relacionados con 'Informes y gráficos' en: {reports_texts}")
+
             index = 0
             informes_encontrados = self._buscar_informes(index)
             index += len(informes_encontrados)
+
+            # Función auxiliar para normalizar texto
+            def normalizar_texto_ui(texto):
+                """Normaliza texto para comparación multiidioma"""
+                if not texto:
+                    return ""
+                texto = texto.lower().strip()
+                # Eliminar caracteres especiales comunes
+                import re
+                texto = re.sub(r'[^\w\s]', '', texto)
+                return texto
+            
+            # Función para verificar coincidencia con informes/gráficos
+            def texto_coincide_informes(texto_control, lista_traducciones):
+                """Verifica si el texto corresponde a 'Informes y gráficos' en cualquier idioma"""
+                texto_normalizado = normalizar_texto_ui(texto_control)
+                for traduccion in lista_traducciones:
+                    if normalizar_texto_ui(traduccion) in texto_normalizado:
+                        return True
+                return False
 
             # Buscar texto relacionado
             self.logger.info("\n📋 Buscando elementos de texto relacionados...")
@@ -538,7 +627,7 @@ class SonelExecutor:
             for texto in textos:
                 try:
                     texto_content = texto.window_text().strip()
-                    if any(k in texto_content for k in ["Informes", "Gráficos", "Informes y gráficos"]):
+                    if texto_content and texto_coincide_informes(texto_content, reports_texts):
                         detalles = self._log_control_details(texto, index, "Text")
                         if detalles:
                             detalles['contenido_relevante'] = texto_content
@@ -559,18 +648,52 @@ class SonelExecutor:
 
     def _buscar_informes(self, index): 
         informes_encontrados = {}
+        
+        # Importar traducciones multiidioma
+        from config.settings import get_all_possible_translations
+        
+        # Obtener términos de informes en todos los idiomas
+        report_terms = get_all_possible_translations('ui_controls', 'reports')
+        
+        self.logger.info(f"\n🔘 Buscando botón 'Informes' multiidioma...")
+        self.logger.info(f"🌐 Términos de búsqueda: {report_terms}")
 
-        self.logger.info("\n🔘 Buscando botón 'Informes' y sus opciones...")
+        def normalizar_para_busqueda(texto):
+            """Normaliza texto para búsqueda multiidioma"""
+            if not texto:
+                return ""
+            texto = texto.lower().strip()
+            # Eliminar acentos y caracteres especiales
+            texto = re.sub(r'[áàäâ]', 'a', texto)
+            texto = re.sub(r'[éèëê]', 'e', texto)
+            texto = re.sub(r'[íìïî]', 'i', texto)
+            texto = re.sub(r'[óòöô]', 'o', texto)
+            texto = re.sub(r'[úùüû]', 'u', texto)
+            texto = re.sub(r'[^\w\s]', ' ', texto)
+            texto = re.sub(r'\s+', ' ', texto)
+            return texto.strip()
 
+        def contiene_termino_informe(texto):
+            """Verifica si el texto contiene algún término de informe"""
+            texto_normalizado = normalizar_para_busqueda(texto)
+            for termino in report_terms:
+                termino_normalizado = normalizar_para_busqueda(termino)
+                if termino_normalizado in texto_normalizado:
+                    return True
+            return False
+
+        # Buscar botones de informes
         for i, button in enumerate(self.ventana_configuracion.descendants(control_type="Button")):
             try:
                 texto = button.window_text().strip()
-                if "Informe" in texto:
+                if contiene_termino_informe(texto):
                     detalles = self._log_control_details(button, index, "Button")
                     if detalles:
-                        detalles['metodo_deteccion'] = "Por texto botón"
+                        detalles['metodo_deteccion'] = "Por texto botón multiidioma"
+                        detalles['termino_encontrado'] = texto
 
                         try:
+                            self.logger.info(f"🖱️ Haciendo clic en botón de informes: '{texto}'")
                             button.click_input()
                             time.sleep(1.2)  # Esperar menú emergente
 
@@ -580,31 +703,37 @@ class SonelExecutor:
                             pyautogui.click(button='left')
 
                         except Exception as submenu_err:
-                            self.logger.warning(f"⚠️  No se pudieron obtener los subelementos del botón 'Informes': {submenu_err}")
+                            self.logger.warning(f"⚠️ No se pudieron obtener los subelementos del botón 'Informes': {submenu_err}")
 
                         informes_encontrados[f"Button_Informes_{index}"] = detalles
                         index += 1
+                        break  # Solo procesar el primer botón encontrado
             except Exception as e:
                 self.logger.debug(f"Error en botón 'Informes': {e}")
 
-        # Fallback: detectar por contenido visible
-        buttons = self.ventana_configuracion.descendants(control_type="Button")
-        for button in buttons:
-            try:
-                texto_button = button.window_text().strip()
-                if "Informe" in texto_button or "Informes" in texto_button:
-                    ya_encontrado = any("Button_Informes" in k for k in informes_encontrados)
-                    if not ya_encontrado:
+        # Fallback: detectar por contenido visible con multiidioma
+        if not informes_encontrados:
+            buttons = self.ventana_configuracion.descendants(control_type="Button")
+            for button in buttons:
+                try:
+                    texto_button = button.window_text().strip()
+                    if contiene_termino_informe(texto_button):
                         detalles = self._log_control_details(button, index, "Button")
                         if detalles:
                             detalles['funcionalidad'] = "Abre vista gráfica del análisis"
-                            detalles['metodo_deteccion'] = "Por contenido de texto"
-                            detalles['opcion_prioritaria'] = "Informe CSV" if "CSV" in texto_button.upper() else None
+                            detalles['metodo_deteccion'] = "Por contenido de texto multiidioma"
+                            detalles['termino_encontrado'] = texto_button
+                            
+                            # Detectar si es CSV específicamente
+                            if any(term in texto_button.upper() for term in ['CSV']):
+                                detalles['opcion_prioritaria'] = "Informe CSV"
+                            
                             informes_encontrados[f"Button_Graficos_Contenido_{index}"] = detalles
                             index += 1
-                            self.logger.info(f"   ✅ BUTTON encontrado por contenido: {texto_button}")
-            except Exception as e:
-                self.logger.debug(f"Error procesando botón: {e}")
+                            self.logger.info(f"✅ BUTTON encontrado por contenido multiidioma: {texto_button}")
+                            break
+                except Exception as e:
+                    self.logger.debug(f"Error procesando botón: {e}")
 
         return informes_encontrados
 
@@ -615,6 +744,30 @@ class SonelExecutor:
         try:
             self.logger.info(f"💾 Guardando archivo CSV: {nombre_archivo}")
             time.sleep(2)
+
+            # Obtener todas las traducciones posibles para 'save'
+            save_terms = get_all_possible_translations('ui_controls', 'save')
+            self.logger.info(f"🌐 Buscando diálogo 'Guardar' en términos: {save_terms}")
+
+            # Función auxiliar para normalizar texto
+            def normalizar_texto_ui(texto):
+                """Normaliza texto para comparación multiidioma"""
+                if not texto:
+                    return ""
+                texto = texto.lower().strip()
+                # Eliminar caracteres especiales comunes
+                import re
+                texto = re.sub(r'[^\w\s]', '', texto)
+                return texto
+
+            # Función para verificar coincidencia con 'Guardar'
+            def es_dialogo_guardar(texto_control, lista_traducciones):
+                """Verifica si el texto corresponde a un diálogo de guardar en cualquier idioma"""
+                texto_normalizado = normalizar_texto_ui(texto_control)
+                for traduccion in lista_traducciones:
+                    if normalizar_texto_ui(traduccion) in texto_normalizado:
+                        return True
+                return False
             
             if not self.app:
                 self.logger.error("❌ No hay conexión con la aplicación Sonel")
@@ -627,10 +780,26 @@ class SonelExecutor:
                 for i, dialog in enumerate(dialogs):
                     try:
                         self._log_control_details(dialog, index=i, tipo_esperado="Dialogo candidato")
-                        if dialog.is_visible() and ("Guardar" in dialog.window_text() or dialog.child_window(title="Guardar", control_type="Button").exists()):
-                            guardar_ventana = dialog
-                            print(f"✅ Diálogo de guardado encontrado: '{dialog.window_text()}'")
-                            break
+                        dialog_text = dialog.window_text()
+                        
+                        # Verificar si es diálogo de guardar usando multiidioma
+                        if (dialog.is_visible() and 
+                            (es_dialogo_guardar(dialog_text, save_terms) or 
+                            dialog.child_window(control_type="Button").exists())):
+                            
+                            # Verificar si tiene botón guardar
+                            try:
+                                for ctrl in dialog.descendants(control_type="Button"):
+                                    if es_dialogo_guardar(ctrl.window_text(), save_terms):
+                                        guardar_ventana = dialog
+                                        print(f"✅ Diálogo de guardado encontrado: '{dialog_text}'")
+                                        break
+                            except:
+                                pass
+                            
+                            if guardar_ventana:
+                                break
+                                
                     except Exception as e:
                         self.logger.warning(f"⚠️ Diálogo no procesado: {e}")
 
@@ -646,6 +815,18 @@ class SonelExecutor:
             except Exception as e:
                 self.logger.warning(f"⚠️ No se pudo enfocar la ventana: {e}")
 
+            image_terms = get_all_possible_translations('ui_controls', 'image')
+            self.logger.info(f"🌐 Buscando campo relacionado con 'Imágenes' en términos: {image_terms}")
+        
+            # Función para verificar coincidencia con 'Imágenes'
+            def es_campo_imagenes(texto_control, lista_traducciones):
+                """Verifica si el texto corresponde a 'Imágenes' en cualquier idioma"""
+                texto_normalizado = normalizar_texto_ui(texto_control)
+                for traduccion in lista_traducciones:
+                    if normalizar_texto_ui(traduccion) in texto_normalizado:
+                        return True
+                return False
+
             # Localizar el campo de texto "Nombre"
             campo_control = None
 
@@ -653,7 +834,7 @@ class SonelExecutor:
                 if isinstance(ctrl, EditWrapper):
                     try:
                         padre = ctrl.parent()
-                        if padre and "Imágenes" in padre.window_text():
+                        if padre and es_campo_imagenes(padre.window_text(), image_terms):
                             campo_control = ctrl
                             self._log_control_details(ctrl, index=idx, tipo_esperado="Campo Nombre (EditWrapper)")
                             break
@@ -716,12 +897,25 @@ class SonelExecutor:
 
             # Localizar el botón "Guardar"
             boton_guardar_control = None
+
+            save_terms = get_all_possible_translations('ui_controls', 'save')
+            self.logger.info(f"🌐 Buscando botón 'Guardar' en términos: {save_terms}")
+
+            def es_boton_guardar(texto):
+                """Verifica si el texto corresponde a un botón de guardar en cualquier idioma"""
+                if not texto:
+                    return False
+                texto_normalizado = texto.strip().lower()
+                for termino in save_terms:
+                    if termino.lower() == texto_normalizado:
+                        return True
+                return False
             
             try:
                 for idx, ctrl in enumerate(guardar_ventana.descendants(control_type="Button")):
-                    if isinstance(ctrl, ButtonWrapper) and ctrl.window_text() and ctrl.window_text().strip().lower() == "guardar":
+                    if isinstance(ctrl, ButtonWrapper) and es_boton_guardar(ctrl.window_text()):
                         boton_guardar_control = ctrl
-                        self._log_control_details(ctrl, index=idx, tipo_esperado="Botón Guardar")
+                        self._log_control_details(ctrl, index=idx, tipo_esperado="Botón Guardar (multiidioma)")
                         break
             except Exception as e:
                 self.logger.warning(f"⚠️ Error buscando botón 'Guardar': {e}")

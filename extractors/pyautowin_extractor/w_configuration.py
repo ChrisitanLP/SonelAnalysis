@@ -3,6 +3,8 @@ Clase principal que coordina la ventana de configuración de Sonel
 """
 
 import logging
+from config.logger import get_logger
+from config.settings import get_full_config
 from extractors.pyautowin_extractor.window_configuration.connector import SonelConnector
 from extractors.pyautowin_extractor.window_configuration.navigator import SonelNavigator
 from extractors.pyautowin_extractor.window_configuration.executor import SonelExecutor
@@ -15,16 +17,10 @@ class SonelConfiguracion:
         self.app_reference = app_reference
         
         # Configurar logger SOLO PARA CONSOLA
-        self.logger = logging.getLogger(f"{__name__}_configuracion")
-        self.logger.setLevel(logging.INFO)
+        config = get_full_config()
+        self.logger = get_logger("pywinauto", f"{__name__}_pywinauto")
+        self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
 
-        if not self.logger.handlers:
-            console_handler = logging.StreamHandler()
-            console_handler.setLevel(logging.INFO)
-            formatter = logging.Formatter('%(asctime)s - [CONFIGURACION] %(levelname)s: %(message)s')
-            console_handler.setFormatter(formatter)
-            self.logger.addHandler(console_handler)
-        
         self.logger.info("="*60)
         self.logger.info("⚙️ EXTRACTOR VISTA CONFIGURACIÓN - SONEL ANALYSIS")
         self.logger.info("="*60)
