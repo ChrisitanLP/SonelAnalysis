@@ -6,6 +6,7 @@ import time
 import logging
 import pyautogui
 from config.logger import get_logger
+from utils.wait_handler import WaitHandler
 from config.settings import get_full_config, get_all_possible_translations
 
 class SonelNavigator:
@@ -13,6 +14,8 @@ class SonelNavigator:
     
     def __init__(self, ventana_inicial, logger=None):
         self.ventana_inicial = ventana_inicial
+
+        self.wait_handler = WaitHandler()
 
         config = get_full_config()
         self.logger = logger or get_logger("pywinauto", f"{__name__}_pywinauto")
@@ -29,8 +32,14 @@ class SonelNavigator:
 
             # Obtener todas las traducciones posibles para 'configuration'
             configuration_texts = get_all_possible_translations('ui_controls', 'configuration')
-            
             self.logger.info(f"🌐 Buscando 'Configuración 1' en: {configuration_texts}")
+
+            # Esperar que los TreeItems estén disponibles
+            if not self.wait_handler.esperar_controles_disponibles(self.ventana_inicial, 
+                                                    ["TreeItem"], 
+                                                    timeout=20):
+                self.logger.error("❌ Timeout: TreeItems no disponibles")
+                return False
             
             # Función auxiliar para normalizar texto
             def normalizar_texto_ui(texto):
