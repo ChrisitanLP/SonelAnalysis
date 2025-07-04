@@ -1,6 +1,7 @@
 import time
 import logging
 from config.logger import get_logger
+from utils.wait_handler import WaitHandler
 from config.settings import get_full_config, get_all_possible_translations, CHECKBOXES_CONFIG
 
 class SonelNavigator:
@@ -8,6 +9,8 @@ class SonelNavigator:
     
     def __init__(self, ventana_configuracion):
         self.ventana_configuracion = ventana_configuracion
+
+        self.wait_handler = WaitHandler()
         
         # Configurar logger
         config = get_full_config()
@@ -21,6 +24,13 @@ class SonelNavigator:
 
             measurements = get_all_possible_translations('ui_controls', 'measurements')
             self.logger.info(f"🌐 Buscando 'Meciciones' en: {measurements}")
+
+            # Esperar que la ventana esté lista con sus controles
+            if not self.wait_handler.esperar_controles_disponibles(self.ventana_configuracion, 
+                                                    ["CheckBox"], 
+                                                    timeout=20):
+                self.logger.error("❌ Timeout: Controles de navegación no disponibles")
+                return {}
 
             def normalizar_texto_nav(texto):
                 """Normaliza texto para comparación multiidioma"""
@@ -86,6 +96,13 @@ class SonelNavigator:
             # 1. Seleccionar RadioButton "Usuario" (multiidioma)
             user_translations = get_all_possible_translations('ui_controls', 'user')
             self.logger.info(f"🌐 Buscando 'Usuario' en: {user_translations}")
+
+            # Esperar que los controles estén disponibles
+            if not self.wait_handler.esperar_controles_disponibles(self.ventana_configuracion, 
+                                                    ["RadioButton", "CheckBox"], 
+                                                    timeout=15):
+                self.logger.error("❌ Timeout: Controles de filtros no disponibles")
+                return {}
 
             elementos_configurados = {}
 

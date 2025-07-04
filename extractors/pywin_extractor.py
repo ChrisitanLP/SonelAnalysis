@@ -384,7 +384,6 @@ class SonelExtractorCompleto:
             self.pywinauto_logger.info("--- FASE 2: VISTA CONFIGURACIÓN ---")
             extractor_config = SonelConfiguracion()
             app_ref = extractor_inicial.get_app_reference()
-            time.sleep(4.5)
             
             if not extractor_config.conectar(app_ref):
                 self.pywinauto_logger.error("❌ Error conectando vista configuración")
