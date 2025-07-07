@@ -2,7 +2,6 @@ import time
 import logging
 from pywinauto import Application
 from config.logger import get_logger
-from utils.wait_handler import WaitHandler
 from config.settings import get_full_config
 from config.settings import get_window_title_translations
 
@@ -63,7 +62,7 @@ class SonelConnector:
                 self.logger.info(f"🌐 Buscando ventana de configuración con sufijos: {config_suffixes}")
                 
                 # Función auxiliar para normalizar texto
-                def normalizar_texto_ventana(texto):
+                def normalizar_texto(texto):
                     """Normaliza texto para comparación multiidioma"""
                     if not texto:
                         return ""
@@ -73,9 +72,9 @@ class SonelConnector:
                     return texto
 
                 # Función para verificar si es ventana de configuración
-                def es_ventana_configuracion(titulo):
+                def es_ventana(titulo):
                     """Verifica si el título corresponde a una ventana de configuración"""
-                    titulo_norm = normalizar_texto_ventana(titulo)
+                    titulo_norm = normalizar_texto(titulo)
                     
                     # Debe contener palabra clave de análisis y extensión .pqm
                     tiene_analisis = any(keyword in titulo_norm for keyword in analysis_keywords)
@@ -94,7 +93,7 @@ class SonelConnector:
                 for window in windows:
                     try:
                         title = window.window_text()
-                        if es_ventana_configuracion(title):
+                        if es_ventana(title):
                             self.ventana_configuracion = window
                             self.logger.info(f"✅ Vista configuración encontrada: {title}")
                             return True
@@ -103,7 +102,7 @@ class SonelConnector:
                 
                 # Fallback: verificar ventana principal
                 main_title = main_window.window_text()
-                if es_ventana_configuracion(main_title):
+                if es_ventana(main_title):
                     self.ventana_configuracion = main_window
                     self.logger.info(f"✅ Vista configuración (main): {main_title}")
                     return True

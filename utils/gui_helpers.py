@@ -1,6 +1,4 @@
 import os
-import time
-import pyautogui
 from config.logger import logger
 
 

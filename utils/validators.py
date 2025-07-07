@@ -1,9 +1,8 @@
 #sonel_extractor/utils/validators.py
 import re
-import pandas as pd
 import os
-import hashlib
 import time
+import hashlib
 from config.logger import logger
 from config.settings import COLUMN_PATTERNS
 
@@ -214,40 +213,4 @@ def has_valid_client_code(file_path):
     except Exception as e:
         logger.error(f"Error al verificar código de cliente en {file_path}: {e}")
         return True  # En caso de error, consideramos válido y generaremos un código único
-    
-
-def _get_search_variants(original_name):
-        """
-        Genera variantes de búsqueda para un nombre dado
-        
-        Args:
-            original_name: Nombre original
-            
-        Returns:
-            list: Lista de variantes para buscar
-        """
-        variants = [original_name]
-        
-        # Variantes específicas basadas en tu análisis
-        name_mappings = {
-            "Usuario": ["Usuario", "User"],
-            "Máx.": ["Máx.", "Max.", "Máx", "Max"],
-            "Mín.": ["Mín.", "Min.", "Mín", "Min"],
-            "Instant.": ["Instant.", "Instant", "Instantáneo"],
-            "Prom.": ["Prom.", "Prom", "Promedio"]
-        }
-        
-        if original_name in name_mappings:
-            variants.extend(name_mappings[original_name])
-        
-        # Agregar variantes sin puntos y con puntos
-        base_name = original_name.replace(".", "").replace("/", "").strip()
-        if base_name not in variants:
-            variants.append(base_name)
-        
-        # Agregar variante con punto si no la tiene
-        if not original_name.endswith(".") and f"{original_name}." not in variants:
-            variants.append(f"{original_name}.")
-        
-        return list(set(variants))  # Eliminar duplicados
         

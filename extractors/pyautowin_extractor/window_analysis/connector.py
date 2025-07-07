@@ -49,7 +49,7 @@ class SonelConnector:
                 self.logger.info(f"🌐 Excluyendo sufijos: {config_suffixes}")
                 
                 # Función auxiliar para normalizar texto
-                def normalizar_texto_ventana(texto):
+                def normalizar_texto(texto):
                     """Normaliza texto para comparación multiidioma"""
                     if not texto:
                         return ""
@@ -59,9 +59,9 @@ class SonelConnector:
                     return texto
 
                 # Función para verificar si es ventana de análisis (NO configuración)
-                def es_ventana_analisis(titulo):
+                def es_ventana(titulo):
                     """Verifica si el título corresponde a una ventana de análisis"""
-                    titulo_norm = normalizar_texto_ventana(titulo)
+                    titulo_norm = normalizar_texto(titulo)
                     
                     # Debe contener palabra clave de análisis y extensión .pqm
                     tiene_analisis = any(keyword in titulo_norm for keyword in analysis_keywords)
@@ -102,7 +102,7 @@ class SonelConnector:
                 for window in windows:
                     try:
                         title = window.window_text()
-                        if es_ventana_analisis(title):
+                        if es_ventana(title):
                             self.ventana_inicial = window
                             self.logger.info(f"✅ Vista inicial encontrada: {title}")
                             return True
@@ -111,7 +111,7 @@ class SonelConnector:
                 
                 # Fallback: usar ventana principal si cumple criterios
                 main_title = main_window.window_text()
-                if es_ventana_analisis(main_title):
+                if es_ventana(main_title):
                     self.ventana_inicial = main_window
                     self.logger.info(f"✅ Vista inicial (main): {main_title}")
                     return True

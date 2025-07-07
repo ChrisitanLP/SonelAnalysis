@@ -1,14 +1,13 @@
 #sonel_etl.py
 import os
-import glob
 from config.logger import logger
 from config.settings import load_config
-from database.connection import DatabaseConnection
 from database.operations import DataHandler
+from utils.validators import extract_client_code
+from database.connection import DatabaseConnection
 from extractors.file_extractor import FileExtractor
 from extractors.pygui_extractor import GUIExtractor
 from transformers.voltage_transformer import VoltageTransformer
-from utils.validators import extract_client_code
 from utils.processing_registry import ProcessingRegistry, ProcessingStatus
 
 class SonelETL:
@@ -196,7 +195,7 @@ class SonelETL:
                 should_process, reason = self.registry.should_process_file(file_path)
                 if not should_process:
                     self.registry.register_processing_skipped(file_path, reason)
-                    logger.info(f"⏭️ Archivo omitido: {os.path.basename(file_path)} - {reason}")
+                    logger.info(f"⏭️  Archivo omitido: {os.path.basename(file_path)} - {reason}")
                     return True  # No es un error, simplemente se omitió
             
             # Registrar inicio del procesamiento

@@ -1,12 +1,11 @@
 import os
 import time
-from pathlib import Path
 from config.logger import logger
-from config.settings import get_coordinates, get_delays
 from extractors.base import BaseExtractor
+from config.settings import get_coordinates, get_delays
+from extractors.pyautogui_extractor.file_tracker import FileTracker
 from extractors.pyautogui_extractor.process_manager import ProcessManager
 from extractors.pyautogui_extractor.window_controller import WindowController
-from extractors.pyautogui_extractor.file_tracker import FileTracker
 from extractors.pyautogui_extractor.export_controller import ExportController
 
 class GUIExtractor(BaseExtractor):

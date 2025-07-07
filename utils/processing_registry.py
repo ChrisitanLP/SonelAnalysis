@@ -1,13 +1,11 @@
 # sonel_extractor/utils/processing_registry.py
-
-import json
 import os
+import json
 import hashlib
-from datetime import datetime
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 from enum import Enum
+from datetime import datetime
 from config.logger import logger
+from typing import Dict, List, Tuple
 
 class ProcessingStatus(Enum):
     """Estados posibles de procesamiento de archivos"""
