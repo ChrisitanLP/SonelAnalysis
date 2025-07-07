@@ -4,11 +4,12 @@ import logging
 import pyperclip
 import pyautogui
 from time import sleep
+from pywinauto import mouse
 from pywinauto.mouse import move
+from pyautogui import moveTo, click
 from config.logger import get_logger
 from pywinauto.keyboard import send_keys
-from pyautogui import moveTo, click, position
-from pywinauto import Desktop, mouse, findwindows
+from utils.text_normalize import TextUtils
 from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
 from config.settings import get_full_config, get_all_possible_translations
 
@@ -41,25 +42,6 @@ class SonelExecutor:
             self.logger.info(f"🌐 Buscando 'Seleccionar todo' en: {select_all_texts}")
             self.logger.info(f"🌐 Buscando 'Expandir todo' en: {expand_all_texts}")
 
-            # Función auxiliar para normalizar texto
-            def normalizar_texto_ui(texto):
-                """Normaliza texto para comparación multiidioma"""
-                if not texto:
-                    return ""
-                texto = texto.lower().strip()
-                # Eliminar caracteres especiales comunes
-                texto = re.sub(r'[^\w\s]', '', texto)
-                return texto
-
-            # Función para verificar coincidencia
-            def texto_coincide(texto_control, lista_traducciones):
-                """Verifica si el texto del control coincide con alguna traducción"""
-                texto_normalizado = normalizar_texto_ui(texto_control)
-                for traduccion in lista_traducciones:
-                    if normalizar_texto_ui(traduccion) in texto_normalizado:
-                        return True
-                return False
-
             componentes_encontrados = {
                 'select_all': None,
                 'expand_all': None
@@ -75,7 +57,7 @@ class SonelExecutor:
                     tipo_control = control.friendly_class_name()
                     
                     # Verificar 'Seleccionar todo'
-                    if not componentes_encontrados['select_all'] and texto_coincide(texto, select_all_texts):
+                    if not componentes_encontrados['select_all'] and TextUtils.texto_coincide(texto, select_all_texts):
                         if tipo_control == "CheckBox":
                             componentes_encontrados['select_all'] = control
                             self.logger.info(f"✅ 'Seleccionar todo' encontrado: '{texto}' ({tipo_control})")
@@ -83,7 +65,7 @@ class SonelExecutor:
                             self.logger.warning(f"⚠️ Texto coincide pero tipo incorrecto para 'Seleccionar todo': {tipo_control}")
 
                     # Verificar 'Expandir todo'
-                    elif not componentes_encontrados['expand_all'] and texto_coincide(texto, expand_all_texts):
+                    elif not componentes_encontrados['expand_all'] and TextUtils.texto_coincide(texto, expand_all_texts):
                         if tipo_control == "Button":
                             componentes_encontrados['expand_all'] = control
                             self.logger.info(f"✅ 'Expandir todo' encontrado: '{texto}' ({tipo_control})")
@@ -175,15 +157,13 @@ class SonelExecutor:
                 
                 return texto.lower().strip()
 
-            def contiene_palabra_clave(texto):
+            def contiene_termino(texto):
                 """Verifica si el texto contiene alguna palabra clave multiidioma"""
                 texto_normalizado = normalizar_texto(texto)
-                
                 for clave in palabras_clave:
                     clave_normalizada = normalizar_texto(clave)
                     if clave_normalizada in texto_normalizado:
                         return True
-                
                 return False
 
             def verificar_y_seleccionar_elemento(item, texto):
@@ -195,7 +175,7 @@ class SonelExecutor:
                 
                 try:
                     # Verificar si contiene palabra clave
-                    if not contiene_palabra_clave(texto):
+                    if not contiene_termino(texto):
                         return {
                             'seleccionado': False,
                             'accion': 'no_es_clave',
@@ -340,7 +320,7 @@ class SonelExecutor:
                         'seleccionado': False,
                         'accion': 'error_critico_general',
                         'error': str(e),
-                        'es_clave': contiene_palabra_clave(texto)
+                        'es_clave': contiene_termino(texto)
                     }
                 
             def calcular_area_scroll():
@@ -601,33 +581,13 @@ class SonelExecutor:
             informes_encontrados = self._buscar_informes(index)
             index += len(informes_encontrados)
 
-            # Función auxiliar para normalizar texto
-            def normalizar_texto_ui(texto):
-                """Normaliza texto para comparación multiidioma"""
-                if not texto:
-                    return ""
-                texto = texto.lower().strip()
-                # Eliminar caracteres especiales comunes
-                import re
-                texto = re.sub(r'[^\w\s]', '', texto)
-                return texto
-            
-            # Función para verificar coincidencia con informes/gráficos
-            def texto_coincide_informes(texto_control, lista_traducciones):
-                """Verifica si el texto corresponde a 'Informes y gráficos' en cualquier idioma"""
-                texto_normalizado = normalizar_texto_ui(texto_control)
-                for traduccion in lista_traducciones:
-                    if normalizar_texto_ui(traduccion) in texto_normalizado:
-                        return True
-                return False
-
             # Buscar texto relacionado
             self.logger.info("\n📋 Buscando elementos de texto relacionados...")
             textos = self.ventana_configuracion.descendants(control_type="Text")
             for texto in textos:
                 try:
                     texto_content = texto.window_text().strip()
-                    if texto_content and texto_coincide_informes(texto_content, reports_texts):
+                    if texto_content and TextUtils.texto_coincide(texto_content, reports_texts):
                         detalles = self._log_control_details(texto, index, "Text")
                         if detalles:
                             detalles['contenido_relevante'] = texto_content
@@ -673,7 +633,7 @@ class SonelExecutor:
             texto = re.sub(r'\s+', ' ', texto)
             return texto.strip()
 
-        def contiene_termino_informe(texto):
+        def contiene_termino(texto):
             """Verifica si el texto contiene algún término de informe"""
             texto_normalizado = normalizar_para_busqueda(texto)
             for termino in report_terms:
@@ -686,7 +646,7 @@ class SonelExecutor:
         for i, button in enumerate(self.ventana_configuracion.descendants(control_type="Button")):
             try:
                 texto = button.window_text().strip()
-                if contiene_termino_informe(texto):
+                if contiene_termino(texto):
                     detalles = self._log_control_details(button, index, "Button")
                     if detalles:
                         detalles['metodo_deteccion'] = "Por texto botón multiidioma"
@@ -717,7 +677,7 @@ class SonelExecutor:
             for button in buttons:
                 try:
                     texto_button = button.window_text().strip()
-                    if contiene_termino_informe(texto_button):
+                    if contiene_termino(texto_button):
                         detalles = self._log_control_details(button, index, "Button")
                         if detalles:
                             detalles['funcionalidad'] = "Abre vista gráfica del análisis"
@@ -748,26 +708,6 @@ class SonelExecutor:
             # Obtener todas las traducciones posibles para 'save'
             save_terms = get_all_possible_translations('ui_controls', 'save')
             self.logger.info(f"🌐 Buscando diálogo 'Guardar' en términos: {save_terms}")
-
-            # Función auxiliar para normalizar texto
-            def normalizar_texto_ui(texto):
-                """Normaliza texto para comparación multiidioma"""
-                if not texto:
-                    return ""
-                texto = texto.lower().strip()
-                # Eliminar caracteres especiales comunes
-                import re
-                texto = re.sub(r'[^\w\s]', '', texto)
-                return texto
-
-            # Función para verificar coincidencia con 'Guardar'
-            def es_dialogo_guardar(texto_control, lista_traducciones):
-                """Verifica si el texto corresponde a un diálogo de guardar en cualquier idioma"""
-                texto_normalizado = normalizar_texto_ui(texto_control)
-                for traduccion in lista_traducciones:
-                    if normalizar_texto_ui(traduccion) in texto_normalizado:
-                        return True
-                return False
             
             if not self.app:
                 self.logger.error("❌ No hay conexión con la aplicación Sonel")
@@ -784,13 +724,13 @@ class SonelExecutor:
                         
                         # Verificar si es diálogo de guardar usando multiidioma
                         if (dialog.is_visible() and 
-                            (es_dialogo_guardar(dialog_text, save_terms) or 
+                            (TextUtils.texto_coincide(dialog_text, save_terms) or 
                             dialog.child_window(control_type="Button").exists())):
                             
                             # Verificar si tiene botón guardar
                             try:
                                 for ctrl in dialog.descendants(control_type="Button"):
-                                    if es_dialogo_guardar(ctrl.window_text(), save_terms):
+                                    if TextUtils.texto_coincide(ctrl.window_text(), save_terms):
                                         guardar_ventana = dialog
                                         print(f"✅ Diálogo de guardado encontrado: '{dialog_text}'")
                                         break
@@ -821,9 +761,9 @@ class SonelExecutor:
             # Función para verificar coincidencia con 'Imágenes'
             def es_campo_imagenes(texto_control, lista_traducciones):
                 """Verifica si el texto corresponde a 'Imágenes' en cualquier idioma"""
-                texto_normalizado = normalizar_texto_ui(texto_control)
+                texto_normalizado = TextUtils.normalizar_texto(texto_control)
                 for traduccion in lista_traducciones:
-                    if normalizar_texto_ui(traduccion) in texto_normalizado:
+                    if TextUtils.normalizar_texto(traduccion) in texto_normalizado:
                         return True
                 return False
 

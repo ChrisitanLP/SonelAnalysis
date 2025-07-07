@@ -5,10 +5,9 @@ Clase principal que coordina la ventana de configuración de Sonel
 import logging
 from config.logger import get_logger
 from config.settings import get_full_config
+from extractors.pyautowin_extractor.window_configuration.executor import SonelExecutor
 from extractors.pyautowin_extractor.window_configuration.connector import SonelConnector
 from extractors.pyautowin_extractor.window_configuration.navigator import SonelNavigator
-from extractors.pyautowin_extractor.window_configuration.executor import SonelExecutor
-
 
 class SonelConfiguracion:
     """Clase especializada para manejar la vista de configuración"""

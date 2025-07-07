@@ -1,5 +1,6 @@
 #sonel_extractor/extractors/base.py
 from abc import ABC, abstractmethod
+
 class BaseExtractor(ABC):
     """Clase base abstracta para los extractores de datos"""
     def __init__(self, config):

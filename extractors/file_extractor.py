@@ -3,12 +3,11 @@
 import os
 import glob
 import pandas as pd
-from pathlib import Path
 from config.logger import logger
-from config.settings import FILE_SEARCH_PATTERNS
-from parser.excel_parser import ExcelParser
 from parser.csv_parser import CSVParser
 from extractors.base import BaseExtractor
+from parser.excel_parser import ExcelParser
+from config.settings import FILE_SEARCH_PATTERNS
 from utils.processing_registry import ProcessingRegistry
 
 class FileExtractor(BaseExtractor):

@@ -1,8 +1,8 @@
 #sonel_extractor/database/operations.py
-from config.logger import logger
-import datetime
-import os.path
+
 import re
+from config.logger import logger
+from utils.validators import extract_client_code
 from config.settings import (
     CREATE_CODIGO_TABLE_QUERY, CREATE_MEDICIONES_TABLE_QUERY, 
     CREATE_VOLTAJE_MEDICIONES_TABLE_QUERY, CREATE_CORRIENTE_MEDICIONES_TABLE_QUERY, 
@@ -10,7 +10,6 @@ from config.settings import (
     INSERT_MEDICION_QUERY, INSERT_VOLTAJE_QUERY, INSERT_CORRIENTE_QUERY, INSERT_POTENCIA_QUERY, 
     CREATE_TABLA_UNICA_QUERY, INSERT_TABLA_UNICA_QUERY
 )
-from utils.validators import extract_client_code
 
 class DataHandler:
     """Clase para manejar operaciones de base de datos para la estructura relacional"""
