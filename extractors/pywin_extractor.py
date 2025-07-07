@@ -1,29 +1,17 @@
 import os
-import re
 import json
 import time
 import psutil
 import logging
-import traceback
-import pyautogui
-import pyperclip
-from time import sleep
 from pathlib import Path
 from datetime import datetime
-from pywinauto.mouse import move
-from pywinauto import Application
 from config.logger import get_logger
-from pywinauto.keyboard import send_keys
-from pyautogui import click, moveTo, position
-from pywinauto import Desktop, mouse, findwindows
 from pynput.mouse import Button, Listener as MouseListener
-from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
+from config.settings import get_full_config, create_directories, PATHS
 
 # Imports de los nuevos módulos
 from extractors.pyautowin_extractor.w_analysis import SonelAnalisisInicial
 from extractors.pyautowin_extractor.w_configuration import SonelConfiguracion
-
-from config.settings import get_full_config, create_directories, PATHS, LOGGING_CONFIG, GUI_DELAYS
 
 class SonelExtractorCompleto:
     """Coordinador principal que maneja ambas clases con procesamiento dinámico"""
@@ -502,6 +490,15 @@ class SonelExtractorCompleto:
 
     def ejecutar_extraccion_completa_dinamica(self):
         """Ejecuta el flujo completo para todos los archivos no procesados"""
+        # Inicializar estructura de resultados por defecto
+        resultados_globales = {
+            "procesados_exitosos": 0,
+            "procesados_fallidos": 0,
+            "saltados": 0,
+            "csvs_verificados": 0,
+            "detalles": []
+        }
+        
         try:
             # Obtener estadísticas iniciales
             stats = self.obtener_estadisticas_procesados()
@@ -513,7 +510,7 @@ class SonelExtractorCompleto:
             archivos_pqm = self.get_pqm_files()
             if not archivos_pqm:
                 self.pywinauto_logger.warning("⚠️  No se encontraron archivos .pqm702 para procesar")
-                return None
+                return resultados_globales  # Devolver estructura vacía pero válida
             
             # Filtrar archivos ya procesados
             archivos_pendientes = [
@@ -521,21 +518,16 @@ class SonelExtractorCompleto:
                 if not self.ya_ha_sido_procesado(archivo)
             ]
             
+            # Actualizar saltados
+            resultados_globales["saltados"] = len(archivos_pqm) - len(archivos_pendientes)
+            
             if not archivos_pendientes:
                 self.pywinauto_logger.info("✅ Todos los archivos ya han sido procesados")
-                return {"procesados": 0, "saltados": len(archivos_pqm)}
+                return resultados_globales
             
             self.pywinauto_logger.info(f"🔄 Archivos pendientes de procesar: {len(archivos_pendientes)}")
             
             # Procesar cada archivo
-            resultados_globales = {
-                "procesados_exitosos": 0,
-                "procesados_fallidos": 0,
-                "saltados": len(archivos_pqm) - len(archivos_pendientes),
-                "csvs_verificados": 0,
-                "detalles": []
-            }
-            
             for i, archivo in enumerate(archivos_pendientes, 1):
                 nombre_archivo = os.path.basename(archivo)
                 self.pywinauto_logger.info(f"\n{'='*60}")
@@ -543,42 +535,60 @@ class SonelExtractorCompleto:
                 self.pywinauto_logger.info(f"{'='*60}")
                 
                 # EJECUTAR PROCESAMIENTO
-                resultado = self.ejecutar_extraccion_archivo(archivo)
-                
-                # EVALUAR RESULTADO Y ACTUAR EN CONSECUENCIA
-                if resultado is True:
-                    # ÉXITO - No forzar cierre
-                    resultados_globales["procesados_exitosos"] += 1
-                    resultados_globales["csvs_verificados"] += 1
-                    resultados_globales["detalles"].append({
-                        "archivo": nombre_archivo,
-                        "estado": "exitoso",
-                        "csv_verificado": True
-                    })
-                    self.pywinauto_logger.info(f"✅ Archivo procesado exitosamente: {nombre_archivo}")
+                try:
+                    resultado = self.ejecutar_extraccion_archivo(archivo)
                     
-                    # CIERRE SUAVE - Solo cerrar procesos, no forzar
-                    try:
-                        time.sleep(2)  # Dar tiempo para que termine correctamente
-                        self.close_sonel_analysis_force()  # Limpieza preventiva
-                    except Exception as e:
-                        self.pywinauto_logger.warning(f"⚠️ Error en limpieza post-éxito: {e}")
+                    # EVALUAR RESULTADO Y ACTUAR EN CONSECUENCIA
+                    if resultado is True:
+                        # ÉXITO - No forzar cierre
+                        resultados_globales["procesados_exitosos"] += 1
+                        resultados_globales["csvs_verificados"] += 1
+                        resultados_globales["detalles"].append({
+                            "archivo": nombre_archivo,
+                            "estado": "exitoso",
+                            "csv_verificado": True
+                        })
+                        self.pywinauto_logger.info(f"✅ Archivo procesado exitosamente: {nombre_archivo}")
+                        
+                        # CIERRE SUAVE - Solo cerrar procesos, no forzar
+                        try:
+                            time.sleep(2)  # Dar tiempo para que termine correctamente
+                            self.close_sonel_analysis_force()  # Limpieza preventiva
+                        except Exception as e:
+                            self.pywinauto_logger.warning(f"⚠️ Error en limpieza post-éxito: {e}")
                     
-                else:
-                    # FALLO - Aquí sí forzar cierre
+                    else:
+                        # FALLO - Aquí sí forzar cierre
+                        resultados_globales["procesados_fallidos"] += 1
+                        resultados_globales["detalles"].append({
+                            "archivo": nombre_archivo,
+                            "estado": "fallido",
+                            "csv_verificado": False
+                        })
+                        self.pywinauto_logger.error(f"❌ Archivo procesado con error: {nombre_archivo}")
+                        
+                        # CIERRE FORZOSO por error
+                        try:
+                            self.close_sonel_analysis_force()
+                        except Exception as e:
+                            self.pywinauto_logger.warning(f"⚠️ Error en cierre forzoso: {e}")
+                            
+                except Exception as e:
+                    # Error en procesamiento individual
+                    self.pywinauto_logger.error(f"❌ Error procesando archivo {nombre_archivo}: {e}")
                     resultados_globales["procesados_fallidos"] += 1
                     resultados_globales["detalles"].append({
                         "archivo": nombre_archivo,
-                        "estado": "fallido",
-                        "csv_verificado": False
+                        "estado": "error_excepcion",
+                        "csv_verificado": False,
+                        "error": str(e)
                     })
-                    self.pywinauto_logger.error(f"❌ Archivo procesado con error: {nombre_archivo}")
                     
-                    # CIERRE FORZOSO por error
+                    # Limpieza tras error
                     try:
                         self.close_sonel_analysis_force()
-                    except Exception as e:
-                        self.pywinauto_logger.warning(f"⚠️ Error en cierre forzoso: {e}")
+                    except Exception as cleanup_error:
+                        self.pywinauto_logger.warning(f"⚠️ Error en limpieza tras excepción: {cleanup_error}")
 
                 # Pausa entre archivos para estabilidad
                 if i < len(archivos_pendientes):
@@ -605,5 +615,13 @@ class SonelExtractorCompleto:
             return resultados_globales
             
         except Exception as e:
-            self.pywinauto_logger.error(f"❌ Error en extracción completa dinámica: {e}")
-            return None
+            self.pywinauto_logger.error(f"❌ Error crítico en extracción completa dinámica: {e}")
+            import traceback
+            self.pywinauto_logger.error(traceback.format_exc())
+            
+            # Devolver estructura con información de error
+            resultados_globales.update({
+                "error_critico": True,
+                "mensaje_error": str(e)
+            })
+            return resultados_globales
