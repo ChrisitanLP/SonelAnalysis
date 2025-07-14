@@ -10,8 +10,8 @@ from pynput.mouse import Button, Listener as MouseListener
 from config.settings import get_full_config, create_directories, PATHS
 
 # Imports de los nuevos módulos
-from extractors.pyautowin_extractor.w_analysis import SonelAnalisisInicial
-from extractors.pyautowin_extractor.w_configuration import SonelConfiguracion
+from core.extractors.pyautowin_extractor.w_analysis import SonelAnalisisInicial
+from core.extractors.pyautowin_extractor.w_configuration import SonelConfiguracion
 
 class SonelExtractorCompleto:
     """Coordinador principal que maneja ambas clases con procesamiento dinámico"""
@@ -381,32 +381,44 @@ class SonelExtractorCompleto:
             try:
                 time.sleep(1)
                 if not extractor_config.extraer_navegacion_lateral():
-                    self.pywinauto_logger.warning("⚠️ Falló extracción navegación lateral, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló extracción navegación lateral, continuando")
                     # NO retornar False aquí, solo advertir
                 
                 time.sleep(1)
                 if not extractor_config.configurar_filtros_datos():
-                    self.pywinauto_logger.warning("⚠️ Falló configuración filtros, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló configuración filtros, continuando")
                     # NO retornar False aquí, solo advertir
 
-                time.sleep(2)
+                #if not extractor_config.configurar_filtros_datos():
+                #    self.pywinauto_logger.warning("⚠️ Falló configuración filtros, continuando")
+                    # NO retornar False aquí, solo advertir
+
+                if not extractor_config.configurar_radiobutton():
+                    self.pywinauto_logger.warning("⚠️ Falló configuración radiobutton User, continuando")
+                    # NO retornar False aquí, solo advertir
+
+                if not extractor_config.configurar_chechkboxes():
+                    self.pywinauto_logger.warning("⚠️ Falló configuración Checkboxes, continuando")
+                    # NO retornar False aquí, solo advertir
+
+                time.sleep(1)
                 if not extractor_config.extraer_configuracion_principal_mediciones():
-                    self.pywinauto_logger.warning("⚠️ Falló extracción configuración principal, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló extracción configuración principal, continuando")
                     # NO retornar False aquí, solo advertir
 
-                time.sleep(2)
+                time.sleep(1)
                 if not extractor_config.extraer_componentes_arbol_mediciones():
-                    self.pywinauto_logger.warning("⚠️ Falló extracción árbol mediciones, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló extracción árbol mediciones, continuando")
                     # NO retornar False aquí, solo advertir
 
                 time.sleep(1)
                 if not extractor_config.extraer_tabla_mediciones():
-                    self.pywinauto_logger.warning("⚠️ Falló extracción tabla mediciones, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló extracción tabla mediciones, continuando")
                     # NO retornar False aquí, solo advertir
 
-                time.sleep(2)
+                time.sleep(1)
                 if not extractor_config.extraer_informes_graficos():
-                    self.pywinauto_logger.warning("⚠️ Falló extracción informes gráficos, continuando...")
+                    self.pywinauto_logger.warning("⚠️ Falló extracción informes gráficos, continuando")
                     # NO retornar False aquí, solo advertir
 
             except Exception as e:
@@ -427,7 +439,7 @@ class SonelExtractorCompleto:
                 
                 # Si el guardado falló, aún intentar verificar
                 if not save_result:
-                    self.pywinauto_logger.warning("⚠️ Comando de guardado retornó False, pero verificando archivo...")
+                    self.pywinauto_logger.warning("⚠️ Comando de guardado retornó False, pero verificando archivo")
                 
                 # Esperar un poco para que se complete la escritura
                 time.sleep(3)
@@ -592,7 +604,7 @@ class SonelExtractorCompleto:
 
                 # Pausa entre archivos para estabilidad
                 if i < len(archivos_pendientes):
-                    self.pywinauto_logger.info("⏳ Pausa entre archivos...")
+                    self.pywinauto_logger.info("⏳ Pausa entre archivos")
                     time.sleep(4)
             
             # Resumen final
@@ -606,7 +618,7 @@ class SonelExtractorCompleto:
             self.pywinauto_logger.info("="*80)
 
             # Limpieza final
-            self.pywinauto_logger.info("🧹 Limpieza final de procesos Sonel Analysis...")
+            self.pywinauto_logger.info("🧹 Limpieza final de procesos Sonel Analysis")
             try:
                 self.close_sonel_analysis_force()
             except Exception as e:

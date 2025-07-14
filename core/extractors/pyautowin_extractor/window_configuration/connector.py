@@ -2,8 +2,7 @@ import time
 import logging
 from pywinauto import Application
 from config.logger import get_logger
-from config.settings import get_full_config
-from config.settings import get_window_title_translations
+from config.settings import get_full_config, get_window_title_translations
 
 class SonelConnector:
     """Maneja la conexión con la aplicación Sonel"""

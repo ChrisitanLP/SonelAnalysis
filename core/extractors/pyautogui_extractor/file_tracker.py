@@ -4,7 +4,7 @@ import json
 import datetime
 from pathlib import Path
 from config.logger import logger
-from utils.gui_helpers import GUIHelpers
+from core.utils.gui_helpers import GUIHelpers
 
 class FileTracker:
     def __init__(self, parent_extractor):

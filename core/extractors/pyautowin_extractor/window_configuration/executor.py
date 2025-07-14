@@ -7,9 +7,9 @@ from time import sleep
 from pywinauto import mouse
 from pywinauto.mouse import move
 from pyautogui import moveTo, click
-from config.logger import get_logger
 from pywinauto.keyboard import send_keys
-from utils.text_normalize import TextUtils
+from config.logger import get_logger
+from core.utils.text_normalize import TextUtils
 from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
 from config.settings import get_full_config, get_all_possible_translations
 

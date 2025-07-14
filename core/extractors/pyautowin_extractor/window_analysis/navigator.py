@@ -6,8 +6,8 @@ import time
 import logging
 import pyautogui
 from config.logger import get_logger
-from utils.text_normalize import TextUtils
-from utils.wait_handler import WaitHandler
+from core.utils.text_normalize import TextUtils
+from core.utils.wait_handler import WaitHandler
 from config.settings import get_full_config, get_all_possible_translations
 
 class SonelNavigator:

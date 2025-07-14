@@ -4,7 +4,7 @@ import pyautogui
 import pyperclip
 from pathlib import Path
 from config.logger import logger
-from utils.gui_helpers import GUIHelpers
+from core.utils.gui_helpers import GUIHelpers
 
 class ExportController:
     """Maneja la configuración de mediciones y exportación a CSV"""

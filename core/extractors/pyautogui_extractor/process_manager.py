@@ -5,7 +5,7 @@ import pyautogui
 import subprocess
 import pygetwindow as gw
 from config.logger import logger
-from utils.gui_helpers import GUIHelpers
+from core.utils.gui_helpers import GUIHelpers
 
 class ProcessManager:
     """Maneja procesos y subprocesos de Sonel Analysis"""
