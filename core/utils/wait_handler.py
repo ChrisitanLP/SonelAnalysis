@@ -24,7 +24,7 @@ class WaitHandler:
             bool: True si los controles están disponibles, False si timeout
         """
         try:
-            self.logger.info(f"⏳ Esperando controles {control_types} (timeout: {timeout}s)...")
+            self.logger.info(f"⏳ Esperando controles {control_types} (timeout: {timeout}s)")
             
             start_time = time.time()
             
