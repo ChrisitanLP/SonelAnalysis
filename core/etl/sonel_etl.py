@@ -2,13 +2,13 @@
 import os
 from config.logger import logger
 from config.settings import load_config
-from database.operations import DataHandler
-from utils.validators import extract_client_code
-from database.connection import DatabaseConnection
-from extractors.file_extractor import FileExtractor
-from extractors.pygui_extractor import GUIExtractor
-from transformers.voltage_transformer import VoltageTransformer
-from utils.processing_registry import ProcessingRegistry, ProcessingStatus
+from core.database.operations import DataHandler
+from core.utils.validators import extract_client_code
+from core.database.connection import DatabaseConnection
+from core.extractors.file_extractor import FileExtractor
+from core.extractors.pygui_extractor import GUIExtractor
+from core.transformers.voltage_transformer import VoltageTransformer
+from core.utils.processing_registry import ProcessingRegistry, ProcessingStatus
 
 class SonelETL:
     """Clase orquestadora del proceso ETL completo con control de procesamiento"""
