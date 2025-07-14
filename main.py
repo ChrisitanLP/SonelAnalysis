@@ -14,12 +14,12 @@ import time
 import logging
 import argparse
 from pathlib import Path
-from etl.sonel_etl import SonelETL
+from core.etl.sonel_etl import SonelETL
 from config.logger import get_logger
-from database.connection import DatabaseConnection
+from core.database.connection import DatabaseConnection
 
 # Importar la clase principal del extractor
-from extractors.pywin_extractor import SonelExtractorCompleto
+from core.extractors.pywin_extractor import SonelExtractorCompleto
 from config.settings import get_full_config, validate_configuration, validate_screen_resolution ,PATHS, LOGGING_CONFIG, load_config, create_directories
 
 class UnifiedSonelProcessor:

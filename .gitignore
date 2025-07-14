@@ -7,3 +7,4 @@ config.ini
 *.txt
 *.pyc
 __pycache__/
+*.json
