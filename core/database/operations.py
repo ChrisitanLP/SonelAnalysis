@@ -2,7 +2,7 @@
 
 import re
 from config.logger import logger
-from utils.validators import extract_client_code
+from core.utils.validators import extract_client_code
 from config.settings import (
     CREATE_CODIGO_TABLE_QUERY, CREATE_MEDICIONES_TABLE_QUERY, 
     CREATE_VOLTAJE_MEDICIONES_TABLE_QUERY, CREATE_CORRIENTE_MEDICIONES_TABLE_QUERY, 
