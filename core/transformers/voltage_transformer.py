@@ -3,7 +3,7 @@ import re
 import numpy as np
 import pandas as pd
 from config.logger import logger
-from utils.validators import validate_voltage_columns
+from core.utils.validators import validate_voltage_columns
 
 class VoltageTransformer:
     """Clase para transformar datos de voltaje al formato requerido"""
@@ -91,8 +91,9 @@ class VoltageTransformer:
                 
                 try:
                     if df[source_col].dtype == object:  # Si es string
-                        # Extraer valores numéricos del texto
-                        values = df[source_col].astype(str).str.replace(',', '.').str.extract(r'([\d\.]+)')[0]
+                        # Extraer valores numéricos del texto incluyendo el signo negativo
+                        # Patrón mejorado para capturar: signo opcional + dígitos + punto decimal opcional + más dígitos
+                        values = df[source_col].astype(str).str.replace(',', '.').str.extract(r'(-?[\d\.]+)')[0]
                         return pd.to_numeric(values, errors='coerce')
                     else:
                         # Ya es numérico
