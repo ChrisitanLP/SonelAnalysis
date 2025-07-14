@@ -2,7 +2,7 @@
 import re
 import pandas as pd
 from config.logger import logger
-from utils.validators import validate_voltage_columns
+from core.utils.validators import validate_voltage_columns
 
 class ExcelParser:
     """Clase para procesar archivos Excel con datos de voltaje"""

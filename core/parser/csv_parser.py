@@ -2,7 +2,8 @@
 import re
 import pandas as pd
 from config.logger import logger
-from utils.validators import validate_voltage_columns
+from config.settings import SUPPORTED_ENCODINGS
+from core.utils.validators import validate_voltage_columns
 
 class CSVParser:
     """Clase para procesar archivos CSV con datos de voltaje"""
@@ -24,7 +25,7 @@ class CSVParser:
             
             # Probar diferentes combinaciones de separador y encoding
             for sep in [';', ',', '\t', '|']:
-                for encoding in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16']:
+                for encoding in ['utf-8', 'utf-8-sig', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16', 'utf-16le', 'utf-16be', 'windows-1252', 'iso-8859-15']:
                     try:
                         df = pd.read_csv(file_path, sep=sep, encoding=encoding)
                         
@@ -78,7 +79,7 @@ class CSVParser:
         try:
             # Detectar encabezados buscando filas con strings que coincidan con patrones de fechas/voltajes
             for sep in [';', ',', '\t', '|']:
-                for encoding in ['utf-8', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16']:
+                for encoding in SUPPORTED_ENCODINGS:
                     try:
                         # Intentar diferentes números de filas a saltar
                         for skip_rows in range(1, 20):  # Intentar saltando hasta 20 filas
