@@ -5,9 +5,9 @@ Clase principal que coordina la ventana de análisis de Sonel
 import logging
 from config.logger import get_logger
 from config.settings import PATHS, get_full_config
-from extractors.pyautowin_extractor.window_analysis.executor import SonelExecutor
-from extractors.pyautowin_extractor.window_analysis.connector import SonelConnector
-from extractors.pyautowin_extractor.window_analysis.navigator import SonelNavigator
+from core.extractors.pyautowin_extractor.window_analysis.executor import SonelExecutor
+from core.extractors.pyautowin_extractor.window_analysis.connector import SonelConnector
+from core.extractors.pyautowin_extractor.window_analysis.navigator import SonelNavigator
 
 class SonelAnalisisInicial:
     """Clase especializada para manejar la vista inicial de análisis"""

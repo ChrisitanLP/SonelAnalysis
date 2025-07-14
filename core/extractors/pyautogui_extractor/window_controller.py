@@ -2,7 +2,7 @@ import time
 import pyautogui
 import pygetwindow as gw
 from config.logger import logger
-from utils.gui_helpers import GUIHelpers
+from core.utils.gui_helpers import GUIHelpers
 
 class WindowController:
     """Controla ventanas y acciones de GUI"""

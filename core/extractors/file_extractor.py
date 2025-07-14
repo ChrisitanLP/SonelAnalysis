@@ -4,11 +4,11 @@ import os
 import glob
 import pandas as pd
 from config.logger import logger
-from parser.csv_parser import CSVParser
-from extractors.base import BaseExtractor
-from parser.excel_parser import ExcelParser
+from core.parser.csv_parser import CSVParser
+from core.extractors.base import BaseExtractor
+from core.parser.excel_parser import ExcelParser
 from config.settings import FILE_SEARCH_PATTERNS
-from utils.processing_registry import ProcessingRegistry
+from core.utils.processing_registry import ProcessingRegistry
 
 class FileExtractor(BaseExtractor):
     """Clase para extraer datos de archivos con control de procesamiento"""

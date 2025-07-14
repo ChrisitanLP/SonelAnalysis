@@ -5,9 +5,9 @@ Clase principal que coordina la ventana de configuración de Sonel
 import logging
 from config.logger import get_logger
 from config.settings import get_full_config
-from extractors.pyautowin_extractor.window_configuration.executor import SonelExecutor
-from extractors.pyautowin_extractor.window_configuration.connector import SonelConnector
-from extractors.pyautowin_extractor.window_configuration.navigator import SonelNavigator
+from core.extractors.pyautowin_extractor.window_configuration.executor import SonelExecutor
+from core.extractors.pyautowin_extractor.window_configuration.connector import SonelConnector
+from core.extractors.pyautowin_extractor.window_configuration.navigator import SonelNavigator
 
 class SonelConfiguracion:
     """Clase especializada para manejar la vista de configuración"""
@@ -57,6 +57,20 @@ class SonelConfiguracion:
             self.logger.error("❌ Navigator no inicializado. Conectar primero.")
             return False
         return self.navigator.configurar_filtros_datos()
+    
+    def configurar_radiobutton(self):
+        """Configura filtros de datos (Usuario)"""
+        if not self.navigator:
+            self.logger.error("❌ Navigator no inicializado. Conectar primero.")
+            return False
+        return self.navigator.configurar_radiobutton()
+    
+    def configurar_chechkboxes(self):
+        """Configura filtros de datos (Prom., Min., etc.)"""
+        if not self.navigator:
+            self.logger.error("❌ Navigator no inicializado. Conectar primero.")
+            return False
+        return self.navigator.configurar_checkboxes()
         
     def extraer_configuracion_principal_mediciones(self):
         """Busca y desactiva el checkbox 'Seleccionar todo' y hace clic en 'Expandir todo'"""

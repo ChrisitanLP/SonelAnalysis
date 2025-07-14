@@ -5,7 +5,7 @@ Módulo para ejecutar análisis de datos
 import time
 import logging
 from config.logger import get_logger
-from utils.text_normalize import TextUtils
+from core.utils.text_normalize import TextUtils
 from config.settings import get_full_config, get_all_possible_translations
 
 class SonelExecutor:

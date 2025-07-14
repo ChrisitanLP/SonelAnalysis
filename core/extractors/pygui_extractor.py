@@ -1,12 +1,12 @@
 import os
 import time
 from config.logger import logger
-from extractors.base import BaseExtractor
+from core.extractors.base import BaseExtractor
 from config.settings import get_coordinates, get_delays
-from extractors.pyautogui_extractor.file_tracker import FileTracker
-from extractors.pyautogui_extractor.process_manager import ProcessManager
-from extractors.pyautogui_extractor.window_controller import WindowController
-from extractors.pyautogui_extractor.export_controller import ExportController
+from core.extractors.pyautogui_extractor.file_tracker import FileTracker
+from core.extractors.pyautogui_extractor.process_manager import ProcessManager
+from core.extractors.pyautogui_extractor.window_controller import WindowController
+from core.extractors.pyautogui_extractor.export_controller import ExportController
 
 class GUIExtractor(BaseExtractor):
     """Orquestador principal para extraer datos mediante automatización de GUI"""
