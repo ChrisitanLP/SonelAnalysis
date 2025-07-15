@@ -184,10 +184,6 @@ class SonelDataExtractorGUI(QMainWindow):
     # 2. Modificar el método upload_to_db():
     def upload_to_db(self):
         """Subir archivos a base de datos"""
-        if not self.selected_folder:
-            self.control_panel.update_folder_info("⚠️ Selecciona una carpeta primero")
-            UIHelpers.warn_select_folder(self)
-            return
             
         self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🗄️ Iniciando subida a base de datos...")
         self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔗 Conectando con PostgreSQL...")
