@@ -89,19 +89,21 @@ class ExecutionSummaryPanel(QWidget):
         self.log_text.setObjectName("LogText")
         
         # Contenido del log con información estática profesional
-        log_content_text = """[15:42:18] ✅ Conexión PostgreSQL establecida exitosamente
-    [15:42:19] 📁 Escaneando directorio: ./data/sonel_files/
-    [15:42:20] 📊 Detectados 32 archivos .pqm702 válidos
-    [15:42:21] 🔄 Iniciando procesamiento: medicion_20240301.pqm702
-    [15:42:22] ✅ Archivo procesado: 847 registros extraídos
-    [15:42:23] 🔄 Procesando: medicion_20240302.pqm702
-    [15:42:25] ✅ Archivo procesado: 823 registros extraídos
-    [15:42:26] 🔄 Procesando: medicion_20240303.pqm702
-    [15:42:27] ❌ Error: Archivo corrupto - omitiendo
-    [15:42:28] 📊 Generando CSV consolidado: output_20240710.csv
-    [15:42:29] 🗄️ Insertando batch 1/3 en tabla measurements
-    [15:42:30] 🗄️ Insertando batch 2/3 en tabla measurements
-    [15:42:31] ✅ Proceso 87% completado - 28/32 archivos"""
+        log_content_text = """
+            [15:42:18] ✅ Conexión PostgreSQL establecida exitosamente
+            [15:42:19] 📁 Escaneando directorio: ./data/sonel_files/
+            [15:42:20] 📊 Detectados 32 archivos .pqm702 válidos
+            [15:42:21] 🔄 Iniciando procesamiento: medicion_20240301.pqm702
+            [15:42:22] ✅ Archivo procesado: 847 registros extraídos
+            [15:42:23] 🔄 Procesando: medicion_20240302.pqm702
+            [15:42:25] ✅ Archivo procesado: 823 registros extraídos
+            [15:42:26] 🔄 Procesando: medicion_20240303.pqm702
+            [15:42:27] ❌ Error: Archivo corrupto - omitiendo
+            [15:42:28] 📊 Generando CSV consolidado: output_20240710.csv
+            [15:42:29] 🗄️ Insertando batch 1/3 en tabla measurements
+            [15:42:30] 🗄️ Insertando batch 2/3 en tabla measurements
+            [15:42:31] ✅ Proceso 87% completado - 28/32 archivos
+        """
         
         self.log_text.setPlainText(log_content_text)
         log_layout.addWidget(self.log_text)
@@ -131,20 +133,21 @@ class ExecutionSummaryPanel(QWidget):
         
         # Contenido del resumen ejecutivo con información estática profesional
         summary_text = f"""
-    <b>Estado General:</b> En progreso (87% completado)<br>
-    <b>Archivos Detectados:</b> 32 archivos .pqm702<br>
-    <b>Procesados Exitosamente:</b> 28 archivos<br>
-    <b>Con Advertencias:</b> 3 archivos (datos fuera de rango)<br>
-    <b>Con Errores:</b> 1 archivo (corrupción de datos)<br><br>
-    <b>Métricas de Datos:</b><br>
-    - Registros de voltaje extraídos: 18,542<br>
-    - Registros de corriente: 18,542<br>
-    - Registros de frecuencia: 18,542<br><br>
-    <b>Performance:</b><br>
-    - Tiempo de procesamiento: 4:12 min<br>
-    - Velocidad promedio: 6.7 archivos/min<br>
-    - Tiempo estimado restante: 2:15 min<br><br>
-    <b>Última Sincronización:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"""
+            <b>Estado General:</b> En progreso (87% completado)<br>
+            <b>Archivos Detectados:</b> 32 archivos .pqm702<br>
+            <b>Procesados Exitosamente:</b> 28 archivos<br>
+            <b>Con Advertencias:</b> 3 archivos (datos fuera de rango)<br>
+            <b>Con Errores:</b> 1 archivo (corrupción de datos)<br><br>
+            <b>Métricas de Datos:</b><br>
+            - Registros de voltaje extraídos: 18,542<br>
+            - Registros de corriente: 18,542<br>
+            - Registros de frecuencia: 18,542<br><br>
+            <b>Performance:</b><br>
+            - Tiempo de procesamiento: 4:12 min<br>
+            - Velocidad promedio: 6.7 archivos/min<br>
+            - Tiempo estimado restante: 2:15 min<br><br>
+            <b>Última Sincronización:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+        """
         
         self.summary_label.setText(summary_text)
         summary_layout.addWidget(self.summary_label)
@@ -159,32 +162,35 @@ class ExecutionSummaryPanel(QWidget):
         layout = QVBoxLayout(tab)
         layout.setSpacing(16)
         
-        # Estado del proceso
-        self.csv_status_label = QLabel("Estado: Completado Exitosamente")
-        self.csv_status_label.setObjectName("CardTitle")
-        layout.addWidget(self.csv_status_label)
+        # === MÉTRICAS PRINCIPALES EN CARDS ===
+        csv_metrics_widget = QWidget()
+        csv_metrics_layout = QGridLayout(csv_metrics_widget)
+        csv_metrics_layout.setSpacing(16)
         
-        # Métricas CSV
-        csv_metrics_card = ModernCard("Métricas de Extracción")
-        csv_metrics_text = """
-    <b>Archivos Procesados:</b> 30 de 32<br>
-    <b>Registros Extraídos:</b> 18,542<br>
-    <b>Errores:</b> 2<br>
-    <b>Tiempo de Ejecución:</b> 4:12<br>
-    <b>Velocidad Promedio:</b> 6.7 archivos/min<br>
-    <b>Tamaño Total Procesado:</b> 67.8 MB<br>
-    <b>Archivos CSV Generados:</b> 30<br>
-    <b>Tasa de Éxito:</b> 93.75%<br>
-    <b>Fecha:</b> 2024-07-10 15:42:18
-        """
-        self.csv_metrics_label = QLabel(csv_metrics_text)
-        self.csv_metrics_label.setObjectName("SummaryLabel")
-        self.csv_metrics_label.setWordWrap(True)
-        csv_metrics_card.layout().addWidget(self.csv_metrics_label)
-        layout.addWidget(csv_metrics_card)
+        # Crear tarjetas de métricas CSV
+        self.csv_cards = []
+        csv_metrics_data = [
+            ("📁", "Archivos Procesados", "30 / 32", "#4CAF50"),
+            ("📊", "Registros Extraídos", "18,542", "#2196F3"),
+            ("❌", "Errores", "2", "#F44336"),
+            ("⏱️", "Tiempo Total", "4:12", "#FF9800"),
+            ("🚀", "Velocidad Promedio", "6.7 arch/min", "#9C27B0"),
+            ("✅", "Tasa de Éxito", "93.75%", "#4CAF50"),
+            ("💾", "Tamaño Procesado", "67.8 MB", "#607D8B"),
+            ("📄", "CSVs Generados", "30", "#3F51B5")
+        ]
         
-        # Tabla de archivos procesados
-        files_card = ModernCard("Detalle de Archivos")
+        for i, (icon, title, value, color) in enumerate(csv_metrics_data):
+            row = i // 4
+            col = i % 4
+            status_card = StatusCard(icon, title, value, color)
+            self.csv_cards.append(status_card)
+            csv_metrics_layout.addWidget(status_card, row, col)
+        
+        layout.addWidget(csv_metrics_widget)
+        
+        # === TABLA DE ARCHIVOS PROCESADOS ===
+        files_card = ModernCard("Detalle de Archivos Procesados")
         self.csv_files_table = QTableWidget()
         self.csv_files_table.setObjectName("FilesTable")
         self.setup_files_table(self.csv_files_table)
@@ -193,8 +199,8 @@ class ExecutionSummaryPanel(QWidget):
         sample_files = [
             ("medicion_20240301.pqm702", "✅ Exitoso", "847", "2.3 MB", "Procesado correctamente"),
             ("medicion_20240302.pqm702", "✅ Exitoso", "823", "2.1 MB", "Procesado correctamente"),
-            ("medicion_20240303.pqm702", "❌ Error", "0", "1.8 MB", "Archivo corrupto"),
-            ("medicion_20240304.pqm702", "⚠️ Advertencia", "765", "2.0 MB", "Datos fuera de rango"),
+            ("medicion_20240303.pqm702", "❌ Error", "0", "1.8 MB", "Archivo corrupto - CRC inválido"),
+            ("medicion_20240304.pqm702", "⚠️ Advertencia", "765", "2.0 MB", "Datos fuera de rango detectados"),
             ("medicion_20240305.pqm702", "✅ Exitoso", "892", "2.4 MB", "Procesado correctamente")
         ]
         self.populate_files_table(self.csv_files_table, [
@@ -213,33 +219,35 @@ class ExecutionSummaryPanel(QWidget):
         layout = QVBoxLayout(tab)
         layout.setSpacing(16)
         
-        # Estado del proceso
-        self.db_status_label = QLabel("Estado: Sincronización Completa")
-        self.db_status_label.setObjectName("CardTitle")
-        layout.addWidget(self.db_status_label)
+        # === MÉTRICAS PRINCIPALES EN CARDS ===
+        db_metrics_widget = QWidget()
+        db_metrics_layout = QGridLayout(db_metrics_widget)
+        db_metrics_layout.setSpacing(16)
         
-        # Métricas BD
-        db_metrics_card = ModernCard("Métricas de Base de Datos")
-        db_metrics_text = """
-    <b>Archivos Subidos:</b> 28 de 30<br>
-    <b>Registros Insertados:</b> 18,542<br>
-    <b>Fallos de Subida:</b> 2<br>
-    <b>Conflictos Resueltos:</b> 15<br>
-    <b>Tiempo de Subida:</b> 2:15<br>
-    <b>Conexión BD:</b> PostgreSQL 13.7 - Estable<br>
-    <b>Tabla Destino:</b> measurements<br>
-    <b>Índices Actualizados:</b> 4<br>
-    <b>Transacciones Exitosas:</b> 96.4%<br>
-    <b>Fecha:</b> 2024-07-10 15:48:33
-        """
-        self.db_metrics_label = QLabel(db_metrics_text)
-        self.db_metrics_label.setObjectName("SummaryLabel")
-        self.db_metrics_label.setWordWrap(True)
-        db_metrics_card.layout().addWidget(self.db_metrics_label)
-        layout.addWidget(db_metrics_card)
+        # Crear tarjetas de métricas BD
+        self.db_cards = []
+        db_metrics_data = [
+            ("🗄️", "Archivos Subidos", "28 / 30", "#4CAF50"),
+            ("📊", "Registros Insertados", "18,542", "#2196F3"),
+            ("❌", "Fallos", "2", "#F44336"),
+            ("⚠️", "Conflictos", "15", "#FF9800"),
+            ("⏱️", "Tiempo Subida", "2:15", "#9C27B0"),
+            ("✅", "Transacciones OK", "96.4%", "#4CAF50"),
+            ("🔄", "Índices Actualizados", "4", "#607D8B"),
+            ("🔗", "Conexión", "Estable", "#4CAF50")
+        ]
         
-        # Tabla de archivos subidos
-        uploads_card = ModernCard("Detalle de Subidas")
+        for i, (icon, title, value, color) in enumerate(db_metrics_data):
+            row = i // 4
+            col = i % 4
+            status_card = StatusCard(icon, title, value, color)
+            self.db_cards.append(status_card)
+            db_metrics_layout.addWidget(status_card, row, col)
+        
+        layout.addWidget(db_metrics_widget)
+        
+        # === TABLA DE ARCHIVOS SUBIDOS ===
+        uploads_card = ModernCard("Detalle de Operaciones de Subida")
         self.db_files_table = QTableWidget()
         self.db_files_table.setObjectName("FilesTable")
         self.setup_db_table(self.db_files_table)
@@ -248,8 +256,8 @@ class ExecutionSummaryPanel(QWidget):
         sample_uploads = [
             ("output_20240301.csv", "✅ Subido", "847", "measurements", "00:15", ""),
             ("output_20240302.csv", "✅ Subido", "823", "measurements", "00:14", ""),
-            ("output_20240303.csv", "❌ Error", "0", "measurements", "00:02", "Constraint violation"),
-            ("output_20240304.csv", "⚠️ Parcial", "765", "measurements", "00:18", "Duplicates found"),
+            ("output_20240303.csv", "❌ Error", "0", "measurements", "00:02", "Constraint violation: invalid timestamp"),
+            ("output_20240304.csv", "⚠️ Parcial", "765", "measurements", "00:18", "15 duplicates resolved via UPSERT"),
             ("output_20240305.csv", "✅ Subido", "892", "measurements", "00:16", "")
         ]
         self.populate_db_table(self.db_files_table, [
@@ -268,59 +276,73 @@ class ExecutionSummaryPanel(QWidget):
         layout = QVBoxLayout(tab)
         layout.setSpacing(16)
         
-        # Estado general
-        self.complete_status_label = QLabel("Estado: Ejecución Completada Exitosamente")
-        self.complete_status_label.setObjectName("CardTitle")
-        layout.addWidget(self.complete_status_label)
+        # === MÉTRICAS PRINCIPALES EN CARDS ===
+        complete_metrics_widget = QWidget()
+        complete_metrics_layout = QGridLayout(complete_metrics_widget)
+        complete_metrics_layout.setSpacing(16)
         
-        # Métricas combinadas
-        combined_metrics_card = ModernCard("Métricas del Proceso Completo")
-        combined_metrics_text = """
-    <b>Tiempo Total de Ejecución:</b> 6:27<br>
-    <b>Archivos Procesados:</b> 30 de 32<br>
-    <b>Archivos Subidos a BD:</b> 28 de 30<br>
-    <b>Registros Totales Procesados:</b> 18,542<br>
-    <b>Eficiencia General:</b> 87.5%<br>
-    <b>Throughput Promedio:</b> 2,876 registros/min<br>
-    <b>Consumo de Memoria Máximo:</b> 156 MB<br>
-    <b>CPU Utilización Promedio:</b> 34%<br>
-    <b>Fecha Inicio:</b> 2024-07-10 15:42:18<br>
-    <b>Fecha Finalización:</b> 2024-07-10 15:48:45
-        """
-        self.complete_metrics_label = QLabel(combined_metrics_text)
-        self.complete_metrics_label.setObjectName("SummaryLabel")
-        self.complete_metrics_label.setWordWrap(True)
-        combined_metrics_card.layout().addWidget(self.complete_metrics_label)
-        layout.addWidget(combined_metrics_card)
+        # Crear tarjetas de métricas completas
+        self.complete_cards = []
+        complete_metrics_data = [
+            ("⏱️", "Tiempo Total", "6:27", "#2196F3"),
+            ("📁", "Archivos Procesados", "30 / 32", "#4CAF50"),
+            ("🗄️", "Subidos a BD", "28 / 30", "#4CAF50"),
+            ("📊", "Registros Totales", "18,542", "#9C27B0"),
+            ("🎯", "Eficiencia General", "87.5%", "#4CAF50"),
+            ("🚀", "Throughput", "2,876 reg/min", "#FF9800"),
+            ("💾", "Memoria Máxima", "156 MB", "#607D8B"),
+            ("🔧", "CPU Promedio", "34%", "#795548")
+        ]
         
-        # Resumen por fases
-        phases_card = ModernCard("Resumen por Fases")
+        for i, (icon, title, value, color) in enumerate(complete_metrics_data):
+            row = i // 4
+            col = i % 4
+            status_card = StatusCard(icon, title, value, color)
+            self.complete_cards.append(status_card)
+            complete_metrics_layout.addWidget(status_card, row, col)
+        
+        layout.addWidget(complete_metrics_widget)
+        
+        # === ANÁLISIS POR FASES ===
+        phases_card = ModernCard("Análisis Detallado por Fases")
+        phases_content = QWidget()
+        phases_layout = QVBoxLayout(phases_content)
+        phases_layout.setContentsMargins(0, 0, 0, 0)
+
+        self.phases_analysis_label = QLabel()
+        self.phases_analysis_label.setObjectName("DetailedInfoLabel")
+        self.phases_analysis_label.setWordWrap(True)
+
+        # Análisis detallado por fases - DISEÑO HORIZONTAL
         phases_text = """
-    <b>📊 Fase 1: Análisis y Escaneo</b><br>
-    - Duración: 0:23<br>
-    - Archivos detectados: 32<br>
-    - Archivos válidos: 30<br>
-    - Archivos corruptos: 2<br><br>
-    <b>📁 Fase 2: Extracción de Datos</b><br>
-    - Duración: 4:12<br>
-    - Archivos procesados: 30<br>
-    - Registros extraídos: 18,542<br>
-    - Tasa de éxito: 93.75%<br><br>
-    <b>🗄️ Fase 3: Carga en Base de Datos</b><br>
-    - Duración: 2:15<br>
-    - Registros insertados: 18,542<br>
-    - Conflictos resueltos: 15<br>
-    - Integridad verificada: ✅<br><br>
-    <b>📋 Observaciones:</b><br>
-    • Proceso ejecutado dentro de los parámetros normales<br>
-    • 2 archivos omitidos por corrupción de datos<br>
-    • Rendimiento superior al promedio histórico<br>
-    • Todas las validaciones de integridad pasaron exitosamente
+                <b>FASE 1: Análisis y Escaneo</b><br>
+                • <b>Duración:</b> 0:23 (5.9%)<br>
+                • <b>Archivos detectados:</b> 32 .pqm702<br>
+                • <b>Archivos válidos:</b> 30 (93.75%)<br>
+                • <b>Archivos corruptos:</b> 2<br>
+                • <b>Validación:</b> 100% completada<br>
+                • <b>Estimación:</b> 67.8 MB<br><br>
+
+                <b>FASE 2: Extracción y Procesamiento</b><br>
+                • <b>Duración:</b> 4:12 (65.1%)<br>
+                • <b>Procesados:</b> 30 archivos<br>
+                • <b>Registros:</b> 18,542 (100%)<br>
+                • <b>Velocidad:</b> 6.7 archivos/min<br>
+                • <b>Throughput:</b> 2,876 reg/min<br>
+                • <b>Errores:</b> 0 | <b>Advertencias:</b> 3<br><br>
+
+                <b>FASE 3: Carga y Sincronización</b><br>
+                • <b>Duración:</b> 2:15 (28.9%)<br>
+                • <b>Insertados:</b> 18,542 (100%)<br>
+                • <b>Conflictos resueltos:</b> 15<br>
+                • <b>Transacciones:</b> 96.4% éxito<br>
+                • <b>Índices:</b> 4 actualizados<br>
+                • <b>Backup:</b> Ejecutado exitosamente
         """
-        self.phases_label = QLabel(phases_text)
-        self.phases_label.setObjectName("SummaryLabel")
-        self.phases_label.setWordWrap(True)
-        phases_card.layout().addWidget(self.phases_label)
+
+        self.phases_analysis_label.setText(phases_text)
+        phases_layout.addWidget(self.phases_analysis_label)
+        phases_card.layout().addWidget(phases_content)
         layout.addWidget(phases_card)
         
         return tab
@@ -349,115 +371,109 @@ class ExecutionSummaryPanel(QWidget):
         """Actualizar resumen de extracción CSV"""
         if not summary_data:
             return
+        
+        # Actualizar cards de métricas
+        if hasattr(self, 'csv_cards'):
+            metrics_values = [
+                f"{summary_data.get('processed_files', 0)} / {summary_data.get('total_files', 0)}",
+                f"{summary_data.get('total_records', 0):,}",
+                str(summary_data.get('errors', 0)),
+                summary_data.get('execution_time', '0:00'),
+                summary_data.get('avg_speed', 'N/A'),
+                f"{summary_data.get('success_rate', 0):.1f}%",
+                summary_data.get('total_size', 'N/A'),
+                str(summary_data.get('csv_files_generated', 0))
+            ]
             
-        # Actualizar estado
-        status = summary_data.get('status', 'unknown')
-        status_icons = {
-            'success': '✅ Exitoso',
-            'failed': '❌ Fallido',
-            'partial': '⚠️ Parcial'
-        }
-        self.csv_status_label.setText(f"Estado: {status_icons.get(status, '❓ Desconocido')}")
-        
-        # Actualizar métricas
-        total_files = summary_data.get('total_files', 0)
-        processed_files = summary_data.get('processed_files', 0)
-        errors = summary_data.get('errors', 0)
-        total_records = summary_data.get('total_records', 0)
-        execution_time = summary_data.get('execution_time', '0:00')
-        
-        metrics_text = f"""
-<b>Archivos Procesados:</b> {processed_files} de {total_files}<br>
-<b>Registros Extraídos:</b> {total_records:,}<br>
-<b>Errores:</b> {errors}<br>
-<b>Tiempo de Ejecución:</b> {execution_time}<br>
-<b>Velocidad Promedio:</b> {summary_data.get('avg_speed', 'N/A')}<br>
-<b>Fecha:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        self.csv_metrics_label.setText(metrics_text)
+            for i, value in enumerate(metrics_values):
+                if i < len(self.csv_cards):
+                    self.csv_cards[i].update_value(value)
         
         # Actualizar tabla
         files_data = summary_data.get('files', [])
-        self.populate_files_table(self.csv_files_table, files_data)
+        if files_data:
+            self.populate_files_table(self.csv_files_table, files_data)
         
     def update_db_summary(self, summary_data):
         """Actualizar resumen de subida a BD"""
         if not summary_data:
             return
+        
+        # Actualizar cards de métricas
+        if hasattr(self, 'db_cards'):
+            metrics_values = [
+                f"{summary_data.get('uploaded_files', 0)} / {summary_data.get('total_files', 0)}",
+                f"{summary_data.get('inserted_records', 0):,}",
+                str(summary_data.get('failed_uploads', 0)),
+                str(summary_data.get('conflicts', 0)),
+                summary_data.get('upload_time', '0:00'),
+                f"{summary_data.get('success_rate', 0):.1f}%",
+                str(summary_data.get('updated_indexes', 0)),
+                summary_data.get('connection_status', 'Desconocido')
+            ]
             
-        # Actualizar estado
-        status = summary_data.get('status', 'unknown')
-        status_icons = {
-            'success': '✅ Exitoso',
-            'failed': '❌ Fallido',
-            'partial': '⚠️ Parcial'
-        }
-        self.db_status_label.setText(f"Estado: {status_icons.get(status, '❓ Desconocido')}")
-        
-        # Actualizar métricas
-        uploaded_files = summary_data.get('uploaded_files', 0)
-        failed_uploads = summary_data.get('failed_uploads', 0)
-        total_records = summary_data.get('inserted_records', 0)
-        conflicts = summary_data.get('conflicts', 0)
-        
-        metrics_text = f"""
-<b>Archivos Subidos:</b> {uploaded_files}<br>
-<b>Registros Insertados:</b> {total_records:,}<br>
-<b>Fallos de Subida:</b> {failed_uploads}<br>
-<b>Conflictos:</b> {conflicts}<br>
-<b>Conexión BD:</b> {summary_data.get('connection_status', 'Desconocido')}<br>
-<b>Fecha:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        self.db_metrics_label.setText(metrics_text)
+            for i, value in enumerate(metrics_values):
+                if i < len(self.db_cards):
+                    self.db_cards[i].update_value(value)
         
         # Actualizar tabla
         files_data = summary_data.get('files', [])
-        self.populate_db_table(self.db_files_table, files_data)
+        if files_data:
+            self.populate_db_table(self.db_files_table, files_data)
         
     def update_complete_summary(self, summary_data):
         """Actualizar resumen de ejecución completa"""
         if not summary_data:
             return
-            
-        # Actualizar estado general
-        status = summary_data.get('overall_status', 'unknown')
-        status_icons = {
-            'success': '✅ Completado Exitosamente',
-            'failed': '❌ Falló',
-            'partial': '⚠️ Completado Parcialmente'
-        }
-        self.complete_status_label.setText(f"Estado: {status_icons.get(status, '❓ Desconocido')}")
-        
-        # Métricas combinadas
-        total_time = summary_data.get('total_execution_time', '0:00')
-        csv_phase = summary_data.get('csv_phase', {})
-        db_phase = summary_data.get('db_phase', {})
-        
-        metrics_text = f"""
-<b>Tiempo Total:</b> {total_time}<br>
-<b>Archivos Procesados:</b> {csv_phase.get('processed_files', 0)}<br>
-<b>Archivos Subidos:</b> {db_phase.get('uploaded_files', 0)}<br>
-<b>Registros Totales:</b> {summary_data.get('total_records', 0):,}<br>
-<b>Eficiencia:</b> {summary_data.get('efficiency', 'N/A')}%<br>
-<b>Fecha Inicio:</b> {summary_data.get('start_time', 'N/A')}<br>
-<b>Fecha Fin:</b> {summary_data.get('end_time', 'N/A')}
-        """
-        self.complete_metrics_label.setText(metrics_text)
-        
-        # Resumen por fases
-        phases_text = f"""
-<b>📊 Fase de Extracción CSV:</b><br>
-  - Estado: {csv_phase.get('status', 'N/A')}<br>
-  - Tiempo: {csv_phase.get('execution_time', 'N/A')}<br>
-  - Archivos: {csv_phase.get('processed_files', 0)}<br><br>
-<b>🗄️ Fase de Subida a BD:</b><br>
-  - Estado: {db_phase.get('status', 'N/A')}<br>
-  - Tiempo: {db_phase.get('execution_time', 'N/A')}<br>
-  - Registros: {db_phase.get('inserted_records', 0):,}<br><br>
-<b>📋 Observaciones:</b><br>
-{summary_data.get('observations', 'Sin observaciones')}
-        """
-        self.phases_label.setText(phases_text)
+
+        # === Actualizar tarjetas de métricas ===
+        if hasattr(self, 'complete_cards'):
+            metrics_values = [
+                summary_data.get('total_time', '0:00'),
+                f"{summary_data.get('processed_files', 0)} / {summary_data.get('detected_files', 0)}",
+                f"{summary_data.get('uploaded_records', 0)} / {summary_data.get('valid_files', 0)}",
+                f"{summary_data.get('total_records', 0):,}",
+                f"{summary_data.get('efficiency', 0):.1f}%",
+                summary_data.get('throughput', '0 reg/min'),
+                summary_data.get('max_memory', '0 MB'),
+                f"{summary_data.get('avg_cpu', 0)}%"
+            ]
+
+            for i, value in enumerate(metrics_values):
+                if i < len(self.complete_cards):
+                    self.complete_cards[i].update_value(value)
+
+        # === Actualizar análisis por fases ===
+        if hasattr(self, 'phases_analysis_label'):
+            phases_text = f"""
+                    <b>FASE 1: Análisis y Escaneo</b><br>
+                    • Duración: {summary_data.get('phase1_duration', '0:00')}<br>
+                    • Archivos detectados: {summary_data.get('detected_files', 0)} archivos .pqm702<br>
+                    • Archivos válidos: {summary_data.get('valid_files', 0)}<br>
+                    • Archivos corruptos: {summary_data.get('corrupted_files', 0)}<br>
+                    • Validación: {summary_data.get('integrity_check', 'N/A')}<br>
+                    • Estimación: {summary_data.get('estimated_size', 'N/A')}<br><br>
+
+                    <b>FASE 2: Extracción y Procesamiento</b><br>
+                    • Duración: {summary_data.get('phase2_duration', '0:00')}<br>
+                    • Procesados: {summary_data.get('processed_files', 0)}<br>
+                    • Registros: {summary_data.get('total_records', 0):,}<br>
+                    • Velocidad: {summary_data.get('avg_file_speed', 'N/A')}<br>
+                    • Throughput: {summary_data.get('throughput', 'N/A')}<br>
+                    • Errores: {summary_data.get('processing_errors', 0)}<br>
+                    • Advertencias: {summary_data.get('warnings', 0)}<br><br>
+
+                    <b>FASE 3: Carga y Sincronización</b><br>
+                    • Duración: {summary_data.get('phase3_duration', '0:00')}<br>
+                    • Insertados: {summary_data.get('uploaded_records', 0):,}<br>
+                    • Conflictos: {summary_data.get('conflicts', 0)}<br>
+                    • Transacciones: {summary_data.get('success_tx_rate', 'N/A')}<br>
+                    • Índices: {summary_data.get('updated_indexes', 'N/A')}<br>
+                    • Integridad: {summary_data.get('referential_integrity', 'N/A')}<br>
+                    • Backup: {summary_data.get('backup_status', 'N/A')}<br><br>
+
+            """
+            self.phases_analysis_label.setText(phases_text)
         
     def update_general_summary(self, summary_data):
         """Actualizar resumen general"""
