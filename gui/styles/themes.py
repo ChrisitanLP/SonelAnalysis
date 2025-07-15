@@ -348,9 +348,9 @@ class ThemeManager:
                     border: 1px solid #505050;
                     border-bottom: none;
                     border-radius: 6px 6px 0 0;
-                    padding: 8px 16px;
+                    padding: 10px 18px;
                     margin-right: 2px;
-                    font-size: 12px;
+                    font-size: 11px;
                     font-weight: 500;
                 }
                 
@@ -369,6 +369,91 @@ class ThemeManager:
                     color: #ffffff;
                     font-size: 12px;
                     line-height: 1.6;
+                }
+
+                QLabel#DetailedInfoLabel {
+                    font-size: 12px;
+                    line-height: 1.6;
+                    color: #ffffff;
+                    background-color: transparent;
+                    padding: 8px;
+                }
+
+                QTableWidget#FilesTable {
+                    background-color: #1e1e1e;
+                    border: 1px solid #404040;
+                    border-radius: 8px;
+                    gridline-color: #404040;
+                    font-size: 11px;
+                    color: #ffffff;
+                    selection-background-color: #1976D2;
+                    selection-color: #ffffff;
+                }
+
+                QTableWidget#FilesTable::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #404040;
+                }
+
+                QTableWidget#FilesTable::item:selected {
+                    background-color: #1976D2;
+                    color: #ffffff;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section {
+                    background-color: #3d3d3d;
+                    color: #ffffff;
+                    padding: 10px;
+                    border: 1px solid #505050;
+                    font-weight: 600;
+                    font-size: 11px;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section:horizontal {
+                    border-bottom: 2px solid #1976D2;
+                }
+
+                /* Estilos adicionales para TEMA CLARO */
+                QLabel#DetailedInfoLabel {
+                    font-size: 12px;
+                    line-height: 1.6;
+                    color: #fff;
+                    background-color: transparent;
+                    padding: 8px;
+                }
+
+                QTableWidget#FilesTable {
+                    background-color: #ffffff;
+                    border: 1px solid #e1e5e9;
+                    border-radius: 8px;
+                    gridline-color: #e1e5e9;
+                    font-size: 11px;
+                    color: #212121;
+                    selection-background-color: #1976D2;
+                    selection-color: #ffffff;
+                }
+
+                QTableWidget#FilesTable::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #e1e5e9;
+                }
+
+                QTableWidget#FilesTable::item:selected {
+                    background-color: #1976D2;
+                    color: #ffffff;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section {
+                    background-color: #f8f9fa;
+                    color: #212121;
+                    padding: 10px;
+                    border: 1px solid #e1e5e9;
+                    font-weight: 600;
+                    font-size: 11px;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section:horizontal {
+                    border-bottom: 2px solid #1976D2;
                 }
             """
 
@@ -708,9 +793,9 @@ class ThemeManager:
                     border: 1px solid #e1e5e9;
                     border-bottom: none;
                     border-radius: 6px 6px 0 0;
-                    padding: 8px 16px;
+                    padding: 10px 18px;
                     margin-right: 2px;
-                    font-size: 12px;
+                    font-size: 11px;
                     font-weight: 500;
                 }
                 
