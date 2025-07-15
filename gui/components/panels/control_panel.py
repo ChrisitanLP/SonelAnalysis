@@ -48,11 +48,9 @@ class ControlPanel(QWidget):
         
         # Botones de acción
         self.csv_btn = ActionButton("Generar Archivos CSV", "📊", "secondary")
-        self.csv_btn.clicked.connect(self.parent_app.generate_csv)
         self.csv_btn.clicked.connect(self.confirm_generate_csv)
         
         self.upload_btn = ActionButton("Subir a Base de Datos", "🗄️", "secondary")
-        self.upload_btn.clicked.connect(self.parent_app.upload_to_db)
         self.upload_btn.clicked.connect(self.confirm_upload_db)
         
         self.execute_all_btn = ActionButton("Ejecutar Proceso Completo", "⚡", "primary")
