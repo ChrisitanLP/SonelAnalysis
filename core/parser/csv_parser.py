@@ -43,8 +43,6 @@ class CSVParser:
                         df.columns = df.columns.astype(str)
                         
                         # Imprimir las columnas para debug
-                        logger.info(f"Columnas encontradas con sep='{sep}', encoding='{encoding}': {list(df.columns)}")
-                        
                         valid, column_map = validate_voltage_columns(df)
                         if valid:
                             logger.info(f"Datos extraídos correctamente de {file_path}")
@@ -84,7 +82,6 @@ class CSVParser:
                         # Intentar diferentes números de filas a saltar
                         for skip_rows in range(1, 20):  # Intentar saltando hasta 20 filas
                             try:
-                                logger.info(f"Intentando leer CSV saltando {skip_rows} filas con sep='{sep}', encoding='{encoding}'")
                                 df = pd.read_csv(file_path, sep=sep, encoding=encoding, skiprows=skip_rows)
                                 
                                 if df.empty:
@@ -100,7 +97,6 @@ class CSVParser:
                                     
                                     # Si encontramos fechas en la primera fila, podría ser que las columnas sean la fila anterior
                                     if date_cols and skip_rows > 0:
-                                        logger.info(f"Posibles datos de fecha encontrados en la fila {skip_rows+1}")
                                         # Intentar usar esta fila como datos y la anterior como encabezados
                                         try:
                                             df_headers = pd.read_csv(file_path, sep=sep, encoding=encoding, 
@@ -112,9 +108,6 @@ class CSVParser:
                                                 df = df_data
                                         except Exception as e:
                                             logger.debug(f"Error al intentar recomponer encabezados: {e}")
-                                
-                                # Imprimir las columnas para debug
-                                logger.info(f"Columnas encontradas con skiprows={skip_rows}: {list(df.columns)}")
                                 
                                 valid, column_map = validate_voltage_columns(df)
                                 if valid:
