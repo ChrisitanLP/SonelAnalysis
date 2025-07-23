@@ -18,9 +18,6 @@ def validate_voltage_columns(df):
     # Convertir todos los nombres de columnas a string para evitar errores con enteros
     df.columns = df.columns.astype(str)
 
-    # Imprimir las columnas disponibles para debug
-    logger.info(f"Validando columnas en DataFrame: {list(df.columns)}")
-
     # Mapeo de nombres de columnas estándar a nombres encontrados
     column_mapping = {}
 
@@ -28,7 +25,6 @@ def validate_voltage_columns(df):
         matched = [col for col in df.columns if re.search(pattern, col)]
         if matched:
             column_mapping[std_name] = matched[0]
-            logger.info(f"Columna '{std_name}' identificada como '{matched[0]}'")
         else:
             logger.debug(f"No se encontró columna que coincida con patrón: {pattern}")
 
@@ -39,7 +35,6 @@ def validate_voltage_columns(df):
         return True, column_mapping
 
     # Si no se encuentran las columnas mínimas, devolver False
-    logger.warning("No se encontraron las columnas mínimas requeridas")
     return False, column_mapping
 
 def find_column(df, pattern):
