@@ -1,6 +1,7 @@
 # componentes_guardado.py
 import os
 import json
+import datetime
 
 class ComponentesGuardado:
     def __init__(self, logger=None, ruta_salida="componentes_configuracion.json", ruta_coordenadas="component_positions.json"):

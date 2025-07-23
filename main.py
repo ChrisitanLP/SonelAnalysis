@@ -13,6 +13,7 @@ import sys
 import time
 import logging
 import argparse
+import traceback
 from pathlib import Path
 from core.etl.sonel_etl import SonelETL
 from config.logger import get_logger
@@ -221,7 +222,6 @@ class UnifiedSonelProcessor:
             
         except Exception as e:
             self.unified_logger.error(f"❌ Error durante extracción PYWIN: {e}")
-            import traceback
             self.unified_logger.error(traceback.format_exc())
             return False, 0
         
@@ -233,7 +233,7 @@ class UnifiedSonelProcessor:
             force_reprocess: Si True, reprocesa todos los archivos ignorando el registro
             
         Returns:
-            bool: True si el procesamiento fue exitoso
+            tuple: (success: bool, summary_data: dict) - Estado y resumen detallado
         """
 
         self.unified_logger.info("🚀 === INICIANDO PROCESAMIENTO ETL ===")
@@ -246,7 +246,7 @@ class UnifiedSonelProcessor:
             db_connection = DatabaseConnection(self.etl_config)
             if not db_connection.connect():
                 self.unified_logger.error("❌ No se pudo establecer conexión con la base de datos")
-                return False
+                return False, self._get_error_summary("Error de conexión BD")
             
             self.unified_logger.info("✅ Conexión a base de datos establecida")
             
@@ -258,7 +258,6 @@ class UnifiedSonelProcessor:
             
             # Directorio donde están los CSV (mismo que export_dir de GUI)
             csv_directory = self.rutas["output_directory"]
-            
             self.unified_logger.info(f"📂 Procesando archivos CSV desde: {csv_directory}")
             
             # Ejecutar procesamiento ETL
@@ -268,18 +267,22 @@ class UnifiedSonelProcessor:
                 force_reprocess=force_reprocess
             )
             
+            # Generar resumen para la GUI
             if success:
                 self.unified_logger.info("✅ Procesamiento ETL completado exitosamente")
-                return True
+                summary_data = etl.get_complete_summary_for_gui()
+                self._log_summary(summary_data)
+                return True, summary_data
             else:
                 self.unified_logger.warning("⚠️ El procesamiento ETL se completó con advertencias")
-                return True  # Consideramos las advertencias como éxito parcial
-                
+                summary_data = etl.get_complete_summary_for_gui()
+                self._log_summary(summary_data)
+                return True, summary_data  # Consideramos las advertencias como éxito parcial
+                    
         except Exception as e:
             self.unified_logger.error(f"❌ Error durante procesamiento ETL: {e}")
-            import traceback
             self.unified_logger.error(traceback.format_exc())
-            return False
+            return False, self._get_error_summary(f"Error ETL: {str(e)}")
             
         finally:
             # Limpieza de recursos
@@ -289,8 +292,13 @@ class UnifiedSonelProcessor:
                 db_connection.close()
             self.unified_logger.info("🧹 Recursos liberados correctamente")
 
+    def _log_summary(self, summary: dict) -> None:
+        self.unified_logger.info("📊 Resumen del flujo:")
+        for k, v in summary.items():
+            self.unified_logger.info(f"   • {k:15}: {v}")
+
     def run_complete_workflow(self, force_reprocess: bool = False, 
-                        skip_gui: bool = False, skip_etl: bool = False):
+                    skip_gui: bool = False, skip_etl: bool = False):
         """
         Ejecuta el flujo completo: extracción GUI + procesamiento ETL
         
@@ -300,7 +308,7 @@ class UnifiedSonelProcessor:
             skip_etl: Omite el procesamiento ETL
             
         Returns:
-            bool: True si el flujo completo fue exitoso
+            tuple: (success: bool, complete_summary: dict) - Estado y resumen completo
         """
         self.unified_logger.info("🎯 === INICIANDO FLUJO COMPLETO SONEL ===")
         start_time = time.time()
@@ -308,10 +316,11 @@ class UnifiedSonelProcessor:
         # Validar entorno
         if not self.validate_environment():
             self.unified_logger.error("❌ Validación de entorno fallida")
-            return False
+            return False, self._get_error_summary("Validación de entorno fallida")
         
         gui_success = True
         extracted_files = 0
+        csv_summary = {}
         
         # Paso 1: Extracción GUI (opcional)
         if not skip_gui:
@@ -323,10 +332,15 @@ class UnifiedSonelProcessor:
         
         # Paso 2: Procesamiento ETL (opcional)
         etl_success = True
+        db_summary = {}
+        
         if not skip_etl:
-            etl_success = self.run_etl_processing(force_reprocess)
+            etl_success, db_summary = self.run_etl_processing(force_reprocess)
+            if not etl_success:
+                self.unified_logger.error("❌ Procesamiento ETL falló")
         else:
             self.unified_logger.info("⏭️ Procesamiento ETL omitido por configuración")
+            db_summary = self._get_empty_db_summary()
         
         # Resumen final
         end_time = time.time()
@@ -335,7 +349,7 @@ class UnifiedSonelProcessor:
         self.unified_logger.info("🏁 === RESUMEN DEL FLUJO COMPLETO ===")
         self.unified_logger.info(f"⏱️ Tiempo total de ejecución: {total_time:.2f} segundos")
         
-        # ✅ MENSAJE MEJORADO: Más claro sobre el estado
+        # Mensajes mejorados
         if gui_success and extracted_files > 0:
             self.unified_logger.info(f"🔄 Extracción PYWIN: ✅ Exitosa - {extracted_files} archivos nuevos procesados")
         elif gui_success and extracted_files == 0 and not skip_gui:
@@ -351,7 +365,12 @@ class UnifiedSonelProcessor:
         overall_success = (gui_success or skip_gui) and (etl_success or skip_etl)
         self.unified_logger.info(f"🎯 Resultado general: {'✅ ÉXITO' if overall_success else '❌ FALLO'}")
         
-        return overall_success
+        # Generar resumen completo
+        complete_summary = self._build_complete_summary(
+            gui_success, extracted_files, etl_success, db_summary, total_time
+        )
+        
+        return overall_success, complete_summary
 
     def mostrar_resumen_pywinauto(self, resultados):
         """
@@ -430,6 +449,147 @@ class UnifiedSonelProcessor:
             self.unified_logger.info("="*50)
             self.unified_logger.info(f"Resultados recibidos: {resultados}")
             self.unified_logger.info("="*50)
+
+    def _get_error_summary(self, error_message):
+        """
+        Genera un resumen de error estándar
+        
+        Args:
+            error_message: Mensaje de error
+            
+        Returns:
+            dict: Resumen de error
+        """
+        return {
+            'total_files': 0,
+            'uploaded_files': 0,
+            'failed_uploads': 1,
+            'conflicts': 0,
+            'inserted_records': 0,
+            'success_rate': 0,
+            'upload_time': '0:00',
+            'updated_indexes': 0,
+            'connection_status': 'Error',
+            'files': [],
+            'error_message': error_message
+        }
+
+    def _get_empty_db_summary(self):
+        """
+        Genera un resumen vacío para cuando se omite ETL
+        
+        Returns:
+            dict: Resumen vacío
+        """
+        return {
+            'total_files': 0,
+            'uploaded_files': 0,
+            'failed_uploads': 0,
+            'conflicts': 0,
+            'inserted_records': 0,
+            'success_rate': 0,
+            'upload_time': '0:00',
+            'updated_indexes': 0,
+            'connection_status': 'Omitido',
+            'files': []
+        }
+
+    def _build_complete_summary(self, gui_success, extracted_files, etl_success, db_summary, total_time):
+        """
+        Construye el resumen completo del flujo
+        
+        Args:
+            gui_success: Éxito de extracción GUI
+            extracted_files: Archivos extraídos
+            etl_success: Éxito de ETL
+            db_summary: Resumen de BD
+            total_time: Tiempo total en segundos
+            
+        Returns:
+            dict: Resumen completo
+        """
+        # Formatear tiempo
+        minutes = int(total_time // 60)
+        seconds = int(total_time % 60)
+        time_str = f"{minutes}:{seconds:02d}"
+        
+        # Determinar estado general
+        if gui_success and etl_success:
+            overall_status = "✅ Completado"
+        elif gui_success or etl_success:
+            overall_status = "⚠️ Parcial"
+        else:
+            overall_status = "❌ Fallido"
+        
+        return {
+            'overall_status': overall_status,
+            'total_files': db_summary.get('total_files', 0),
+            'csv_extracted': extracted_files,
+            'db_uploaded': db_summary.get('uploaded_files', 0),
+            'total_errors': db_summary.get('failed_uploads', 0),
+            'total_time': time_str,
+            'success_rate': db_summary.get('success_rate', 0),
+            'data_processed': db_summary.get('inserted_records', 0),
+            'connection_status': db_summary.get('connection_status', 'Desconocido'),
+            'gui_success': gui_success,
+            'etl_success': etl_success,
+            'db_summary': db_summary
+        }
+
+    # Método auxiliar para uso desde GUI
+    def execute_etl_for_gui(self, force_reprocess: bool = False):
+        """
+        Método específico para ser llamado desde la GUI
+        
+        Args:
+            force_reprocess: Si True, reprocesa todos los archivos
+            
+        Returns:
+            dict: Resumen completo con datos para la GUI
+        """
+        try:
+            # Ejecutar solo ETL
+            success, db_summary = self.run_etl_processing(force_reprocess)
+            
+            # Generar resumen completo
+            complete_summary = {
+                'db_summary': db_summary,
+                'csv_summary': self._get_csv_summary_for_gui(),
+                'complete_summary': self._build_complete_summary(
+                    True, 0, success, db_summary, 0
+                ),
+                'success': success
+            }
+            
+            return complete_summary
+            
+        except Exception as e:
+            self.unified_logger.error(f"❌ Error en ejecución ETL para GUI: {e}")
+            return {
+                'db_summary': self._get_error_summary(str(e)),
+                'csv_summary': {},
+                'complete_summary': {},
+                'success': False,
+                'error': str(e)
+            }
+
+    def _get_csv_summary_for_gui(self):
+        """
+        Genera resumen CSV básico
+        
+        Returns:
+            dict: Resumen CSV
+        """
+        return {
+            'total_files': 0,
+            'extracted_files': 0,
+            'failed_extractions': 0,
+            'duplicates': 0,
+            'extraction_time': '0:00',
+            'success_rate': 0,
+            'data_size': '0 bytes',
+            'source_app': 'Sonel Analysis'
+        }
 
 def parse_arguments():
     """
@@ -538,7 +698,6 @@ def main():
         return 1
     except Exception as e:
         print(f"❌ Error inesperado: {e}")
-        import traceback
         print(traceback.format_exc())
         return 2
     finally:
