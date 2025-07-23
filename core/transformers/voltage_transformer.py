@@ -28,18 +28,12 @@ class VoltageTransformer:
         try:
             # Copia para no modificar el original
             df = data.copy()
-
-            # Imprimir las columnas disponibles para debug
-            logger.info(f"Columnas disponibles en el DataFrame original: {list(df.columns)}")
             
             # Identificar columnas usando la función mejorada
             valid, column_map = validate_voltage_columns(df)
             if not valid or not column_map:
                 logger.error("No se pudieron identificar las columnas necesarias para la transformación")
                 return None
-            
-            # Imprimir el mapeo de columnas para debug
-            logger.info(f"Mapeo de columnas identificado: {column_map}")
             
             # Crear nuevo DataFrame con las columnas requeridas
             transformed_df = pd.DataFrame()
@@ -159,7 +153,6 @@ class VoltageTransformer:
                 logger.warning("No se encontraron columnas de potencia en el archivo")
             
             logger.info("Transformación de datos completada exitosamente")
-            logger.info(f"Columnas en el DataFrame transformado: {list(transformed_df.columns)}")
             return transformed_df
             
         except Exception as e:

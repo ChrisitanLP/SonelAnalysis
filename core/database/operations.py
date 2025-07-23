@@ -189,10 +189,7 @@ class DataHandler:
         if data is None or data.empty:
             logger.error("No hay datos para cargar en la base de datos")
             return False
-            
-        # Imprimir columnas disponibles para debug
-        logger.info(f"Columnas disponibles en el DataFrame: {list(data.columns)}")
-        
+                  
         # Contador de filas procesadas exitosamente
         successful_rows = 0
         
