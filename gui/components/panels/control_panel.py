@@ -1,8 +1,8 @@
 from PyQt5.QtCore import Qt
-from components.cards.modern_card import ModernCard
-from components.controls.action_button import ActionButton
+from gui.components.cards.modern_card import ModernCard
+from gui.components.controls.action_button import ActionButton
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar
-from utils.ui_helper import UIHelpers
+from gui.utils.ui_helper import UIHelpers
 
 class ControlPanel(QWidget):
     def __init__(self, parent=None):
@@ -70,18 +70,30 @@ class ControlPanel(QWidget):
         progress_layout = QVBoxLayout(progress_content)
         progress_layout.setContentsMargins(0, 0, 0, 0)
         progress_layout.setSpacing(12)
-        
-        self.progress_label = QLabel("🔄 Extracción de archivos PQM en progreso...")
+
+        self.progress_label = QLabel("Sistema listo para procesar...")
         self.progress_label.setObjectName("ProgressLabel")
-        
+
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimumHeight(12)
-        self.progress_bar.setValue(72)
+        self.progress_bar.setValue(0)  # Cambiar de 72 a 0
         self.progress_bar.setObjectName("ProgressBar")
-        
+
+        # Aplicar estilo inicial (sin progreso)
+        self.progress_label.setStyleSheet("""
+            QLabel {
+                color: #666666;
+                font-weight: normal;
+                padding: 8px;
+                border-left: 4px solid #E0E0E0;
+                background-color: rgba(224, 224, 224, 0.1);
+                border-radius: 4px;
+            }
+        """)
+
         progress_layout.addWidget(self.progress_label)
         progress_layout.addWidget(self.progress_bar)
-        
+
         progress_card.layout().addWidget(progress_content)
         
         # Agregar tarjetas al panel
@@ -97,10 +109,133 @@ class ControlPanel(QWidget):
         return self.progress_bar.value()
         
     def set_progress_value(self, value):
+        """Establecer valor del progreso con validación"""
+        # Asegurar que el valor esté en rango válido
+        value = max(0, min(100, value))
         self.progress_bar.setValue(value)
         
+        # Cambiar color de la barra según el progreso
+        if value == 0:
+            # Sin progreso - estilo neutral
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid #E0E0E0;
+                    border-radius: 8px;
+                    background-color: rgba(224, 224, 224, 0.1);
+                    text-align: center;
+                    color: #666666;
+                    font-weight: normal;
+                }
+                QProgressBar::chunk {
+                    background-color: #E0E0E0;
+                    border-radius: 6px;
+                }
+            """)
+        elif value == 100:
+            # Verde para completado
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid #4CAF50;
+                    border-radius: 8px;
+                    background-color: rgba(76, 175, 80, 0.1);
+                    text-align: center;
+                    color: #2E7D32;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                        stop: 0 #4CAF50, stop: 1 #66BB6A);
+                    border-radius: 6px;
+                }
+            """)
+        elif value > 0:
+            # Azul para en progreso
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid #2196F3;
+                    border-radius: 8px;
+                    background-color: rgba(33, 150, 243, 0.1);
+                    text-align: center;
+                    color: #1565C0;
+                    font-weight: bold;
+                }
+                QProgressBar::chunk {
+                    background-color: qlineargradient(x1: 0, y1: 0, x2: 1, y2: 0,
+                        stop: 0 #2196F3, stop: 1 #42A5F5);
+                    border-radius: 6px;
+                }
+            """)
+        
     def update_progress_label(self, text):
+        """Actualizar etiqueta de progreso con emoji dinámico"""
         self.progress_label.setText(text)
+        
+        # NUEVO: Agregar efecto visual según el tipo de mensaje
+        if "✅" in text or "completado" in text.lower() or "finalizada" in text.lower():
+            # Estilo para completado
+            self.progress_label.setStyleSheet("""
+                QLabel {
+                    color: #2E7D32;
+                    font-weight: bold;
+                    padding: 8px;
+                    border-left: 4px solid #4CAF50;
+                    background-color: rgba(76, 175, 80, 0.1);
+                    border-radius: 4px;
+                }
+            """)
+        elif "❌" in text or "error" in text.lower() or "fallido" in text.lower():
+            # Estilo para error
+            self.progress_label.setStyleSheet("""
+                QLabel {
+                    color: #C62828;
+                    font-weight: bold;
+                    padding: 8px;
+                    border-left: 4px solid #F44336;
+                    background-color: rgba(244, 67, 54, 0.1);
+                    border-radius: 4px;
+                }
+            """)
+        elif "⚠️" in text or "advertencia" in text.lower():
+            # Estilo para advertencia
+            self.progress_label.setStyleSheet("""
+                QLabel {
+                    color: #F57C00;
+                    font-weight: bold;
+                    padding: 8px;
+                    border-left: 4px solid #FF9800;
+                    background-color: rgba(255, 152, 0, 0.1);
+                    border-radius: 4px;
+                }
+            """)
+        else:
+            # Estilo para procesando
+            self.progress_label.setStyleSheet("""
+                QLabel {
+                    color: #1565C0;
+                    font-weight: bold;
+                    padding: 8px;
+                    border-left: 4px solid #2196F3;
+                    background-color: rgba(33, 150, 243, 0.1);
+                    border-radius: 4px;
+                }
+            """)
+
+    def reset_progress(self):
+        """Resetear la barra de progreso y etiqueta al estado inicial"""
+        self.set_progress_value(0)
+        self.update_progress_label("Sistema listo para procesar...")
+        
+    # NUEVO MÉTODO: Mostrar progreso detallado
+    def update_detailed_progress(self, current: int, total: int, operation: str = ""):
+        """Actualizar progreso con información detallada"""
+        if total > 0:
+            percentage = int((current / total) * 100)
+            self.set_progress_value(percentage)
+            
+            if operation:
+                self.update_progress_label(f"{operation} ({current}/{total}) - {percentage}%")
+            else:
+                self.update_progress_label(f"Procesando... ({current}/{total}) - {percentage}%")
 
     def confirm_generate_csv(self):
         """Pide confirmación antes de generar CSV."""
@@ -123,3 +258,9 @@ class ControlPanel(QWidget):
         )
         if ok:
             self.parent_app.upload_to_db()
+
+
+    def start_progress(self, initial_message="🔄 Iniciando proceso..."):
+        """Iniciar el progreso con un mensaje inicial"""
+        self.set_progress_value(0)
+        self.update_progress_label(initial_message)
