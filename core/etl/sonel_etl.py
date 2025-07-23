@@ -1,7 +1,11 @@
 #sonel_etl.py
 import os
+import json
+from datetime import datetime
 from config.logger import logger
 from config.settings import load_config
+from core.parser.csv_parser import CSVParser
+from core.parser.excel_parser import ExcelParser
 from core.database.operations import DataHandler
 from core.utils.validators import extract_client_code
 from core.database.connection import DatabaseConnection
@@ -184,6 +188,10 @@ class SonelETL:
         Returns:
             bool: True si el procesamiento fue exitoso
         """
+        # Capturar tiempo de inicio del procesamiento
+        start_time = datetime.now()
+        start_time_iso = start_time.isoformat() + 'Z'
+        
         try:
             # Validar que el archivo existe
             if not os.path.exists(file_path):
@@ -208,20 +216,32 @@ class SonelETL:
             # Extraer datos del archivo según su tipo
             file_ext = os.path.splitext(file_path)[1].lower()
             if file_ext == '.xlsx':
-                from parser.excel_parser import ExcelParser
                 df = ExcelParser.parse(file_path)
             elif file_ext == '.csv':
-                from parser.csv_parser import CSVParser
                 df = CSVParser.parse(file_path)
             else:
                 error_msg = f"Formato de archivo no soportado: {file_path}"
-                self.registry.register_processing_error(file_path, error_msg)
+                # 🔄 MEJORA: Calcular tiempo incluso en caso de error
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                error_info = {
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                }
+                self.registry.register_processing_error(file_path, error_msg, error_info)
                 logger.error(f"⚠️ {error_msg}")
                 return False
             
             if df is None or df.empty:
                 error_msg = f"No se extrajeron datos del archivo: {file_path}"
-                self.registry.register_processing_error(file_path, error_msg)
+                # 🔄 MEJORA: Calcular tiempo incluso en caso de error
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                error_info = {
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                }
+                self.registry.register_processing_error(file_path, error_msg, error_info)
                 logger.error(f"⚠️ {error_msg}")
                 return False
                 
@@ -230,7 +250,14 @@ class SonelETL:
             
             if transformed_data is None or transformed_data.empty:
                 error_msg = f"Transformación de datos fallida para archivo: {file_path}"
-                self.registry.register_processing_error(file_path, error_msg)
+                # 🔄 MEJORA: Calcular tiempo incluso en caso de error
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                error_info = {
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                }
+                self.registry.register_processing_error(file_path, error_msg, error_info)
                 logger.error(f"⚠️ {error_msg}")
                 return False
             
@@ -238,7 +265,14 @@ class SonelETL:
             # ya sea extraído o generado automáticamente, pero verificamos por si acaso
             if cliente_codigo is None:
                 error_msg = f"No se pudo obtener código de cliente desde el archivo {file_path}"
-                self.registry.register_processing_error(file_path, error_msg)
+                # 🔄 MEJORA: Calcular tiempo incluso en caso de error
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                error_info = {
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+                }
+                self.registry.register_processing_error(file_path, error_msg, error_info)
                 logger.error(f"❌ {error_msg}")
                 return False
             
@@ -246,24 +280,45 @@ class SonelETL:
             success = self._load_data(transformed_data, cliente_codigo, file_path)
 
             if success:
-                # Registrar éxito con información adicional
+                # Calcular tiempo de procesamiento
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                
+                # Registrar éxito con información adicional mejorada
                 additional_info = {
                     "rows_processed": len(transformed_data),
                     "columns_processed": len(transformed_data.columns) if hasattr(transformed_data, 'columns') else 0,
-                    "client_code": cliente_codigo
+                    "client_code": cliente_codigo,
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
                 }
                 self.registry.register_processing_success(file_path, additional_info)
-                logger.info(f"✅ Archivo procesado exitosamente: {file_path} | Cliente: {cliente_codigo}")
+                logger.info(f"✅ Archivo procesado exitosamente: {file_path} | Cliente: {cliente_codigo} | Tiempo: {processing_time:.2f}s | Registros: {len(transformed_data)}")
                 return True
             else:
                 error_msg = f"Error al cargar datos desde archivo: {file_path}"
-                self.registry.register_processing_error(file_path, error_msg)
+                # 🔄 MEJORA: Calcular tiempo incluso en caso de error
+                end_time = datetime.now()
+                processing_time = (end_time - start_time).total_seconds()
+                error_info = {
+                    "processing_time_seconds": processing_time,
+                    "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0,
+                    "client_code": cliente_codigo
+                }
+                self.registry.register_processing_error(file_path, error_msg, error_info)
                 logger.error(f"❌ {error_msg}")
                 return False
                 
         except Exception as e:
             error_msg = f"Error crítico al procesar archivo {file_path}: {e}"
-            self.registry.register_processing_error(file_path, error_msg)
+            # 🔄 MEJORA: Calcular tiempo incluso en caso de excepción
+            end_time = datetime.now()
+            processing_time = (end_time - start_time).total_seconds()
+            error_info = {
+                "processing_time_seconds": processing_time,
+                "file_size_bytes": os.path.getsize(file_path) if os.path.exists(file_path) else 0
+            }
+            self.registry.register_processing_error(file_path, error_msg, error_info)
             logger.error(f"❌ {error_msg}")
             import traceback
             logger.error(traceback.format_exc())
@@ -280,6 +335,9 @@ class SonelETL:
         Returns:
             bool: True si se procesaron archivos exitosamente (al menos uno)
         """
+        # 🔄 MEJORA: Capturar tiempo de inicio del procesamiento del directorio
+        start_time = datetime.now()
+        
         if directory is None:
             directory = self.config['PATHS']['data_dir']
             
@@ -316,8 +374,19 @@ class SonelETL:
                 success_count += 1
             # No registramos errores aquí porque ya se hace en process_file
 
-        logger.info(f"📈 Resultado final: {success_count}/{total_files} archivos procesados con éxito")
+        # 🔄 MEJORA: Calcular tiempo total del directorio y almacenarlo
+        end_time = datetime.now()
+        total_time = (end_time - start_time).total_seconds()
         
+        # 🔄 MEJORA: Guardar tiempo total en el registro para uso posterior
+        self.registry.register_batch_processing_time(total_time, start_time, end_time)
+        
+        logger.info(f"📈 Resultado final: {success_count}/{total_files} archivos procesados con éxito en {total_time:.2f} segundos")
+        
+        output_file = self.save_processing_summary_to_file()
+        if output_file:
+            print(f"Resumen guardado en: {output_file}")
+
         # Mostrar resumen del registro
         self.print_processing_summary()
         
@@ -363,7 +432,7 @@ class SonelETL:
         stats = self.registry.get_processing_stats()
         
         # Obtener archivos por estado
-        from utils.processing_registry import ProcessingStatus
+        
         error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
         pending_files = self.registry.get_files_by_status(ProcessingStatus.PENDING)
         
@@ -380,3 +449,406 @@ class SonelETL:
         }
         
         return report
+    
+    def get_db_summary_for_gui(self):
+        """
+        Genera un resumen estructurado para la GUI después del procesamiento ETL
+        
+        Returns:
+            dict: Resumen estructurado con métricas de BD para mostrar en la GUI
+        """
+        try:
+            # Obtener estadísticas del registro
+            stats = self.registry.get_processing_stats()
+            
+            # Obtener archivos por estado
+            successful_files = self.registry.get_files_by_status(ProcessingStatus.SUCCESS)
+            error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
+            pending_files = self.registry.get_files_by_status(ProcessingStatus.PENDING)
+            
+            # Calcular métricas
+            total_files = stats['total_files']
+            uploaded_files = stats['successful']
+            failed_uploads = stats['errors']
+            conflicts = 0  # Inicializar conflictos
+            
+            # 🔄 MEJORA: Calcular registros totales insertados y tiempo total REAL
+            inserted_records = 0
+            upload_time_seconds = 0
+            total_file_size = 0
+            files_data = []
+            
+            for file_path in successful_files:
+                file_data = self.registry.registry_data["files"][file_path]
+                additional_info = file_data.get("additional_info", {})
+                
+                # Sumar registros procesados
+                rows_processed = additional_info.get("rows_processed", 0)
+                inserted_records += rows_processed
+                
+                # 🔄 MEJORA: Sumar tiempo de procesamiento individual REAL
+                file_processing_time = additional_info.get("processing_time_seconds", 0)
+                upload_time_seconds += file_processing_time
+                
+                # Sumar tamaño de archivos
+                file_size = additional_info.get("file_size_bytes", 0)
+                total_file_size += file_size
+                
+                # 🔄 MEJORA: Preparar datos del archivo con tiempo preciso
+                files_data.append({
+                    'filename': os.path.basename(file_path),
+                    'status': '✅ Subido',
+                    'records': str(rows_processed),
+                    'table': 'mediciones_planas',
+                    'time': f"{file_processing_time:.1f}s" if file_processing_time > 0 else '0.0s',
+                    'message': ''
+                })
+            
+            # Agregar archivos con errores
+            for file_path in error_files:
+                file_data = self.registry.registry_data["files"][file_path]
+                error_message = file_data.get("error_message", "Error desconocido")
+                
+                # 🔄 MEJORA: Obtener tiempo de procesamiento aunque haya fallado
+                additional_info = file_data.get("additional_info", {})
+                file_processing_time = additional_info.get("processing_time_seconds", 0)
+                upload_time_seconds += file_processing_time  # Sumar también tiempo de archivos fallidos
+                
+                # Verificar si es un conflicto (ejemplo: duplicate key, constraint violation)
+                if any(keyword in error_message.lower() for keyword in ['duplicate', 'constraint', 'conflict', 'unique']):
+                    conflicts += 1
+                    status = '⚠️ Conflicto'
+                else:
+                    status = '❌ Error'
+                
+                files_data.append({
+                    'filename': os.path.basename(file_path),
+                    'status': status,
+                    'records': '0',
+                    'table': 'mediciones_planas',
+                    'time': f"{file_processing_time:.1f}s" if file_processing_time > 0 else '0.0s',
+                    'message': error_message[:100] + '...' if len(error_message) > 100 else error_message
+                })
+            
+            # 🔄 MEJORA: Obtener tiempo total real del batch si está disponible
+            batch_time = self.registry.get_batch_processing_time()
+            if batch_time and batch_time > 0:
+                upload_time_seconds = batch_time  # Usar tiempo total real del batch
+            
+            # Calcular tasa de éxito
+            success_rate = (uploaded_files / total_files * 100) if total_files > 0 else 0
+            
+            # 🔄 MEJORA: Formatear tiempo total con precisión
+            minutes = int(upload_time_seconds // 60)
+            seconds = int(upload_time_seconds % 60)
+            milliseconds = int((upload_time_seconds % 1) * 1000)
+            upload_time_str = f"{minutes}:{seconds:02d}"
+            if milliseconds > 0:
+                upload_time_str += f".{milliseconds:03d}"
+            
+            # Formatear tamaño total de datos
+            if total_file_size > 1024 * 1024:  # MB
+                data_size_str = f"{total_file_size / (1024 * 1024):.1f} MB"
+            elif total_file_size > 1024:  # KB
+                data_size_str = f"{total_file_size / 1024:.1f} KB"
+            else:
+                data_size_str = f"{total_file_size} bytes"
+            
+            # Determinar estado de conexión
+            connection_status = "Estable"
+            try:
+                if self.db_connection and self.db_connection.get_connection():
+                    connection_status = "Estable"
+                else:
+                    connection_status = "Desconectado"
+            except:
+                connection_status = "Error"
+            
+            # Construir resumen estructurado
+            summary_data = {
+                'total_files': total_files,
+                'uploaded_files': uploaded_files,
+                'failed_uploads': failed_uploads,
+                'conflicts': conflicts,
+                'inserted_records': inserted_records,  # 🔄 MEJORA: Registros totales reales
+                'success_rate': success_rate,
+                'upload_time': upload_time_str,
+                'processing_time_seconds': upload_time_seconds,  # 🔄 MEJORA: Tiempo total real
+                'data_size': data_size_str,
+                'updated_indexes': 4,  # Valor estático por ahora
+                'connection_status': connection_status,
+                'files': files_data  # 🔄 MEJORA: Incluye tiempo por archivo
+            }
+            
+            logger.info(f"📊 Resumen BD generado: {uploaded_files}/{total_files} archivos, {inserted_records} registros, {upload_time_str} tiempo total")
+            return summary_data
+            
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen BD: {e}")
+            # Retornar estructura básica en caso de error
+            return {
+                'total_files': 0,
+                'uploaded_files': 0,
+                'failed_uploads': 0,
+                'conflicts': 0,
+                'inserted_records': 0,
+                'success_rate': 0,
+                'upload_time': '0:00',
+                'processing_time_seconds': 0,
+                'data_size': '0 bytes',
+                'updated_indexes': 0,
+                'connection_status': 'Error',
+                'files': []
+            }
+
+    def get_csv_summary_for_gui(self):
+        """
+        Genera un resumen estructurado para CSV/extracción GUI
+        
+        Returns:
+            dict: Resumen estructurado con métricas de extracción CSV
+        """
+        try:
+            stats = self.registry.get_processing_stats()
+            
+            # Obtener archivos procesados
+            successful_files = self.registry.get_files_by_status(ProcessingStatus.SUCCESS)
+            error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
+            
+            # Calcular métricas CSV
+            total_extracted = len(successful_files)
+            total_errors = len(error_files)
+            
+            # Calcular tamaño total
+            total_size = 0
+            for file_path in successful_files:
+                try:
+                    if os.path.exists(file_path):
+                        total_size += os.path.getsize(file_path)
+                except:
+                    pass
+            
+            # Formatear tamaño
+            if total_size > 1024 * 1024:  # MB
+                size_str = f"{total_size / (1024 * 1024):.1f} MB"
+            elif total_size > 1024:  # KB
+                size_str = f"{total_size / 1024:.1f} KB"
+            else:
+                size_str = f"{total_size} bytes"
+            
+            # Calcular tasa de éxito
+            total_files = stats['total_files']
+            success_rate = (total_extracted / total_files * 100) if total_files > 0 else 0
+            
+            return {
+                'total_files': total_files,
+                'extracted_files': total_extracted,
+                'failed_extractions': total_errors,
+                'duplicates': 0,  # Valor por defecto
+                'extraction_time': '0:00',  # Valor por defecto
+                'success_rate': success_rate,
+                'data_size': size_str,
+                'source_app': 'Sonel Analysis'
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen CSV: {e}")
+            return {
+                'total_files': 0,
+                'extracted_files': 0,
+                'failed_extractions': 0,
+                'duplicates': 0,
+                'extraction_time': '0:00',
+                'success_rate': 0,
+                'data_size': '0 bytes',
+                'source_app': 'Sonel Analysis'
+            }
+
+    def get_complete_summary_for_gui(self):
+        """
+        Genera un resumen completo combinando CSV y BD
+        
+        Returns:
+            dict: Resumen completo del flujo
+        """
+        try:
+            db_summary = self.get_db_summary_for_gui()
+            csv_summary = self.get_csv_summary_for_gui()
+            
+            # 🔄 MEJORA: Usar el tiempo real calculado desde el registro
+            total_time_seconds = db_summary.get('processing_time_seconds', 0)
+            
+            # 🔄 MEJORA: Formatear tiempo con mayor precisión
+            minutes = int(total_time_seconds // 60)
+            seconds = int(total_time_seconds % 60)
+            milliseconds = int((total_time_seconds % 1) * 1000)
+            total_time_str = f"{minutes}:{seconds:02d}"
+            if milliseconds > 0:
+                total_time_str += f".{milliseconds:03d}"
+            
+            # Determinar estado general
+            if db_summary['failed_uploads'] == 0 and csv_summary['failed_extractions'] == 0:
+                overall_status = "✅ Completado"
+            elif db_summary['uploaded_files'] > 0 or csv_summary['extracted_files'] > 0:
+                overall_status = "⚠️ Parcial"
+            else:
+                overall_status = "❌ Fallido"
+            
+            # 🔄 MEJORA: Retornar resumen completo con datos precisos
+            return {
+                'overall_status': overall_status,
+                'total_files': db_summary['total_files'],
+                'csv_extracted': csv_summary['extracted_files'],
+                'db_uploaded': db_summary['uploaded_files'],
+                'total_errors': db_summary['failed_uploads'] + csv_summary['failed_extractions'],
+                'total_time': total_time_str,  # 🔄 MEJORA: Tiempo total real formateado
+                'success_rate': db_summary['success_rate'],
+                'data_processed': db_summary['inserted_records'],  # 🔄 MEJORA: Registros totales reales
+                'connection_status': db_summary['connection_status'],
+                'files': db_summary['files'],  # 🔄 MEJORA: Detalle por archivo con tiempos
+                'data_size': db_summary['data_size'],
+                'source_app': csv_summary['source_app'],
+                'processing_time_seconds': total_time_seconds  # 🔄 MEJORA: Tiempo en segundos para cálculos
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error generando resumen completo: {e}")
+            return {
+                'overall_status': '❌ Error',
+                'total_files': 0,
+                'csv_extracted': 0,
+                'db_uploaded': 0,
+                'total_errors': 1,
+                'total_time': '0:00',
+                'success_rate': 0,
+                'data_processed': 0,  # 🔄 MEJORA: Clave correcta
+                'connection_status': 'Error',
+                'files': [],
+                'data_size': '0 bytes',
+                'source_app': 'Sonel Analysis',
+                'processing_time_seconds': 0
+            }
+    
+
+    def save_processing_summary_to_file(self, output_file=None, include_files_detail=True):
+        """
+        Guarda un resumen completo del procesamiento ETL en un archivo JSON
+        
+        Args:
+            output_file: Ruta del archivo de salida. Si es None, usa un nombre por defecto
+            include_files_detail: Si True, incluye el detalle de cada archivo procesado
+            
+        Returns:
+            str: Ruta del archivo generado o None si hay error
+        """
+        try:
+            # Definir archivo de salida por defecto
+            if output_file is None:
+                data_dir = self.config['PATHS']['data_dir']
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                output_file = os.path.join(data_dir, f"resumen_etl.json")
+            
+            # Obtener resumen completo
+            complete_summary = self.get_complete_summary_for_gui()
+            db_summary = self.get_db_summary_for_gui()
+            csv_summary = self.get_csv_summary_for_gui()
+            
+            # Obtener estadísticas del registro
+            stats = self.registry.get_processing_stats()
+            
+            # Crear estructura de datos completa para guardar
+            summary_data = {
+                "metadata": {
+                    "generated_at": datetime.now().isoformat() + 'Z',
+                    "etl_version": "1.0",
+                    "config_file": getattr(self, 'config_file', 'config.ini'),
+                    "registry_file": self.registry_file
+                },
+                "overall_summary": complete_summary,
+                "database_summary": {
+                    "total_files": db_summary['total_files'],
+                    "uploaded_files": db_summary['uploaded_files'],
+                    "failed_uploads": db_summary['failed_uploads'],
+                    "conflicts": db_summary['conflicts'],
+                    "inserted_records": db_summary['inserted_records'],
+                    "success_rate": db_summary['success_rate'],
+                    "upload_time": db_summary['upload_time'],
+                    "processing_time_seconds": db_summary['processing_time_seconds'],
+                    "data_size": db_summary['data_size'],
+                    "connection_status": db_summary['connection_status']
+                },
+                "csv_summary": csv_summary,
+                "processing_statistics": stats,
+                "files_processed": []
+            }
+            
+            # Agregar detalle de archivos si se solicita
+            if include_files_detail and 'files' in db_summary:
+                summary_data["files_processed"] = db_summary['files']
+            
+            # Agregar información adicional del registro
+            successful_files = self.registry.get_files_by_status(ProcessingStatus.SUCCESS)
+            error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
+            
+            # Agregar archivos exitosos con más detalles
+            summary_data["successful_files_detail"] = []
+            for file_path in successful_files:
+                file_data = self.registry.registry_data["files"][file_path]
+                additional_info = file_data.get("additional_info", {})
+                
+                file_detail = {
+                    "filename": os.path.basename(file_path),
+                    "full_path": file_path,
+                    "client_code": additional_info.get("client_code", "N/A"),
+                    "rows_processed": additional_info.get("rows_processed", 0),
+                    "processing_time_seconds": additional_info.get("processing_time_seconds", 0),
+                    "file_size_bytes": additional_info.get("file_size_bytes", 0),
+                    "processed_at": file_data.get("processed_at", "N/A"),
+                    "status": "SUCCESS"
+                }
+                summary_data["successful_files_detail"].append(file_detail)
+            
+            # Agregar archivos con errores con más detalles
+            summary_data["error_files_detail"] = []
+            for file_path in error_files:
+                file_data = self.registry.registry_data["files"][file_path]
+                additional_info = file_data.get("additional_info", {})
+                
+                file_detail = {
+                    "filename": os.path.basename(file_path),
+                    "full_path": file_path,
+                    "error_message": file_data.get("error_message", "Error desconocido"),
+                    "processing_time_seconds": additional_info.get("processing_time_seconds", 0),
+                    "file_size_bytes": additional_info.get("file_size_bytes", 0),
+                    "processed_at": file_data.get("processed_at", "N/A"),
+                    "status": "ERROR"
+                }
+                summary_data["error_files_detail"].append(file_detail)
+            
+            # Agregar tiempo total del batch si está disponible
+            batch_time = self.registry.get_batch_processing_time()
+            if batch_time:
+                summary_data["batch_processing"] = {
+                    "total_time_seconds": batch_time,
+                    "batch_start": self.registry.registry_data.get("batch_start_time", "N/A"),
+                    "batch_end": self.registry.registry_data.get("batch_end_time", "N/A")
+                }
+            
+            # Crear directorio si no existe
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
+            # Guardar archivo JSON con formato legible
+            import json
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(summary_data, f, indent=2, ensure_ascii=False)
+            
+            logger.info(f"💾 Resumen ETL guardado en: {output_file}")
+            logger.info(f"📁 Tamaño del archivo: {os.path.getsize(output_file)} bytes")
+            
+            return output_file
+            
+        except Exception as e:
+            logger.error(f"❌ Error guardando resumen ETL: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return None
