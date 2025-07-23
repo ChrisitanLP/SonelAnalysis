@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout
-from components.panels.global_panel import ExecutionSummaryPanel
+from gui.components.panels.global_panel import ExecutionSummaryPanel
 
 class StatusPanel(QWidget):
     def __init__(self, parent=None):
