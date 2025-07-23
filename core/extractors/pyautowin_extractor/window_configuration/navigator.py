@@ -3,6 +3,7 @@ import json
 import time
 import logging
 import pyautogui
+from datetime import datetime
 from config.logger import get_logger
 from core.utils.text_normalize import TextUtils
 from core.utils.wait_handler import WaitHandler
@@ -14,7 +15,6 @@ class SonelNavigator:
     
     def __init__(self, ventana_configuracion):
         self.ventana_configuracion = ventana_configuracion
-
         self.wait_handler = WaitHandler()
         
         # Configurar logger
@@ -23,6 +23,12 @@ class SonelNavigator:
         self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
 
         self.save_file = ComponentesGuardado(logger=self.logger)
+        
+        # Definir componentes requeridos
+        self.componentes_requeridos = {
+            "RadioButton": ["User"],
+            "CheckBox": ["AVG", "MIN", "MAX"]
+        }
 
     def extraer_navegacion_lateral(self):
         """Extrae y activa elementos de navegación lateral (Mediciones)"""
@@ -119,7 +125,7 @@ class SonelNavigator:
             # Intentar usar coordenadas guardadas
             if self.seleccionar_radiobutton_usuario_por_coordenadas():
                 self.logger.info("✅ Selección del radiobutton 'Usuario' realizada por coordenadas.")
-                return  # Ya está hecho. No es necesario retornar nada
+                return [], {}
 
             # Si no existen coordenadas guardadas, hacer el proceso completo
             user_translations = get_all_possible_translations('ui_controls', 'user')
@@ -141,7 +147,11 @@ class SonelNavigator:
                             self.logger.info(f"✅ RadioButton '{texto}' seleccionado")
                         else:
                             self.logger.info(f"ℹ️ RadioButton '{texto}' ya estaba seleccionado")
+                        
+                        # Guardar coordenada del componente encontrado
+                        self.save_file.guardar_coordenada_componente(radio, "RadioButton", "User")
                         elementos_configurados[f"RadioButton_{texto}"] = "Seleccionado"
+                        
                     except Exception as e:
                         self.logger.error(f"❌ Error seleccionando '{texto}': {e}")
 
@@ -156,21 +166,47 @@ class SonelNavigator:
         try:
             self.logger.info("☑️ Configurando checkboxes de filtros...")
 
+            # Verificar si ya existe el archivo de configuración
+            if os.path.exists("componentes_configuracion.json"):
+                self.logger.info("📁 Información de componentes ya existe en 'componentes_configuracion.json'")
+                
+                # Verificar si tenemos coordenadas para los checkboxes necesarios
+                checkboxes_pendientes = []
+                for checkbox_id in self.componentes_requeridos["CheckBox"]:
+                    if not self.save_file.obtener_coordenada_componente("CheckBox", checkbox_id):
+                        checkboxes_pendientes.append(checkbox_id)
+                
+                # Si tenemos todas las coordenadas, usar coordenadas
+                if not checkboxes_pendientes:
+                    self.logger.info("📍 Usando coordenadas guardadas para checkboxes")
+                    for checkbox_id in self.componentes_requeridos["CheckBox"]:
+                        self.seleccionar_checkbox_por_coordenadas(checkbox_id)
+                    return [], {}
+
             checkboxes = self.ventana_configuracion.descendants(control_type="CheckBox")
-            self.checkboxes_cache = checkboxes  # Guardar para uso posterior (opcional)
             elementos_configurados = {}
+            checkboxes_encontrados = {}
 
             for checkbox in checkboxes:
                 texto = checkbox.window_text().strip()
                 debe_estar_activo = None
+                checkbox_id = None
 
+                # Identificar el checkbox y determinar si debe estar activo
                 for config_text, estado_deseado in CHECKBOXES_CONFIG.items():
                     if (config_text.lower() in texto.lower() or
                             TextUtils.normalizar_texto(config_text) == TextUtils.normalizar_texto(texto)):
                         debe_estar_activo = estado_deseado
+                        # Mapear a nuestros IDs estándar
+                        if "avg" in config_text.lower() or "prom" in config_text.lower():
+                            checkbox_id = "AVG"
+                        elif "min" in config_text.lower():
+                            checkbox_id = "MIN"
+                        elif "max" in config_text.lower():
+                            checkbox_id = "MAX"
                         break
 
-                if debe_estar_activo is not None:
+                if debe_estar_activo is not None and checkbox_id:
                     try:
                         estado_actual = checkbox.get_toggle_state()
 
@@ -181,7 +217,11 @@ class SonelNavigator:
                             checkbox.toggle()
                             self.logger.info(f"🚫 Desactivando '{texto}'")
 
+                        # Guardar coordenada del checkbox encontrado
+                        self.save_file.guardar_coordenada_componente(checkbox, "CheckBox", checkbox_id)
+                        checkboxes_encontrados[checkbox_id] = checkbox
                         elementos_configurados[f"CheckBox_{texto}"] = "Configurado"
+                        
                     except Exception as e:
                         self.logger.error(f"❌ Error configurando '{texto}': {e}")
 
@@ -262,36 +302,42 @@ class SonelNavigator:
             return False
         
     def configurar_radiobutton(self):
-        """Ejecuta configuración completa de filtros: radio y checkboxes"""
+        """Ejecuta configuración completa de radiobutton Usuario"""
         try:
-            self.logger.info("⚙️ Configurando filtros de datos...")
+            self.logger.info("⚙️ Configurando radiobutton Usuario...")
 
             radios_resultado = self.configurar_radiobutton_usuario()
             radios = radios_resultado[0] if isinstance(radios_resultado, tuple) else []
-            self.save_file.guardar_radiobuttons(radios)
+            
+            # Solo guardar si se encontraron radiobuttons (búsqueda manual)
+            if radios:
+                self.save_file.guardar_radiobuttons(radios)
 
             return True
         
         except Exception as e:
-            self.logger.error(f"❌ Error configurando filtros: {e}")
+            self.logger.error(f"❌ Error configurando radiobutton: {e}")
             return False
 
     def configurar_checkboxes(self):
-        """Ejecuta configuración completa de filtros: radio y checkboxes"""
+        """Ejecuta configuración completa de checkboxes"""
         try:
-            self.logger.info("⚙️ Configurando filtros de datos...")
+            self.logger.info("⚙️ Configurando checkboxes...")
 
             checks, elementos_check = self.configurar_checkboxes_filtros()
-            self.save_file.guardar_checkboxes(checks)
+            
+            # Solo guardar si se encontraron checkboxes (búsqueda manual)
+            if checks:
+                self.save_file.guardar_checkboxes(checks)
+            
             total_config = elementos_check.copy()
-            self.logger.info(f"📊 Filtros: {len(total_config)} elementos configurados")
+            self.logger.info(f"📊 Checkboxes: {len(total_config)} elementos configurados")
 
             return True
         
         except Exception as e:
-            self.logger.error(f"❌ Error configurando filtros: {e}")
+            self.logger.error(f"❌ Error configurando checkboxes: {e}")
             return False
-
 
     def _log_control_details(self, control, index, tipo_esperado=""):
         """Registra detalles del control"""
@@ -318,3 +364,42 @@ class SonelNavigator:
         except Exception as e:
             self.logger.error(f"Error registrando control: {e}")
             return None
+        
+
+    def seleccionar_radiobutton_usuario_por_coordenadas(self):
+        """Selecciona el radiobutton Usuario usando coordenadas guardadas"""
+        try:
+            coordenada = self.save_file.obtener_coordenada_componente("RadioButton", "User")
+            if not coordenada:
+                self.logger.info("📍 No hay coordenadas guardadas para RadioButton User")
+                return False
+            
+            # Usar las coordenadas para hacer clic
+            pyautogui.click(coordenada["x"], coordenada["y"])
+            time.sleep(0.5)
+            
+            self.logger.info(f"✅ RadioButton 'User' seleccionado por coordenadas ({coordenada['x']}, {coordenada['y']})")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error seleccionando RadioButton por coordenadas: {e}")
+            return False
+
+    def seleccionar_checkbox_por_coordenadas(self, identificador):
+        """Selecciona un checkbox específico usando coordenadas guardadas"""
+        try:
+            coordenada = self.save_file.obtener_coordenada_componente("CheckBox", identificador)
+            if not coordenada:
+                self.logger.info(f"📍 No hay coordenadas guardadas para CheckBox {identificador}")
+                return False
+            
+            # Usar las coordenadas para hacer clic
+            pyautogui.click(coordenada["x"], coordenada["y"])
+            time.sleep(0.5)
+            
+            self.logger.info(f"✅ CheckBox '{identificador}' procesado por coordenadas ({coordenada['x']}, {coordenada['y']})")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error procesando CheckBox {identificador} por coordenadas: {e}")
+            return False
