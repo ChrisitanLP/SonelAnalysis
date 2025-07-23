@@ -1,4 +1,4 @@
-# sonel_extractor/utils/processing_registry.py
+# core/utils/processing_registry.py
 import os
 import json
 import hashlib
@@ -193,19 +193,25 @@ class ProcessingRegistry:
                 "error_message": None
             })
             
+            # 🔄 MEJORA: Guardar additional_info de manera estructurada
             if additional_info:
-                self.registry_data["files"][file_key].update(additional_info)
+                self.registry_data["files"][file_key]["additional_info"] = additional_info
             
             self._save_registry()
-            logger.info(f"✅ Procesamiento exitoso registrado: {os.path.basename(file_path)}")
-    
-    def register_processing_error(self, file_path: str, error_message: str):
+            
+            # 🔄 MEJORA: Log mejorado con información de tiempo y registros
+            rows = additional_info.get("rows_processed", 0) if additional_info else 0
+            time_taken = additional_info.get("processing_time_seconds", 0) if additional_info else 0
+            logger.info(f"✅ Procesamiento exitoso registrado: {os.path.basename(file_path)} | {rows} registros | {time_taken:.2f}s")
+
+    def register_processing_error(self, file_path: str, error_message: str, additional_info: Dict = None):
         """
         Registra un error en el procesamiento de un archivo
         
         Args:
             file_path: Ruta al archivo
             error_message: Mensaje de error
+            additional_info: Información adicional del procesamiento (opcional)
         """
         file_key = os.path.abspath(file_path)
         
@@ -216,9 +222,17 @@ class ProcessingRegistry:
                 "error_message": error_message
             })
             
+            # 🔄 MEJORA: Guardar additional_info incluso en caso de error
+            if additional_info:
+                self.registry_data["files"][file_key]["additional_info"] = additional_info
+            
             self._save_registry()
-            logger.error(f"❌ Error de procesamiento registrado: {os.path.basename(file_path)} - {error_message}")
-    
+            
+            # 🔄 MEJORA: Log con información de tiempo si está disponible
+            time_taken = additional_info.get("processing_time_seconds", 0) if additional_info else 0
+            time_info = f" | {time_taken:.2f}s" if time_taken > 0 else ""
+            logger.error(f"❌ Error de procesamiento registrado: {os.path.basename(file_path)}{time_info} - {error_message}")
+
     def register_processing_skipped(self, file_path: str, reason: str):
         """
         Registra que un archivo fue omitido
@@ -326,3 +340,41 @@ class ProcessingRegistry:
             
             if len(error_files) > 5:
                 logger.info(f"  ... y {len(error_files) - 5} archivos más con errores")
+
+    def register_batch_processing_time(self, total_time_seconds: float, start_time: datetime, end_time: datetime):
+        """
+        Registra el tiempo total de procesamiento del batch
+        
+        Args:
+            total_time_seconds: Tiempo total en segundos
+            start_time: Tiempo de inicio del batch
+            end_time: Tiempo de finalización del batch
+        """
+        self.registry_data["batch_processing"] = {
+            "total_time_seconds": total_time_seconds,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "recorded_at": datetime.now().isoformat()
+        }
+        
+        self._save_registry()
+        logger.info(f"⏱️ Tiempo total de batch registrado: {total_time_seconds:.2f} segundos")
+
+    def get_batch_processing_time(self) -> float:
+        """
+        Obtiene el tiempo total de procesamiento del batch
+        
+        Returns:
+            float: Tiempo total en segundos, o 0 si no está disponible
+        """
+        batch_data = self.registry_data.get("batch_processing", {})
+        return batch_data.get("total_time_seconds", 0)
+
+    def get_batch_processing_info(self) -> Dict:
+        """
+        Obtiene información completa del procesamiento del batch
+        
+        Returns:
+            dict: Información del batch o diccionario vacío si no está disponible
+        """
+        return self.registry_data.get("batch_processing", {})
