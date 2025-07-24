@@ -13,6 +13,7 @@ class ProcessingStatus(Enum):
     SUCCESS = "exitoso"
     ERROR = "con_errores"
     SKIPPED = "omitido"
+    PROCESSING = "processing"
 
 class ProcessingRegistry:
     """Gestor del registro de archivos procesados"""
