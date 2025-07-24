@@ -148,13 +148,13 @@ class SonelDataExtractorGUI(QMainWindow):
             UIHelpers.warn_select_folder(self)
             return
         
-        self.control_panel.start_progress("🚀 Iniciando generación de CSV...")
+        self.control_panel.start_progress("Iniciando generación de CSV...")
         
         # Actualizar el directorio de entrada del controlador
         self.controller.rutas["input_directory"] = self.selected_folder
         
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚀 Iniciando generación de CSV...")
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📊 Procesando archivos en: {self.selected_folder}")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Iniciando generación de CSV...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Procesando archivos en: {self.selected_folder}")
         
         # Ejecutar extracción usando el controlador
         try:
@@ -201,10 +201,10 @@ class SonelDataExtractorGUI(QMainWindow):
     def upload_to_db(self):
         """Subir archivos a base de datos usando el controlador"""
         
-        self.control_panel.start_progress("🗄️ Iniciando subida a base de datos...")
+        self.control_panel.start_progress("Iniciando subida a base de datos...")
 
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🗄️ Iniciando subida a base de datos...")
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔗 Conectando con PostgreSQL...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Iniciando subida a base de datos...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Conectando con PostgreSQL...")
         
         try:
             # Ejecutar procesamiento ETL usando el controlador
@@ -260,13 +260,13 @@ class SonelDataExtractorGUI(QMainWindow):
             UIHelpers.warn_select_folder(self)
             return
         
-        self.control_panel.start_progress("⚡ Iniciando proceso completo...")
+        self.control_panel.start_progress("Iniciando proceso completo...")
         
         # Actualizar el directorio de entrada del controlador
         self.controller.rutas["input_directory"] = self.selected_folder
         
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚡ Iniciando proceso completo...")
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📁 Escaneando archivos...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Iniciando proceso completo...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Escaneando archivos...")
         
         # Simular animación de progreso
         self.animate_progress()
