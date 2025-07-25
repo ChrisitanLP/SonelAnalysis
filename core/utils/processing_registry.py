@@ -252,6 +252,25 @@ class ProcessingRegistry:
         
         logger.info(f"⏭️ Archivo omitido: {os.path.basename(file_path)} - {reason}")
     
+    def is_file_registered_with_status(self, file_path: str, status: ProcessingStatus) -> bool:
+        """
+        Verifica si un archivo está registrado con un estado específico
+        
+        Args:
+            file_path: Ruta al archivo
+            status: Estado a verificar
+            
+        Returns:
+            bool: True si el archivo está registrado con ese estado
+        """
+        file_key = os.path.abspath(file_path)
+        
+        if file_key not in self.registry_data.get("files", {}):
+            return False
+        
+        file_data = self.registry_data["files"][file_key]
+        return file_data.get("status") == status.value
+
     def get_processing_stats(self) -> Dict:
         """
         Obtiene estadísticas del procesamiento
