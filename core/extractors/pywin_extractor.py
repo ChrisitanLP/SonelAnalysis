@@ -8,7 +8,7 @@ from pathlib import Path
 from datetime import datetime
 from config.logger import get_logger
 from core.utils.csv_summary import CSVSummaryUtils
-from config.settings import get_full_config, create_directories, PATHS
+from config.settings import get_full_config, create_directories, load_config, PATHS
 
 # Imports de los nuevos módulos
 from core.extractors.pyautowin_extractor.w_analysis import SonelAnalisisInicial
@@ -26,6 +26,8 @@ class SonelExtractorCompleto:
     def __init__(self, input_dir=None, output_dir=None, ruta_exe=None):
         # Configuración de rutas
         config = get_full_config()
+        config_file = 'config.ini'
+        self.config = load_config(config_file)
 
         # Configuración de paths por defecto
         self.PATHS = {
@@ -347,6 +349,10 @@ class SonelExtractorCompleto:
             csv_summary = self.get_csv_summary_for_gui()
             resultados_globales["csv_summary"] = csv_summary
 
+            output_file = self.save_csv_summary_to_file()
+            if output_file:
+                print(f"Resumen guardado en: {output_file}")
+
             return resultados_globales
             
         except Exception as e:
@@ -529,3 +535,61 @@ class SonelExtractorCompleto:
             "size_bytes": file_size_bytes,
             "execution_time_seconds": execution_time_seconds
         }
+    
+    def save_csv_summary_to_file(self, output_file=None, include_files_detail=True):
+        """
+        Guarda un resumen del procesamiento CSV en un archivo JSON.
+        Se apoya en get_csv_summary_for_gui para obtener los datos.
+        """
+        try:
+            # Definir archivo de salida por defecto
+            if output_file is None:
+                data_dir = self.config['PATHS']['data_dir']
+                output_file = os.path.join(data_dir, "resumen_csv.json")
+
+            # Obtener resumen de CSV
+            csv_summary = self.get_csv_summary_for_gui()
+
+            # Construir estructura de salida
+            summary_data = {
+                "metadata": {
+                    "generated_at": datetime.now().isoformat() + 'Z',
+                    "etl_version": "1.0",
+                    "config_file": getattr(self, 'config_file', 'config.ini')
+                },
+                "csv_summary": {
+                    "processed_files": csv_summary.get("processed_files"),
+                    "total_files": csv_summary.get("total_files"),
+                    "errors": csv_summary.get("errors"),
+                    "warnings": csv_summary.get("warnings"),
+                    "csv_files_generated": csv_summary.get("csv_files_generated"),
+                    "execution_time": csv_summary.get("execution_time"),
+                    "avg_speed": csv_summary.get("avg_speed"),
+                    "total_size": csv_summary.get("total_size"),
+                    "success_rate": csv_summary.get("success_rate"),
+                    "total_records": csv_summary.get("total_records")
+                },
+                "files_processed": []
+            }
+
+            # Incluir detalle de archivos si se solicita
+            if include_files_detail:
+                summary_data["files_processed"] = csv_summary.get("files", [])
+
+            # Crear directorio si no existe
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
+            # Guardar archivo JSON
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(summary_data, f, indent=2, ensure_ascii=False)
+
+            self.pywinauto_logger.info(f"Resumen CSV guardado en: {output_file}")
+            self.pywinauto_logger.info(f"Tamaño del archivo: {os.path.getsize(output_file)} bytes")
+
+            return output_file
+
+        except Exception as e:
+            self.pywinauto_logger.error(f"Error guardando resumen CSV: {e}")
+            import traceback
+            self.pywinauto_logger.error(traceback.format_exc())
+            return None
