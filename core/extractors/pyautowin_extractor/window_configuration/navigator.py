@@ -27,7 +27,7 @@ class SonelNavigator:
         # Definir componentes requeridos
         self.componentes_requeridos = {
             "RadioButton": ["User"],
-            "CheckBox": ["AVG", "MIN", "MAX"]
+            "CheckBox": ["AVG", "MIN", "MAX", "INSTANT"]
         }
 
     def extraer_navegacion_lateral(self):
@@ -204,6 +204,8 @@ class SonelNavigator:
                             checkbox_id = "MIN"
                         elif "max" in config_text.lower():
                             checkbox_id = "MAX"
+                        elif "instant" in config_text.lower():
+                            checkbox_id = "INSTANT"
                         break
 
                 if debe_estar_activo is not None and checkbox_id:
