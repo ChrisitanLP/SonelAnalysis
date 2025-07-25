@@ -23,15 +23,19 @@ class DataExtractor:
         Returns:
             DataFrame con los datos extraídos o None si hay error
         """
-        if method == 'file':
-            extractor = FileExtractor(self.config, self.registry_file)
-            if force_reprocess:
-                return extractor.extract_all_files(force_reprocess=True)
-            else:
+        try:
+            if method == 'file':
+                extractor = FileExtractor(self.config, self.registry_file)
+                if force_reprocess:
+                    return extractor.extract_all_files(force_reprocess=True)
+                else:
+                    return extractor.extract()
+            elif method == 'gui':
+                extractor = GUIExtractor(self.config)
                 return extractor.extract()
-        elif method == 'gui':
-            extractor = GUIExtractor(self.config)
-            return extractor.extract()
-        else:
-            logger.error(f"Método de extracción no válido: {method}")
+            else:
+                logger.error(f"Método de extracción no válido: {method}")
+                return None
+        except Exception as e:
+            logger.exception(f"Error durante la extracción de datos con el método '{method}': {e}")
             return None
