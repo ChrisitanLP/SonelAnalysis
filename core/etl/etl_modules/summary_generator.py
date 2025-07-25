@@ -221,7 +221,7 @@ class SummaryGenerator:
                 'total_files': db_summary['total_files'],
                 'csv_extracted': csv_summary['extracted_files'],
                 'db_uploaded': db_summary['uploaded_files'],
-                'total_errors': db_summary['failed_uploads'] + csv_summary['failed_extractions'],
+                'total_errors': db_summary['failed_uploads'],
                 'total_time': total_time_str,
                 'success_rate': db_summary['success_rate'],
                 'data_processed': db_summary['inserted_records'],
@@ -250,6 +250,9 @@ class SummaryGenerator:
             csv_summary = self.get_csv_summary_for_gui()
             stats = self.registry.get_processing_stats()
             
+            # NUEVA LÓGICA: Obtener archivos fallidos
+            error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
+            
             # Crear estructura de datos completa
             summary_data = {
                 "metadata": {
@@ -262,7 +265,10 @@ class SummaryGenerator:
                 "database_summary": self._extract_db_summary_data(db_summary),
                 "csv_summary": csv_summary,
                 "processing_statistics": stats,
-                "files_processed": []
+                "files_processed": [],
+                # NUEVOS CAMPOS:
+                "failed_files_count": len(error_files),
+                "failed_files_list": [os.path.basename(f) for f in error_files]
             }
             
             # Agregar detalle de archivos si se solicita
@@ -414,6 +420,13 @@ class SummaryGenerator:
                 "status": "ERROR"
             }
             summary_data["error_files_detail"].append(file_detail)
+        
+        # Agregar resumen de conteos
+        summary_data["processing_summary"] = {
+            "total_successful": len(successful_files),
+            "total_errors": len(error_files),
+            "total_processed": len(successful_files) + len(error_files)
+        }
     
     def _add_batch_info(self, summary_data):
         """Agrega información del batch al resumen"""

@@ -75,24 +75,34 @@ class DbTab(QWidget):
         
     def setup_db_table(self, table):
         """Configurar tabla de subidas a BD"""
-        headers = ["Archivo", "Estado", "Registros", "Tabla", "Tiempo", "Mensaje"]
+        headers = ["#", "Archivo", "Estado", "Registros", "Tabla", "Tiempo", "Mensaje"]
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.horizontalHeader().setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
         table.setAlternatingRowColors(True)
         table.setSelectionBehavior(QTableWidget.SelectRows)
+
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)     # "#" - mínimo necesario
+        header.setSectionResizeMode(1, QHeaderView.Stretch)              # "Archivo"
+        header.setSectionResizeMode(2, QHeaderView.ResizeToContents)     # "Estado"
+        header.setSectionResizeMode(3, QHeaderView.ResizeToContents)     # "Registros"
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)     # "Tabla"
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)     # "Tiempo"
+        header.setSectionResizeMode(6, QHeaderView.Stretch)     
         
     def populate_db_table(self, table, files_data):
         """Poblar tabla de subidas a BD"""
         table.setRowCount(len(files_data))
         for row, file_data in enumerate(files_data):
-            table.setItem(row, 0, QTableWidgetItem(file_data.get('filename', '')))
-            table.setItem(row, 1, QTableWidgetItem(file_data.get('status', '')))
-            table.setItem(row, 2, QTableWidgetItem(str(file_data.get('records', 0))))
-            table.setItem(row, 3, QTableWidgetItem(file_data.get('table', '')))
-            table.setItem(row, 4, QTableWidgetItem(file_data.get('time', '')))
-            table.setItem(row, 5, QTableWidgetItem(file_data.get('message', '')))
+            table.setItem(row, 0, QTableWidgetItem(str(row + 1))) 
+            table.setItem(row, 1, QTableWidgetItem(file_data.get('filename', '')))
+            table.setItem(row, 2, QTableWidgetItem(file_data.get('status', '')))
+            table.setItem(row, 3, QTableWidgetItem(str(file_data.get('records', 0))))
+            table.setItem(row, 4, QTableWidgetItem(file_data.get('table', '')))
+            table.setItem(row, 5, QTableWidgetItem(file_data.get('time', '')))
+            table.setItem(row, 6, QTableWidgetItem(file_data.get('message', '')))
             
     def update_db_summary(self, summary_data):
         """Actualizar resumen de subida a BD con datos reales del core"""

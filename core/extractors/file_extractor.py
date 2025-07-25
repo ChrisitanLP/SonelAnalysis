@@ -36,15 +36,18 @@ class FileExtractor(BaseExtractor):
             DataFrame con los datos extraídos o None si hay error
         """
         # Intentar encontrar un archivo en el directorio configurado
-        files = self.find_files_to_process()
-        
-        if not files:
-            logger.info(f"ℹ️ No se encontraron archivos nuevos para procesar en {self.data_dir}")
+        try:
+            files = self.find_files_to_process()
+
+            if not files:
+                logger.info(f"ℹ️ No se encontraron archivos nuevos para procesar en {self.data_dir}")
+                return None
+
+            logger.info(f"Procesando archivo por defecto: {files[0]}")
+            return self.extract_from_file(files[0])
+        except Exception as e:
+            logger.exception(f"Error en extract(): {e}")
             return None
-        
-        # Procesamos solo el primer archivo encontrado para compatibilidad hacia atrás
-        logger.info(f"Procesando archivo por defecto: {files[0]}")
-        return self.extract_from_file(files[0])
     
     def extract_from_file(self, file_path):
         """
@@ -102,30 +105,33 @@ class FileExtractor(BaseExtractor):
     def find_files_in_directory(self, directory=None):
         """
         Encuentra archivos en un directorio que coincidan con los patrones soportados
-        
+
         Args:
             directory: Directorio donde buscar (usa el configurado por defecto si es None)
-            
+
         Returns:
             list: Lista de rutas a archivos encontrados
         """
-        if directory is None:
-            directory = self.data_dir
-        
-        if not os.path.exists(directory):
-            logger.error(f"El directorio {directory} no existe")
+        try:
+            if directory is None:
+                directory = self.data_dir
+
+            if not os.path.exists(directory):
+                logger.error(f"El directorio {directory} no existe")
+                return []
+
+            all_files = []
+            for pattern in FILE_SEARCH_PATTERNS:
+                pattern_files = glob.glob(os.path.join(directory, pattern))
+                all_files.extend(pattern_files)
+
+            all_files.sort(key=os.path.getmtime, reverse=True)
+
+            logger.info(f"Encontrados {len(all_files)} archivos en {directory}: {[os.path.basename(f) for f in all_files]}")
+            return all_files
+        except Exception as e:
+            logger.exception(f"Error en find_files_in_directory(): {e}")
             return []
-        
-        all_files = []
-        for pattern in FILE_SEARCH_PATTERNS:
-            pattern_files = glob.glob(os.path.join(directory, pattern))
-            all_files.extend(pattern_files)
-        
-        # Ordenar por fecha de modificación (más reciente primero)
-        all_files.sort(key=os.path.getmtime, reverse=True)
-        
-        logger.info(f"Encontrados {len(all_files)} archivos en {directory}: {[os.path.basename(f) for f in all_files]}")
-        return all_files
     
     def find_files_to_process(self, directory=None):
         """
@@ -137,27 +143,31 @@ class FileExtractor(BaseExtractor):
         Returns:
             list: Lista de rutas a archivos que deben procesarse
         """
-        all_files = self.find_files_in_directory(directory)
-        
-        if not all_files:
+        try:
+            all_files = self.find_files_in_directory(directory)
+
+            if not all_files:
+                return []
+
+            files_to_process = []
+            skipped_count = 0
+
+            for file_path in all_files:
+                should_process, reason = self.registry.should_process_file(file_path)
+
+                if should_process:
+                    files_to_process.append(file_path)
+                    logger.debug(f"📄 Para procesar: {os.path.basename(file_path)} - {reason}")
+                else:
+                    self.registry.register_processing_skipped(file_path, reason)
+                    skipped_count += 1
+                    logger.debug(f"⏭️ Omitido: {os.path.basename(file_path)} - {reason}")
+
+            logger.info(f"📊 Archivos para procesar: {len(files_to_process)}, Omitidos: {skipped_count}")
+            return files_to_process
+        except Exception as e:
+            logger.exception(f"Error en find_files_to_process(): {e}")
             return []
-        
-        files_to_process = []
-        skipped_count = 0
-        
-        for file_path in all_files:
-            should_process, reason = self.registry.should_process_file(file_path)
-            
-            if should_process:
-                files_to_process.append(file_path)
-                logger.debug(f"📄 Para procesar: {os.path.basename(file_path)} - {reason}")
-            else:
-                self.registry.register_processing_skipped(file_path, reason)
-                skipped_count += 1
-                logger.debug(f"⏭️ Omitido: {os.path.basename(file_path)} - {reason}")
-        
-        logger.info(f"📊 Archivos para procesar: {len(files_to_process)}, Omitidos: {skipped_count}")
-        return files_to_process
     
     def extract_all_files(self, directory=None, force_reprocess=False):
         """
@@ -250,17 +260,18 @@ class FileExtractor(BaseExtractor):
             file_path: Ruta al archivo
             new_status: Nuevo estado (opcional, por defecto lo elimina del registro)
         """
-        file_key = os.path.abspath(file_path)
-        
-        if new_status is None:
-            # Eliminar del registro para que se procese como nuevo
-            if file_key in self.registry.registry_data["files"]:
-                del self.registry.registry_data["files"][file_key]
-                self.registry._save_registry()
-                logger.info(f"🔄 Estado reiniciado: {os.path.basename(file_path)}")
-        else:
-            # Cambiar a un estado específico
-            if file_key in self.registry.registry_data["files"]:
-                self.registry.registry_data["files"][file_key]["status"] = new_status
-                self.registry._save_registry()
-                logger.info(f"🔄 Estado cambiado a {new_status}: {os.path.basename(file_path)}")
+        try:
+            file_key = os.path.abspath(file_path)
+
+            if new_status is None:
+                if file_key in self.registry.registry_data["files"]:
+                    del self.registry.registry_data["files"][file_key]
+                    self.registry._save_registry()
+                    logger.info(f"🔄 Estado reiniciado: {os.path.basename(file_path)}")
+            else:
+                if file_key in self.registry.registry_data["files"]:
+                    self.registry.registry_data["files"][file_key]["status"] = new_status
+                    self.registry._save_registry()
+                    logger.info(f"🔄 Estado cambiado a {new_status}: {os.path.basename(file_path)}")
+        except Exception as e:
+            logger.exception(f"Error al reiniciar estado del archivo {file_path}: {e}")
