@@ -1,15 +1,18 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QTextEdit
+import os
+import json
 from PyQt5.QtCore import Qt
+from datetime import datetime
 from gui.components.cards.modern_card import ModernCard
 from gui.components.cards.status_card import StatusCard
-import datetime
-
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QLabel, QTextEdit
 
 class GeneralTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_app = parent
         self.setObjectName("GeneralTab")
+        self.csv_data = self.load_csv_data()
+        self.etl_data = self.load_etl_data()
         self.init_ui()
         
     def init_ui(self):
@@ -17,20 +20,25 @@ class GeneralTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
         
-        # === MÉTRICAS PRINCIPALES (anteriormente en status_panel) ===
+        # === MÉTRICAS PRINCIPALES ===
         metrics_widget = QWidget()
         metrics_layout = QGridLayout(metrics_widget)
         metrics_layout.setSpacing(16)
         
-        # Crear tarjetas de métricas principales
+        # Obtener datos de ambos JSON
+        csv_summary = self.csv_data.get('csv_summary', {})
+        etl_summary = self.etl_data.get('overall_summary', {})
+        db_summary = self.etl_data.get('database_summary', {})
+        
+        # Crear tarjetas de métricas principales con datos reales
         self.general_cards = []
         metrics_data = [
-            ("📁", "Archivos Procesados", "28 / 32", "#4CAF50"),
-            ("⚠️", "Advertencias", "3", "#FF9800"),
-            ("❌", "Errores", "1", "#F44336"),
-            ("🗄️", "Archivos Subidos", "28 / 30", "#4CAF50"),
-            ("📊", "Registros Totales", "18,542", "#9C27B0"),
-            ("💾", "Memoria Máxima", "156 MB", "#607D8B"),
+            ("📁", "Archivos Procesados", f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}", "#4CAF50"),
+            ("⚠️", "Advertencias", str(csv_summary.get('warnings', 0)), "#FF9800"),
+            ("❌", "Errores", str(etl_summary.get('total_errors', 0)), "#F44336"),
+            ("🗄️", "Archivos Subidos", f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}", "#3F51B5"),
+            ("📊", "Registros Totales", f"{db_summary.get('inserted_records', 0):,}", "#9C27B0"),
+            ("💾", "Tamaño Procesado", etl_summary.get('data_size', '0 MB'), "#607D8B"),
         ]
         
         for i, (icon, title, value, color) in enumerate(metrics_data):
@@ -62,26 +70,71 @@ class GeneralTab(QWidget):
         summary_card.layout().addWidget(summary_content)
         layout.addWidget(summary_card)
 
-        # Contenido del resumen ejecutivo con información estática profesional
-        summary_text = f"""
-            <b>Estado General:</b> En progreso (87% completado)<br>
-            <b>Archivos Detectados:</b> 32 archivos .pqm702<br>
-            <b>Procesados Exitosamente:</b> 28 archivos<br>
-            <b>Con Advertencias:</b> 3 archivos (datos fuera de rango)<br>
-            <b>Con Errores:</b> 1 archivo (corrupción de datos)<br><br>
-            <b>Métricas de Datos:</b><br>
-            - Registros de voltaje extraídos: 18,542<br>
-            - Registros de corriente: 18,542<br>
-            - Registros de frecuencia: 18,542<br><br>
-            <b>Performance:</b><br>
-            - Tiempo de procesamiento: 4:12 min<br>
-            - Velocidad promedio: 6.7 archivos/min<br>
-            - Tiempo estimado restante: 2:15 min<br><br>
-            <b>Última Sincronización:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
+        # Generar contenido del resumen ejecutivo con datos reales
+        self.update_summary_content()
         
-        self.summary_label.setText(summary_text)
+    def load_csv_data(self):
+        """Cargar datos del resumen CSV desde el archivo JSON"""
+        json_path = "data/archivos_csv/resumen_csv.json"
         
+        try:
+            if os.path.exists(json_path):
+                with open(json_path, 'r', encoding='utf-8') as file:
+                    return json.load(file)
+            else:
+                print(f"Archivo no encontrado: {json_path}")
+                return self.get_default_csv_data()
+        except Exception as e:
+            print(f"Error al cargar {json_path}: {e}")
+            return self.get_default_csv_data()
+
+    def load_etl_data(self):
+        """Cargar datos del resumen ETL desde el archivo JSON"""
+        json_path = "data/archivos_csv/resumen_etl.json"
+        
+        try:
+            if os.path.exists(json_path):
+                with open(json_path, 'r', encoding='utf-8') as file:
+                    return json.load(file)
+            else:
+                print(f"Archivo no encontrado: {json_path}")
+                return self.get_default_etl_data()
+        except Exception as e:
+            print(f"Error al cargar {json_path}: {e}")
+            return self.get_default_etl_data()
+
+    # 4. Agregar métodos para datos por defecto
+    def get_default_csv_data(self):
+        """Datos por defecto para CSV si no se puede cargar el JSON"""
+        return {
+            "csv_summary": {
+                "processed_files": 0,
+                "total_files": 0,
+                "errors": 0,
+                "warnings": 0,
+                "csv_files_generated": 0,
+                "execution_time": "0:00",
+                "total_records": 0,
+                "total_size": "0 MB"
+            }
+        }
+
+    def get_default_etl_data(self):
+        """Datos por defecto para ETL si no se puede cargar el JSON"""
+        return {
+            "overall_summary": {
+                "total_files": 0,
+                "db_uploaded": 0,
+                "total_errors": 0,
+                "data_processed": 0,
+                "data_size": "0 MB",
+                "connection_status": "Desconectado"
+            },
+            "database_summary": {
+                "inserted_records": 0
+            }
+        }
+    
     def add_log_entry(self, text):
         """Agregar entrada al log de actividad"""
         if hasattr(self, 'log_text'):
@@ -122,3 +175,81 @@ class GeneralTab(QWidget):
         # Actualizar historial
         history_text = summary_data.get('history', 'No hay historial disponible')
         self.general_history_label.setText(history_text)
+
+    def update_summary_content(self):
+        """Actualizar el contenido del resumen ejecutivo con datos reales"""
+        csv_summary = self.csv_data.get('csv_summary', {})
+        etl_summary = self.etl_data.get('overall_summary', {})
+        
+        # Calcular porcentaje de completado
+        total_files = csv_summary.get('total_files', 1)
+        processed_files = csv_summary.get('processed_files', 0)
+        completion_percentage = (processed_files / total_files) * 100 if total_files > 0 else 0
+        
+        # Obtener timestamp de generación
+        metadata = self.etl_data.get('metadata', {})
+        generated_at = metadata.get('generated_at', datetime.now().isoformat())
+        
+        try:
+            # Convertir timestamp ISO a formato legible
+            dt = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+            formatted_time = dt.strftime('%Y-%m-%d %H:%M:%S')
+        except:
+            formatted_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        summary_text = f"""
+            <b>Estado General:</b> {etl_summary.get('overall_status', 'Sin datos')} ({completion_percentage:.1f}% completado)<br>
+            <b>Archivos Detectados:</b> {total_files} archivos .pqm702<br>
+            <b>Procesados Exitosamente:</b> {processed_files} archivos<br>
+            <b>Con Advertencias:</b> {csv_summary.get('warnings', 0)} archivos<br>
+            <b>Con Errores:</b> {etl_summary.get('total_errors', 0)} archivos<br><br>
+            <b>Performance:</b><br>
+            - Tiempo extracción CSV: {csv_summary.get('execution_time', '0:00')}<br>
+            - Tiempo carga BD: {etl_summary.get('total_time', '0:00')}<br>
+            - Velocidad promedio: {csv_summary.get('avg_speed', '0 archivos/min')}<br>
+            - Registros procesados: {etl_summary.get('data_processed', 0):,}<br><br>
+            <b>Base de Datos:</b><br>
+            - Estado conexión: {etl_summary.get('connection_status', 'Desconectado')}<br>
+            - Tamaño procesado: {etl_summary.get('data_size', '0 MB')}<br><br>
+            <b>Última Actualización:</b> {formatted_time}
+        """
+        
+        self.summary_label.setText(summary_text)
+        
+        # Agregar información del historial si hay archivos fallidos
+        failed_files = self.etl_data.get('failed_files_list', [])
+        if failed_files:
+            history_text = f"""
+                <b>Archivos con Problemas ({len(failed_files)}):</b><br>
+                {', '.join(failed_files[:5])}{'...' if len(failed_files) > 5 else ''}
+            """
+            self.general_history_label.setText(history_text)
+        else:
+            self.general_history_label.setText("<b>✅ Todos los archivos procesados exitosamente</b>")
+
+    def refresh_data(self):
+        """Refrescar datos desde ambos archivos JSON"""
+        self.csv_data = self.load_csv_data()
+        self.etl_data = self.load_etl_data()
+        
+        # Actualizar métricas
+        csv_summary = self.csv_data.get('csv_summary', {})
+        etl_summary = self.etl_data.get('overall_summary', {})
+        db_summary = self.etl_data.get('database_summary', {})
+        
+        metrics_values = [
+            f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}",
+            str(csv_summary.get('warnings', 0)),
+            str(etl_summary.get('total_errors', 0)),
+            f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}",
+            f"{db_summary.get('inserted_records', 0):,}",
+            etl_summary.get('data_size', '0 MB')
+        ]
+        
+        # Actualizar cards
+        for i, value in enumerate(metrics_values):
+            if i < len(self.general_cards):
+                self.general_cards[i].update_value(value)
+        
+        # Actualizar resumen
+        self.update_summary_content()
