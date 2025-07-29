@@ -55,7 +55,7 @@ class ControlPanel(QWidget):
         
         self.execute_all_btn = ActionButton("Ejecutar Proceso Completo", "⚡", "primary")
         self.execute_all_btn.setMinimumHeight(52)
-        self.execute_all_btn.clicked.connect(self.parent_app.execute_all)
+        self.execute_all_btn.clicked.connect(self.confirm_complete_process)
         
         actions_layout.addWidget(self.csv_btn)
         actions_layout.addWidget(self.upload_btn)
@@ -238,27 +238,37 @@ class ControlPanel(QWidget):
                 self.update_progress_label(f"Procesando... ({current}/{total}) - {percentage}%")
 
     def confirm_generate_csv(self):
-        """Pide confirmación antes de generar CSV."""
+        """Solicita confirmación antes de generar los archivos CSV."""
         ok = UIHelpers.show_confirmation_dialog(
             self,
-            title="Confirmar generación de CSV",
-            message="¿Seguro que deseas generar los archivos CSV?",
-            details="Esta operación puede sobrescribir archivos existentes."
+            title="Confirmar generación de archivos CSV",
+            message="¿Deseas continuar con la generación de los archivos CSV?",
+            details="Este proceso puede sobrescribir archivos existentes en el directorio de salida."
         )
         if ok:
             self.parent_app.generate_csv()
 
     def confirm_upload_db(self):
-        """Pide confirmación antes de subir a la base de datos."""
+        """Solicita confirmación antes de subir los datos a la base de datos."""
         ok = UIHelpers.show_confirmation_dialog(
             self,
-            title="Confirmar subida a la base de datos",
-            message="¿Seguro que deseas subir los datos a la BD?",
-            details="Asegúrate de que la conexión esté disponible y las tablas preparadas."
+            title="Confirmar carga a base de datos",
+            message="¿Deseas cargar los datos procesados en la base de datos?",
+            details="Verifica que la conexión esté activa y las tablas necesarias se encuentren configuradas."
         )
         if ok:
             self.parent_app.upload_to_db()
 
+    def confirm_complete_process(self):
+        """Solicita confirmación antes de ejecutar el proceso completo."""
+        ok = UIHelpers.show_confirmation_dialog(
+            self,
+            title="Confirmar ejecución completa del proceso",
+            message="¿Deseas ejecutar el proceso completo de extracción, transformación y carga?",
+            details="Esta operación ejecutará todas las etapas del flujo (ETL) en una sola ejecución y actualizará los paneles con los resultados obtenidos."
+        )
+        if ok:
+            self.parent_app.execute_all()
 
     def start_progress(self, initial_message="🔄 Iniciando proceso..."):
         """Iniciar el progreso con un mensaje inicial"""
