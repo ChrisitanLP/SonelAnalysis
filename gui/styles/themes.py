@@ -379,13 +379,12 @@ class ThemeManager:
                     padding: 8px;
                 }
 
-                QTableWidget#FilesTable {
+                QTableWidget, QTableView {
                     background-color: #1e1e1e;
-                    border: 1px solid #404040;
-                    border-radius: 8px;
-                    gridline-color: #404040;
-                    font-size: 11px;
                     color: #ffffff;
+                    border: 1px solid #404040;
+                    gridline-color: #404040;
+                    border-radius: 8px;
                     selection-background-color: #1976D2;
                     selection-color: #ffffff;
                 }
@@ -814,5 +813,40 @@ class ThemeManager:
                     color: #212121;
                     font-size: 12px;
                     line-height: 1.6;
+                }
+
+                QTableWidget#FilesTable {
+                    background-color: #ffffff;
+                    border: 1px solid #d0d4d9;
+                    border-radius: 8px;
+                    gridline-color: #d0d4d9;
+                    font-size: 11px;
+                    color: #212121;
+                    selection-background-color: #1976D2;
+                    selection-color: #ffffff;
+                    alternate-background-color: #f4f6f8; /* más suave para filas alternas */
+                }
+
+                QTableWidget#FilesTable::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #e1e5e9;
+                }
+
+                QTableWidget#FilesTable::item:selected {
+                    background-color: #1976D2;
+                    color: #ffffff;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section {
+                    background-color: #e9ecf0;
+                    color: #212121;
+                    padding: 10px;
+                    border: 1px solid #d0d4d9;
+                    font-weight: 600;
+                    font-size: 11px;
+                }
+
+                QTableWidget#FilesTable QHeaderView::section:horizontal {
+                    border-bottom: 2px solid #1976D2;
                 }
             """
