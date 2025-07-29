@@ -167,34 +167,21 @@ class CsvTab(QWidget):
             table.setRowCount(0)
 
     def update_csv_summary(self, summary_data):
-        """Actualizar resumen de extracción CSV"""
+        """Actualizar resumen de extracción CSV con validación robusta"""
         if not summary_data or not isinstance(summary_data, dict):
+            print("Warning: summary_data inválido en CSV tab")
             return
         
-        # Actualizar cards de métricas
-        if hasattr(self, 'csv_cards') and len(self.csv_cards) >= 6:
+        # Actualizar cards de métricas con validación
+        if hasattr(self, 'csv_cards') and len(self.csv_cards) >= 5:
             try:
-                # Valores seguros con validación de tipos
-                processed_files = summary_data.get('processed_files', 0)
-                total_files = summary_data.get('total_files', 0)
-                warnings = summary_data.get('warnings', 0)
-                errors = summary_data.get('errors', 0)
-                csv_files_generated = summary_data.get('csv_files_generated', 0)
-                execution_time = summary_data.get('execution_time', '0:00')
-                
-                # Asegurar que son tipos correctos
-                if not isinstance(processed_files, int):
-                    processed_files = 0
-                if not isinstance(total_files, int):
-                    total_files = 0
-                if not isinstance(warnings, int):
-                    warnings = 0
-                if not isinstance(errors, int):
-                    errors = 0
-                if not isinstance(csv_files_generated, int):
-                    csv_files_generated = 0
-                if not isinstance(execution_time, str):
-                    execution_time = '0:00'
+                # Extraer valores de forma segura
+                processed_files = int(summary_data.get('processed_files', 0))
+                total_files = int(summary_data.get('total_files', processed_files))
+                warnings = int(summary_data.get('warnings', 0))
+                errors = int(summary_data.get('errors', 0))
+                csv_files_generated = int(summary_data.get('csv_files_generated', 0))
+                execution_time = str(summary_data.get('execution_time', '0:00'))
                 
                 metrics_values = [
                     f"{processed_files} / {total_files}",  # Archivos Procesados
@@ -209,18 +196,31 @@ class CsvTab(QWidget):
                     if i < len(self.csv_cards) and hasattr(self.csv_cards[i], 'update_value'):
                         self.csv_cards[i].update_value(str(value))
                         
+                print(f"✅ CSV Cards actualizadas: {metrics_values}")
+                            
             except Exception as e:
                 print(f"Error actualizando métricas CSV: {e}")
         
-        # Actualizar tabla de archivos
+        # Actualizar tabla de archivos con mejor validación
         try:
-            files_data = summary_data.get('files', [])
-            if isinstance(files_data, list) and files_data:
+            # Buscar datos de archivos en diferentes posibles ubicaciones
+            files_data = []
+            
+            # Prioridad 1: 'files' (formato estándar)
+            if 'files' in summary_data and isinstance(summary_data['files'], list):
+                files_data = summary_data['files']
+            # Prioridad 2: 'files_detail' (formato del controlador)
+            elif 'files_detail' in summary_data and isinstance(summary_data['files_detail'], list):
+                files_data = summary_data['files_detail']
+            
+            if files_data:
                 self.populate_files_table(self.csv_files_table, files_data)
-            elif hasattr(summary_data, 'get') and 'files_detail' in summary_data:
-                # Alternativa si los datos están en files_detail
-                files_detail = summary_data.get('files_detail', [])
-                if isinstance(files_detail, list):
-                    self.populate_files_table(self.csv_files_table, files_detail)
+                print(f"✅ Tabla CSV actualizada con {len(files_data)} archivos")
+            else:
+                print("ℹ️ No hay datos de archivos para mostrar en CSV tab")
+                
         except Exception as e:
             print(f"Error actualizando tabla de archivos CSV: {e}")
+            # Limpiar tabla en caso de error
+            if hasattr(self, 'csv_files_table'):
+                self.csv_files_table.setRowCount(0)
