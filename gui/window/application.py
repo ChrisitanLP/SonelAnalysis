@@ -61,6 +61,9 @@ class SonelDataExtractorGUI(QMainWindow):
 
         # Mostrar resumen general por defecto
         QTimer.singleShot(1000, self.update_general_summary)
+
+         # Esto permite que execute_all acceda a los tabs individuales
+        self.setup_tab_references()
         
     def create_main_content(self, layout):
         # Header
@@ -92,6 +95,29 @@ class SonelDataExtractorGUI(QMainWindow):
         # Footer
         layout.addWidget(self.footer_panel)
 
+
+    def setup_tab_references(self):
+        """Configurar referencias a los tabs para actualizaciones directas"""
+        try:
+            # Verificar si el status_panel tiene tabs
+            if hasattr(self.status_panel, 'tabs'):
+                # Obtener referencias a cada tab
+                for i in range(self.status_panel.tabs.count()):
+                    tab_widget = self.status_panel.tabs.widget(i)
+                    tab_text = self.status_panel.tabs.tabText(i)
+                    
+                    # Asignar referencias basadas en el nombre del tab
+                    if "General" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                        self.status_panel.general_tab = tab_widget
+                    elif "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                        self.status_panel.csv_tab = tab_widget
+                    elif "Base de Datos" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                        self.status_panel.db_tab = tab_widget
+            
+            print("Referencias a tabs configuradas correctamente")
+            
+        except Exception as e:
+            print(f"Error configurando referencias a tabs: {e}")
 
     def load_summary_data(self):
         """Cargar datos de resumen desde archivos JSON"""
@@ -487,13 +513,23 @@ class SonelDataExtractorGUI(QMainWindow):
     def execute_all(self):
         """Ejecutar proceso completo usando el controlador"""
         
+        # Verificar que el controlador esté disponible
+        if not self.controller:
+            self.control_panel.update_folder_info("❌ Error: Controlador no disponible")
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: Controlador no inicializado")
+            return
+        
         self.control_panel.start_progress("Iniciando proceso completo...")
         
         # Actualizar el directorio de entrada del controlador
-        self.controller.rutas["input_directory"] = self.selected_folder
+        try:
+            self.controller.rutas["input_directory"] = self.selected_folder
+        except Exception as e:
+            self.control_panel.update_folder_info(f"❌ Error configurando ruta: {str(e)}")
+            return
         
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Iniciando proceso completo...")
-        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Escaneando archivos...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🚀 Iniciando proceso completo...")
+        self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 📂 Procesando archivos en: {self.selected_folder}")
         
         # Simular animación de progreso
         self.animate_progress()
@@ -506,34 +542,134 @@ class SonelDataExtractorGUI(QMainWindow):
                 skip_etl=False
             )
             
-            # Preparar resultados para la GUI
-            complete_results = {
-                'overall_status': 'success' if success else 'partial',
-                'total_execution_time': complete_summary.get('total_time', '0:00'),
-                'total_records': complete_summary.get('data_processed', 0),
-                'efficiency': complete_summary.get('success_rate', 0),
-                'start_time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'end_time': (datetime.datetime.now() + datetime.timedelta(minutes=6)).strftime('%Y-%m-%d %H:%M:%S'),
-                'csv_phase': {
-                    'status': 'success' if complete_summary.get('gui_success') else 'error',
-                    'execution_time': '4:12',
-                    'processed_files': complete_summary.get('csv_extracted', 0)
-                },
-                'db_phase': {
-                    'status': 'success' if complete_summary.get('etl_success') else 'error',
-                    'execution_time': '2:15',
-                    'uploaded_files': complete_summary.get('db_uploaded', 0),
-                    'inserted_records': complete_summary.get('data_processed', 0)
-                },
-                'observations': f"Proceso ejecutado {'exitosamente' if success else 'con advertencias'}."
-            }
-        
-            # Actualizar panel de resultados después de completar
-            QTimer.singleShot(5000, lambda: self.status_panel.update_complete_results(complete_results))
+            # Verificar que complete_summary es un diccionario
+            if not isinstance(complete_summary, dict):
+                raise ValueError(f"El controlador devolvió un tipo inválido: {type(complete_summary)}")
+            
+            # Detener animación de progreso
+            if hasattr(self, 'progress_timer'):
+                self.progress_timer.stop()
+            
+            # Actualizar progreso al 100%
+            self.control_panel.set_progress_value(100)
+            
+            # NUEVA LLAMADA UNIFICADA - Reemplaza todo el código de actualización anterior
+            self.status_panel.update_complete_workflow_results(complete_summary)
+            
+            # Logs y mensajes finales
+            extraction_summary = complete_summary.get('extraction_summary', {})
+            db_summary = complete_summary.get('db_summary', {})
+            
+            # === ACTUALIZAR LOGS ===
+            if success:
+                extracted_files = extraction_summary.get('csv_files_generated', 0)
+                uploaded_files = db_summary.get('uploaded_files', 0)
+                
+                if extracted_files > 0:
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Extracción CSV: {extracted_files} archivos procesados")
+                else:
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Extracción CSV: Todos los archivos ya procesados")
+                
+                if uploaded_files > 0:
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Base de datos: {uploaded_files} archivos subidos")
+                else:
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Base de datos: Todos los archivos ya estaban procesados")
+                
+                self.control_panel.update_progress_label("✅ Proceso completo exitoso")
+                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Proceso completo finalizado exitosamente")
+            else:
+                self.control_panel.update_progress_label("⚠️ Proceso completado con advertencias")
+                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Proceso completado con advertencias")
+                
+            # Actualizar datos estáticos y resumen general
+            self.update_static_data()
+            
+            # === REFRESCAR TODOS LOS TABS DESDE JSON (DATOS MÁS ACTUALES) ===
+            # Esto asegura que los tabs muestren los datos más recientes desde los archivos JSON
+            QTimer.singleShot(2000, self._refresh_all_tabs_after_complete)
+            
         except Exception as e:
+            # Detener animación en caso de error
+            if hasattr(self, 'progress_timer'):
+                self.progress_timer.stop()
+                
             error_time = datetime.datetime.now().strftime('%H:%M:%S')
-            self.status_panel.add_log_entry(f"[{error_time}] ❌ Error durante la ejecución: {str(e)}")
-            self.status_panel.add_log_entry(f"[{error_time}] 🛠️ Verifica los registros de error o la consola para más detalles.")
+            error_msg = str(e)
+            
+            self.status_panel.add_log_entry(f"[{error_time}] ❌ Error durante la ejecución: {error_msg}")
+            self.control_panel.reset_progress()
+            self.control_panel.update_progress_label(f"❌ Error: {error_msg}")
+            
+            # Mostrar error en los paneles
+            error_csv_data = {
+                'status': 'error',
+                'total_files': 0,
+                'processed_files': 0,
+                'errors': 1,
+                'warnings': 0,
+                'csv_files_generated': 0,
+                'total_records': 0,
+                'execution_time': '0:00',
+                'avg_speed': '0 archivos/min',
+                'files': []
+            }
+            
+            error_db_data = {
+                'status': 'error',
+                'uploaded_files': 0,
+                'failed_uploads': 1,
+                'inserted_records': 0,
+                'conflicts': 0,
+                'connection_status': 'Error crítico',
+                'files': [],
+                'upload_time': '0:00',
+                'success_rate': 0
+            }
+            
+            self.status_panel.update_csv_results(error_csv_data)
+            self.status_panel.update_db_results(error_db_data)
+            
+            # Actualizar tabs con datos de error
+            if hasattr(self.status_panel, 'csv_tab') and hasattr(self.status_panel.csv_tab, 'update_csv_summary'):
+                self.status_panel.csv_tab.update_csv_summary(error_csv_data)
+            
+            if hasattr(self.status_panel, 'db_tab') and hasattr(self.status_panel.db_tab, 'update_db_summary'):
+                self.status_panel.db_tab.update_db_summary(error_db_data)
+            
+            print(f"Error en execute_all: {e}")
+            traceback.print_exc()
+
+    def _refresh_all_tabs_after_complete(self):
+        """Refrescar todos los tabs después del proceso completo"""
+        try:
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔄 Actualizando información de tabs...")
+            
+            # Refrescar CSV Tab
+            if hasattr(self.status_panel, 'csv_tab') and hasattr(self.status_panel.csv_tab, 'refresh_data'):
+                self.status_panel.csv_tab.refresh_data()
+                print("CSV Tab actualizado")
+            
+            # Refrescar DB Tab  
+            if hasattr(self.status_panel, 'db_tab') and hasattr(self.status_panel.db_tab, 'refresh_data'):
+                self.status_panel.db_tab.refresh_data()
+                print("DB Tab actualizado")
+                
+            # Refrescar General Tab con método específico para proceso completo
+            if hasattr(self.status_panel, 'general_tab'):
+                if hasattr(self.status_panel.general_tab, 'refresh_data_after_complete_process'):
+                    self.status_panel.general_tab.refresh_data_after_complete_process()
+                elif hasattr(self.status_panel.general_tab, 'refresh_data'):
+                    self.status_panel.general_tab.refresh_data()
+                print("General Tab actualizado")
+            
+            # Actualizar datos estáticos generales también  
+            self.update_static_data()
+            
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Información de tabs actualizada")
+            
+        except Exception as refresh_error:
+            print(f"Error refrescando tabs después del proceso completo: {refresh_error}")
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Error actualizando información de tabs")
 
     def update_general_summary(self):
         """Actualizar resumen general con datos reales desde JSON"""
