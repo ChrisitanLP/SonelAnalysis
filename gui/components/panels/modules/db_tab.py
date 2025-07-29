@@ -105,30 +105,59 @@ class DbTab(QWidget):
             table.setItem(row, 6, QTableWidgetItem(file_data.get('message', '')))
             
     def update_db_summary(self, summary_data):
-        """Actualizar resumen de subida a BD con datos reales del core"""
-        if not summary_data:
+        """Actualizar resumen de subida a BD con validación robusta"""
+        if not summary_data or not isinstance(summary_data, dict):
+            print("Warning: summary_data inválido en DB tab")
             return
         
-        # Actualizar cards de métricas con la estructura correcta del core
+        # Actualizar cards de métricas con validación
         if hasattr(self, 'db_cards') and len(self.db_cards) >= 6:
-            # Formato: ("🗄️", "Archivos Subidos", "28 / 30", "#4CAF50")
-            metrics_values = [
-                f"{summary_data.get('uploaded_files', 0)} / {summary_data.get('total_files', summary_data.get('uploaded_files', 0) + summary_data.get('failed_uploads', 0))}",  # Archivos Subidos
-                str(summary_data.get('conflicts', 0)),  # Advertencias/Conflictos
-                str(summary_data.get('failed_uploads', 0)),  # Errores
-                f"{summary_data.get('inserted_records', 0):,}",  # Registros Insertados
-                summary_data.get('upload_time', '0:00'),  # Tiempo Subida
-                summary_data.get('connection_status', 'Desconocido')  # Conexión
-            ]
-            
-            for i, value in enumerate(metrics_values):
-                if i < len(self.db_cards):
-                    self.db_cards[i].update_value(value)
+            try:
+                # Extraer valores de forma segura
+                uploaded_files = int(summary_data.get('uploaded_files', 0))
+                total_files = max(
+                    int(summary_data.get('total_files', uploaded_files)), 
+                    uploaded_files + int(summary_data.get('failed_uploads', 0))
+                )
+                conflicts = int(summary_data.get('conflicts', 0))
+                failed_uploads = int(summary_data.get('failed_uploads', 0))
+                inserted_records = int(summary_data.get('inserted_records', 0))
+                upload_time = str(summary_data.get('upload_time', '0:00'))
+                connection_status = str(summary_data.get('connection_status', 'Desconocido'))
+                
+                metrics_values = [
+                    f"{uploaded_files} / {total_files}",  # Archivos Subidos
+                    str(conflicts),                       # Advertencias/Conflictos
+                    str(failed_uploads),                  # Errores
+                    f"{inserted_records:,}",              # Registros Insertados
+                    upload_time,                          # Tiempo Subida
+                    connection_status                     # Conexión
+                ]
+                
+                # Actualizar cada card de forma segura
+                for i, value in enumerate(metrics_values):
+                    if i < len(self.db_cards) and hasattr(self.db_cards[i], 'update_value'):
+                        self.db_cards[i].update_value(str(value))
+                        
+                print(f"✅ DB Cards actualizadas: {metrics_values}")
+                            
+            except Exception as e:
+                print(f"Error actualizando métricas DB: {e}")
         
-        # Actualizar tabla con los archivos procesados
-        files_data = summary_data.get('files', [])
-        if files_data:
-            self.populate_db_table(self.db_files_table, files_data)
+        # Actualizar tabla de archivos
+        try:
+            files_data = summary_data.get('files', [])
+            if isinstance(files_data, list) and files_data:
+                self.populate_db_table(self.db_files_table, files_data)
+                print(f"✅ Tabla DB actualizada con {len(files_data)} archivos")
+            else:
+                print("ℹ️ No hay datos de archivos para mostrar en DB tab")
+                
+        except Exception as e:
+            print(f"Error actualizando tabla de archivos DB: {e}")
+            # Limpiar tabla en caso de error
+            if hasattr(self, 'db_files_table'):
+                self.db_files_table.setRowCount(0)
 
     def get_files_data_from_json(self, json_data):
         """Extraer datos de archivos desde el JSON"""
