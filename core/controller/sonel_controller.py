@@ -89,12 +89,12 @@ class SonelController:
             self.logger.error(f"❌ Error en validación de entorno: {e}")
             return False
 
-    def run_pywinauto_extraction(self) -> Tuple[bool, int]:
+    def run_pywinauto_extraction(self) -> Tuple[bool, Dict[str, Any]]:
         """
         Ejecuta la extracción GUI usando pywinauto
         
         Returns:
-            tuple: (success: bool, extracted_files: int)
+            tuple: (success: bool, extraction_summary: dict)
         """
         self.logger.info("🚀 === INICIANDO EXTRACCIÓN PYWIN ===")
         
@@ -102,7 +102,7 @@ class SonelController:
             # Verificar requisitos
             if not self.validate_environment():
                 self.logger.error("❌ No se pueden cumplir los requisitos del sistema")
-                return False, 0
+                return False, self._get_empty_extraction_summary("Error en validación de entorno")
             
             # Crear instancia del extractor
             self.logger.info("🔧 Inicializando extractor...")
@@ -118,15 +118,63 @@ class SonelController:
             
             # Validar resultados
             if not self._validar_resultados_extraccion(resultados):
-                return False, 0
+                return False, self._get_empty_extraction_summary("Error en validación de resultados")
             
-            # Procesar resultados
-            return self._procesar_resultados_extraccion(resultados)
+            # Obtener resumen de extracción del extractor
+            extraction_summary = extractor.get_extraction_summary_for_gui()
+            
+            # Procesar resultados y determinar éxito
+            archivos_exitosos = resultados.get('procesados_exitosos', 0)
+            archivos_saltados = resultados.get('saltados', 0)
+            archivos_fallidos = resultados.get('procesados_fallidos', 0)
+            
+            # Determinar éxito basado en la lógica del negocio
+            if archivos_exitosos > 0:
+                success = True
+                extracted_files = archivos_exitosos
+            elif archivos_saltados > 0 and archivos_fallidos == 0:
+                success = True
+                extracted_files = 0  # Ya procesados previamente
+            else:
+                success = False
+                extracted_files = 0
+            
+            # Agregar información adicional al resumen para la GUI
+            extraction_summary.update({
+                'success': success,
+                'extracted_files': extracted_files,
+                'procesados_exitosos': archivos_exitosos,
+                'procesados_fallidos': archivos_fallidos,
+                'saltados': archivos_saltados
+            })
+            
+            self.logger.info(f"✅ Extracción completada - Éxito: {success}, Archivos: {extracted_files}")
+            
+            return success, extraction_summary
             
         except Exception as e:
             self.logger.error(f"❌ Error durante extracción PYWIN: {e}")
             self.logger.error(traceback.format_exc())
-            return False, 0
+            return False, self._get_empty_extraction_summary(f"Error crítico: {str(e)}")
+
+    def _get_empty_extraction_summary(self, error_message: str = "") -> Dict[str, Any]:
+        """Genera un resumen de extracción vacío para casos de error"""
+        return {
+            'processed_files': 0,
+            'total_files': 0,
+            'warnings': 0,
+            'errors': 1 if error_message else 0,
+            'csv_files_generated': 0,
+            'execution_time': '0:00',
+            'total_size': '0 MB',
+            'files_detail': [],
+            'success': False,
+            'extracted_files': 0,
+            'procesados_exitosos': 0,
+            'procesados_fallidos': 1 if error_message else 0,
+            'saltados': 0,
+            'error_message': error_message
+        }
 
     def run_etl_processing(self, force_reprocess: bool = False) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -219,16 +267,20 @@ class SonelController:
             return False, self._get_error_summary("Validación de entorno fallida")
         
         gui_success = True
-        extracted_files = 0
-        
+        extraction_summary = {}
+    
         # Paso 1: Extracción GUI (opcional)
         if not skip_gui:
-            gui_success, extracted_files = self.run_pywinauto_extraction()
+            gui_success, extraction_summary = self.run_pywinauto_extraction()
             if not gui_success:
                 self.logger.warning("⚠️ Extracción PYWIN falló, continuando con ETL...")
         else:
             self.logger.info("⏭️ Extracción PYWIN omitida por configuración")
+            extraction_summary = self._get_empty_extraction_summary()
         
+        # Log del resumen de extracción
+        self._log_extraction_summary(extraction_summary)
+
         # Paso 2: Procesamiento ETL (opcional)
         etl_success = True
         db_summary = {}
@@ -248,14 +300,83 @@ class SonelController:
         overall_success = (gui_success or skip_gui) and (etl_success or skip_etl)
         
         # Log final
-        self._log_workflow_completion(gui_success, extracted_files, etl_success, total_time, overall_success)
-        
+        self._log_workflow_completion(gui_success, extraction_summary.get('extracted_files', 0), 
+                                 etl_success, total_time, overall_success)
+    
         # Generar resumen completo
-        complete_summary = self._build_complete_summary(
-            gui_success, extracted_files, etl_success, db_summary, total_time
+        complete_summary = self._build_complete_summary_with_extraction(
+            gui_success, extraction_summary, etl_success, db_summary, total_time
         )
         
         return overall_success, complete_summary
+
+    def _build_complete_summary_with_extraction(self, gui_success: bool, extraction_summary: Dict[str, Any], 
+                                           etl_success: bool, db_summary: Dict[str, Any], 
+                                           total_time: float) -> Dict[str, Any]:
+        """Construye el resumen completo del flujo incluyendo detalles de extracción"""
+        # Formatear tiempo
+        minutes = int(total_time // 60)
+        seconds = int(total_time % 60)
+        time_str = f"{minutes}:{seconds:02d}"
+        
+        # Determinar estado general
+        if gui_success and etl_success:
+            overall_status = "✅ Completado"
+        elif gui_success or etl_success:
+            overall_status = "⚠️ Parcial"
+        else:
+            overall_status = "❌ Fallido"
+        
+        return {
+            # Información general
+            'overall_status': overall_status,
+            'total_files': extraction_summary.get('total_files', 0),
+            'total_time': time_str,
+            'success_rate': db_summary.get('success_rate', 0),
+            'connection_status': db_summary.get('connection_status', 'Desconocido'),
+            'gui_success': gui_success,
+            'etl_success': etl_success,
+            
+            # Información de extracción CSV
+            'csv_extracted': extraction_summary.get('csv_files_generated', 0),
+            'csv_processed_files': extraction_summary.get('processed_files', 0),
+            'csv_warnings': extraction_summary.get('warnings', 0),
+            'csv_errors': extraction_summary.get('errors', 0),
+            'csv_execution_time': extraction_summary.get('execution_time', '0:00'),
+            'csv_total_size': extraction_summary.get('total_size', '0 MB'),
+            
+            # Información de base de datos
+            'db_uploaded': db_summary.get('uploaded_files', 0),
+            'total_errors': db_summary.get('failed_uploads', 0),
+            'data_processed': db_summary.get('inserted_records', 0),
+            'data_size': db_summary.get('data_size', '0 bytes'),
+            
+            # Resúmenes detallados
+            'extraction_summary': extraction_summary,
+            'db_summary': db_summary,
+            'files': db_summary.get('files', [])
+        }
+
+    def _log_extraction_summary(self, extraction_summary: Dict[str, Any]) -> None:
+        """Log del resumen de extracción desde el controlador"""
+        self.logger.info("\n" + "🎯" * 30)
+        self.logger.info("📊 RESUMEN DE EXTRACCIÓN CSV DESDE CONTROLADOR")
+        self.logger.info("🎯" * 30)
+        self.logger.info(f"📁 Archivos procesados: {extraction_summary.get('processed_files', 0)} / {extraction_summary.get('total_files', 0)}")
+        self.logger.info(f"⚠️ Advertencias: {extraction_summary.get('warnings', 0)}")
+        self.logger.info(f"❌ Errores: {extraction_summary.get('errors', 0)}")
+        self.logger.info(f"📄 CSVs generados: {extraction_summary.get('csv_files_generated', 0)}")
+        self.logger.info(f"⏱️ Tiempo de extracción: {extraction_summary.get('execution_time', '0:00')}")
+        self.logger.info(f"💾 Tamaño procesado: {extraction_summary.get('total_size', '0 MB')}")
+        
+        # Tasa de éxito
+        total_files = extraction_summary.get('total_files', 0)
+        csv_generated = extraction_summary.get('csv_files_generated', 0)
+        if total_files > 0:
+            success_rate = (csv_generated / total_files) * 100
+            self.logger.info(f"📈 Tasa de éxito: {success_rate:.1f}%")
+        
+        self.logger.info("🎯" * 30)
 
     def get_folder_info(self, folder_path: str) -> Dict[str, Any]:
         """
