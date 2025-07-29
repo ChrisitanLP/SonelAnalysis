@@ -35,7 +35,7 @@ class CsvTab(QWidget):
             ("❌", "Errores", str(summary.get('errors', 0)), "#F44336"),
             ("📄", "CSVs Generados", str(summary.get('csv_files_generated', 0)), "#3F51B5"),
             ("⏱️", "Tiempo Extracción", summary.get('execution_time', '0:00'), "#9C27B0"),
-            ("💾", "Tamaño Procesado", summary.get('total_size', '0 MB'), "#607D8B"),
+            ("🔗", "Conexión", 'Estable', "#607D8B"),
         ]
         
         for i, (icon, title, value, color) in enumerate(csv_metrics_data):
@@ -86,7 +86,6 @@ class CsvTab(QWidget):
                 "csv_files_generated": 0,
                 "execution_time": "0:00",
                 "avg_speed": "0 archivos/min",
-                "total_size": "0 MB",
                 "success_rate": 0.0,
                 "total_records": 0
             },
@@ -104,8 +103,7 @@ class CsvTab(QWidget):
             str(summary.get('warnings', 0)),
             str(summary.get('errors', 0)),
             str(summary.get('csv_files_generated', 0)),
-            summary.get('execution_time', '0:00'),
-            summary.get('total_size', '0 MB')
+            summary.get('execution_time', '0:00')
         ]
         
         # Actualizar cards
@@ -119,7 +117,7 @@ class CsvTab(QWidget):
                 
     def setup_files_table(self, table):
         """Configurar tabla de archivos CSV"""
-        headers = ["#", "Archivo", "Estado", "Tiempo", "Tamaño", "Archivo CSV", "Mensaje"]
+        headers = ["#", "Archivo", "Estado", "Tiempo", "Archivo CSV", "Mensaje"]
         table.setColumnCount(len(headers))
         table.setHorizontalHeaderLabels(headers)
         table.horizontalHeader().setStretchLastSection(True)
@@ -132,45 +130,97 @@ class CsvTab(QWidget):
         header.setSectionResizeMode(1, QHeaderView.Stretch)              # "Archivo"
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)     # "Estado"
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)     # "Tiempo"
-        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)     # "Tamaño"
-        header.setSectionResizeMode(5, QHeaderView.Stretch)              # "Archivo csv"
-        header.setSectionResizeMode(6, QHeaderView.Stretch)    
+        header.setSectionResizeMode(4, QHeaderView.Stretch)              # "Archivo csv"
+        header.setSectionResizeMode(5, QHeaderView.Stretch)    
         
     def populate_files_table(self, table, files_data):
-        """Poblar tabla de archivos CSV"""
-        table.setRowCount(len(files_data))
-        for row, file_data in enumerate(files_data):
-            table.setItem(row, 0, QTableWidgetItem(str(row + 1))) 
-            table.setItem(row, 1, QTableWidgetItem(file_data.get('filename', '')))
-            table.setItem(row, 2, QTableWidgetItem(file_data.get('status', '')))
-            table.setItem(row, 3, QTableWidgetItem(str(file_data.get('records', 0))))
-            table.setItem(row, 4, QTableWidgetItem(file_data.get('size', '')))
-            table.setItem(row, 5, QTableWidgetItem(file_data.get('filename_csv', '')))
-            table.setItem(row, 6, QTableWidgetItem(file_data.get('message', '')))
+        """Poblar tabla de archivos CSV con validación mejorada"""
+        if not isinstance(files_data, list):
+            print(f"Warning: files_data no es una lista: {type(files_data)}")
+            return
             
+        try:
+            table.setRowCount(len(files_data))
+            for row, file_data in enumerate(files_data):
+                if not isinstance(file_data, dict):
+                    continue
+                    
+                # Extraer datos de forma segura
+                index = file_data.get('index', row + 1)
+                filename = file_data.get('filename', file_data.get('file_name', ''))
+                status = file_data.get('status', '')
+                records = file_data.get('records', file_data.get('duration', '0'))
+                csv_output = file_data.get('filename_csv', file_data.get('csv_output', ''))
+                message = file_data.get('message', '')
+                
+                # Poblar tabla
+                table.setItem(row, 0, QTableWidgetItem(str(index)))
+                table.setItem(row, 1, QTableWidgetItem(str(filename)))
+                table.setItem(row, 2, QTableWidgetItem(str(status)))
+                table.setItem(row, 3, QTableWidgetItem(str(records)))
+                table.setItem(row, 4, QTableWidgetItem(str(csv_output)))
+                table.setItem(row, 5, QTableWidgetItem(str(message)))
+                
+        except Exception as e:
+            print(f"Error poblando tabla de archivos: {e}")
+            # Limpiar tabla en caso de error
+            table.setRowCount(0)
+
     def update_csv_summary(self, summary_data):
         """Actualizar resumen de extracción CSV"""
-        if not summary_data:
+        if not summary_data or not isinstance(summary_data, dict):
             return
         
         # Actualizar cards de métricas
-        if hasattr(self, 'csv_cards'):
-            metrics_values = [
-                f"{summary_data.get('processed_files', 0)} / {summary_data.get('total_files', 0)}",
-                f"{summary_data.get('total_records', 0):,}",
-                str(summary_data.get('errors', 0)),
-                summary_data.get('execution_time', '0:00'),
-                summary_data.get('avg_speed', 'N/A'),
-                f"{summary_data.get('success_rate', 0):.1f}%",
-                summary_data.get('total_size', 'N/A'),
-                str(summary_data.get('csv_files_generated', 0))
-            ]
-            
-            for i, value in enumerate(metrics_values):
-                if i < len(self.csv_cards):
-                    self.csv_cards[i].update_value(value)
+        if hasattr(self, 'csv_cards') and len(self.csv_cards) >= 6:
+            try:
+                # Valores seguros con validación de tipos
+                processed_files = summary_data.get('processed_files', 0)
+                total_files = summary_data.get('total_files', 0)
+                warnings = summary_data.get('warnings', 0)
+                errors = summary_data.get('errors', 0)
+                csv_files_generated = summary_data.get('csv_files_generated', 0)
+                execution_time = summary_data.get('execution_time', '0:00')
+                
+                # Asegurar que son tipos correctos
+                if not isinstance(processed_files, int):
+                    processed_files = 0
+                if not isinstance(total_files, int):
+                    total_files = 0
+                if not isinstance(warnings, int):
+                    warnings = 0
+                if not isinstance(errors, int):
+                    errors = 0
+                if not isinstance(csv_files_generated, int):
+                    csv_files_generated = 0
+                if not isinstance(execution_time, str):
+                    execution_time = '0:00'
+                
+                metrics_values = [
+                    f"{processed_files} / {total_files}",  # Archivos Procesados
+                    str(warnings),                         # Advertencias
+                    str(errors),                          # Errores
+                    str(csv_files_generated),             # CSVs Generados
+                    execution_time,                       # Tiempo Extracción
+                ]
+                
+                # Actualizar cada card de forma segura
+                for i, value in enumerate(metrics_values):
+                    if i < len(self.csv_cards) and hasattr(self.csv_cards[i], 'update_value'):
+                        self.csv_cards[i].update_value(str(value))
+                        
+            except Exception as e:
+                print(f"Error actualizando métricas CSV: {e}")
         
-        # Actualizar tabla
-        files_data = summary_data.get('files', [])
-        if files_data:
-            self.populate_files_table(self.csv_files_table, files_data)
+        # Actualizar tabla de archivos
+        try:
+            files_data = summary_data.get('files', [])
+            if isinstance(files_data, list) and files_data:
+                self.populate_files_table(self.csv_files_table, files_data)
+            elif hasattr(summary_data, 'get') and 'files_detail' in summary_data:
+                # Alternativa si los datos están en files_detail
+                files_detail = summary_data.get('files_detail', [])
+                if isinstance(files_detail, list):
+                    self.populate_files_table(self.csv_files_table, files_detail)
+        except Exception as e:
+            print(f"Error actualizando tabla de archivos CSV: {e}")
