@@ -253,3 +253,106 @@ class GeneralTab(QWidget):
         
         # Actualizar resumen
         self.update_summary_content()
+
+    def update_complete_execution_summary(self, results_data):
+        """Actualizar resumen cuando se ejecuta el proceso completo"""
+        if not results_data:
+            return
+        
+        # Actualizar métricas generales con datos del proceso completo
+        csv_phase = results_data.get('csv_phase', {})
+        db_phase = results_data.get('db_phase', {})
+        
+        # Determinar valores para las cards
+        processed_files = csv_phase.get('processed_files', 0)
+        total_files = processed_files  # Asumimos que todos los procesados son el total
+        uploaded_files = db_phase.get('uploaded_files', 0)
+        inserted_records = db_phase.get('inserted_records', 0)
+        
+        # Calcular errores basado en el estado de cada fase
+        total_errors = 0
+        if csv_phase.get('status') == 'error':
+            total_errors += 1
+        if db_phase.get('status') == 'error':
+            total_errors += 1
+        
+        # Estimar tamaño de datos procesados (aproximación)
+        estimated_size = f"{inserted_records * 0.0005:.1f} MB" if inserted_records > 0 else "0 MB"
+        
+        # Actualizar cards con datos del proceso completo
+        metrics_values = [
+            f"{processed_files} / {max(total_files, processed_files)}",  # Archivos Procesados
+            "0",  # Advertencias (por defecto, podría mejorarse)
+            str(total_errors),  # Errores basados en el estado de las fases
+            f"{uploaded_files} / {max(processed_files, uploaded_files)}",  # Archivos Subidos  
+            f"{inserted_records:,}",  # Registros Totales
+            estimated_size  # Tamaño aproximado
+        ]
+        
+        # Actualizar cards de forma segura
+        for i, value in enumerate(metrics_values):
+            if i < len(self.general_cards) and hasattr(self.general_cards[i], 'update_value'):
+                try:
+                    self.general_cards[i].update_value(value)
+                except Exception as e:
+                    print(f"Error actualizando card {i}: {e}")
+        
+        # Generar resumen ejecutivo para proceso completo
+        overall_status = results_data.get('overall_status', 'partial')
+        status_text = "✅ Completado" if overall_status == 'success' else "⚠️ Completado con advertencias"
+        efficiency = results_data.get('efficiency', 0)
+        total_execution_time = results_data.get('total_execution_time', '0:00')
+        
+        # Construir resumen detallado
+        complete_summary_text = f"""
+            <b>Estado General:</b> {status_text}<br>
+            <b>Archivos Procesados:</b> {processed_files} archivos .pqm<br>  
+            <b>Registros Insertados:</b> {inserted_records:,} registros<br>
+            <b>Eficiencia General:</b> {efficiency}%<br><br>
+            <b>Fase CSV:</b><br>
+            - Estado: {'✅ Exitoso' if csv_phase.get('status') == 'success' else '❌ Error'}<br>
+            - Tiempo: {csv_phase.get('execution_time', '0:00')}<br>
+            - Archivos: {csv_phase.get('processed_files', 0)}<br><br>
+            <b>Fase Base de Datos:</b><br>
+            - Estado: {'✅ Exitoso' if db_phase.get('status') == 'success' else '❌ Error'}<br>
+            - Tiempo: {db_phase.get('execution_time', '0:00')}<br>
+            - Subidos: {db_phase.get('uploaded_files', 0)}<br>
+            - Registros: {db_phase.get('inserted_records', 0):,}<br><br>
+            <b>Tiempo Total:</b> {total_execution_time}<br>
+            <b>Observaciones:</b> {results_data.get('observations', 'Proceso completado.')}
+        """
+        
+        # Actualizar el resumen principal
+        if hasattr(self, 'summary_label'):
+            self.summary_label.setText(complete_summary_text)
+        
+        # Actualizar historial con información del proceso completo
+        history_text = f"""
+            <b>✅ Proceso completo ejecutado</b><br>
+            <b>Iniciado:</b> {results_data.get('start_time', 'N/A')}<br>
+            <b>Finalizado:</b> {results_data.get('end_time', 'N/A')}<br>
+            <b>Estado Final:</b> {status_text}<br>
+            <b>Archivos procesados:</b> {processed_files}<br>
+            <b>Subidos a BD:</b> {uploaded_files}
+        """
+        
+        if hasattr(self, 'general_history_label'):
+            self.general_history_label.setText(history_text)
+
+    def refresh_data_after_complete_process(self):
+        """Método específico para refrescar después de proceso completo"""
+        try:
+            # Recargar datos de ambos JSON
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
+            # Si hay datos frescos, actualizar con ellos
+            csv_summary = self.csv_data.get('csv_summary', {})
+            etl_summary = self.etl_data.get('overall_summary', {})
+            
+            if csv_summary.get('processed_files', 0) > 0 or etl_summary.get('db_uploaded', 0) > 0:
+                # Usar datos del JSON que son más actuales
+                self.refresh_data()
+            
+        except Exception as e:
+            print(f"Error en refresh_data_after_complete_process: {e}")
