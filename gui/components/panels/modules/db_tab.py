@@ -115,12 +115,17 @@ class DbTab(QWidget):
             try:
                 # Extraer valores de forma segura
                 uploaded_files = int(summary_data.get('uploaded_files', 0))
-                total_files = max(
-                    int(summary_data.get('total_files', uploaded_files)), 
-                    uploaded_files + int(summary_data.get('failed_uploads', 0))
-                )
-                conflicts = int(summary_data.get('conflicts', 0))
                 failed_uploads = int(summary_data.get('failed_uploads', 0))
+                
+                # CORRECCIÓN: Calcular total_files de forma más robusta
+                total_files = int(summary_data.get('total_files', 0))
+                if total_files == 0:
+                    # Si no viene total_files, calcularlo
+                    total_files = uploaded_files + failed_uploads
+                    if total_files == 0 and uploaded_files > 0:
+                        total_files = uploaded_files  # Al menos los subidos exitosamente
+                
+                conflicts = int(summary_data.get('conflicts', 0))
                 inserted_records = int(summary_data.get('inserted_records', 0))
                 upload_time = str(summary_data.get('upload_time', '0:00'))
                 connection_status = str(summary_data.get('connection_status', 'Desconocido'))
