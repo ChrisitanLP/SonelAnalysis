@@ -101,8 +101,8 @@ class StatusPanel(QWidget):
             }
             self.execution_summary_panel.update_db_summary(db_results)
         
-        # Preparar datos para el resumen general
-        complete_results = {
+        # Preparar datos para el resumen general - CORREGIR: usar update_general_summary en lugar del método inexistente
+        general_data = {
             'overall_status': 'success' if (gui_success and etl_success) else 'partial',
             'total_execution_time': complete_summary.get('total_time', '0:00'),
             'total_records': complete_summary.get('data_processed', 0),
@@ -120,4 +120,5 @@ class StatusPanel(QWidget):
             }
         }
         
-        self.execution_summary_panel.update_complete_summary(complete_results)
+        # CAMBIO CRÍTICO: usar método que SÍ existe
+        self.execution_summary_panel.update_general_summary(general_data)

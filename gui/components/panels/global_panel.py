@@ -1,3 +1,5 @@
+import os
+import json
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel
 from PyQt5.QtCore import Qt
 from gui.components.panels.modules.general_tab import GeneralTab
@@ -120,3 +122,82 @@ class ExecutionSummaryPanel(QWidget):
         # Refrescar tab DB
         if hasattr(self.db_tab, 'refresh_data'):
             self.db_tab.refresh_data()
+
+    def refresh_data_after_complete_process(self):
+        """Método específico para refrescar después de proceso completo"""
+        try:
+            # Recargar datos de ambos JSON
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
+            # Si hay datos frescos, actualizar con ellos
+            csv_summary = self.csv_data.get('csv_summary', {})
+            etl_summary = self.etl_data.get('overall_summary', {})
+            
+            if csv_summary.get('processed_files', 0) > 0 or etl_summary.get('db_uploaded', 0) > 0:
+                # Usar datos del JSON que son más actuales
+                self.refresh_all_tabs()
+            
+        except Exception as e:
+            print(f"Error en refresh_data_after_complete_process: {e}")
+
+    def load_csv_data(self):
+        """Cargar datos del resumen CSV desde el archivo JSON"""
+        json_path = "data/archivos_csv/resumen_csv.json"
+        
+        try:
+            if os.path.exists(json_path):
+                with open(json_path, 'r', encoding='utf-8') as file:
+                    return json.load(file)
+            else:
+                print(f"Archivo no encontrado: {json_path}")
+                return self.get_default_csv_data()
+        except Exception as e:
+            print(f"Error al cargar {json_path}: {e}")
+            return self.get_default_csv_data()
+
+    def load_etl_data(self):
+        """Cargar datos del resumen ETL desde el archivo JSON"""
+        json_path = "data/archivos_csv/resumen_etl.json"
+        
+        try:
+            if os.path.exists(json_path):
+                with open(json_path, 'r', encoding='utf-8') as file:
+                    return json.load(file)
+            else:
+                print(f"Archivo no encontrado: {json_path}")
+                return self.get_default_etl_data()
+        except Exception as e:
+            print(f"Error al cargar {json_path}: {e}")
+            return self.get_default_etl_data()
+        
+    def get_default_csv_data(self):
+        """Datos por defecto para CSV si no se puede cargar el JSON"""
+        return {
+            "csv_summary": {
+                "processed_files": 0,
+                "total_files": 0,
+                "errors": 0,
+                "warnings": 0,
+                "csv_files_generated": 0,
+                "execution_time": "0:00",
+                "total_records": 0,
+                "total_size": "0 MB"
+            }
+        }
+
+    def get_default_etl_data(self):
+        """Datos por defecto para ETL si no se puede cargar el JSON"""
+        return {
+            "overall_summary": {
+                "total_files": 0,
+                "db_uploaded": 0,
+                "total_errors": 0,
+                "data_processed": 0,
+                "data_size": "0 MB",
+                "connection_status": "Desconectado"
+            },
+            "database_summary": {
+                "inserted_records": 0
+            }
+        }
