@@ -145,36 +145,42 @@ class GeneralTab(QWidget):
         if hasattr(self, 'summary_label'):
             self.summary_label.setText(text)
 
-    def update_status_card(self, index, new_value):
-        """Actualizar una tarjeta de estado específica"""
-        if hasattr(self, 'general_cards') and 0 <= index < len(self.general_cards):
-            self.general_cards[index].update_value(new_value)
-            
     def update_general_summary(self, summary_data):
-        """Actualizar resumen general"""
+        """Actualizar resumen general - mejorado para manejar datos completos"""
         if not summary_data:
             return
+        
+        # Caso 1: Datos simples (formato original)
+        if 'total_processed' in summary_data:
+            total_processed = summary_data.get('total_processed', 0)
+            total_time = summary_data.get('total_time', '0:00')
+            successful = summary_data.get('successful', 0)
+            failed = summary_data.get('failed', 0)
             
-        # Actualizar métricas generales
-        total_processed = summary_data.get('total_processed', 0)
-        total_time = summary_data.get('total_time', '0:00')
-        successful = summary_data.get('successful', 0)
-        failed = summary_data.get('failed', 0)
+            metrics_data = [
+                (total_processed, "#4CAF50"),
+                (total_time, "#2196F3"),
+                (successful, "#4CAF50"),
+                (failed, "#F44336")
+            ]
+            
+            for i, (value, color) in enumerate(metrics_data):
+                if i < len(self.general_cards):
+                    self.general_cards[i].update_value(str(value))
+                    
+            # Actualizar historial
+            history_text = summary_data.get('history', 'No hay historial disponible')
+            if hasattr(self, 'general_history_label'):
+                self.general_history_label.setText(history_text)
         
-        metrics_data = [
-            (total_processed, "#4CAF50"),
-            (total_time, "#2196F3"),
-            (successful, "#4CAF50"),
-            (failed, "#F44336")
-        ]
+        # Caso 2: Datos de proceso completo (nuevo formato)
+        elif 'csv_phase' in summary_data and 'db_phase' in summary_data:
+            self.update_complete_execution_summary(summary_data)
         
-        for i, (value, color) in enumerate(metrics_data):
-            if i < len(self.general_cards):
-                self.general_cards[i].update_value(str(value))
-                
-        # Actualizar historial
-        history_text = summary_data.get('history', 'No hay historial disponible')
-        self.general_history_label.setText(history_text)
+        # Caso 3: Fallback - refrescar desde JSON
+        else:
+            print("Formato de summary_data no reconocido, refrescando desde JSON")
+            self.refresh_data()
 
     def update_summary_content(self):
         """Actualizar el contenido del resumen ejecutivo con datos reales"""
