@@ -180,7 +180,7 @@ class CsvTab(QWidget):
                 total_files = int(summary_data.get('total_files', processed_files))
                 warnings = int(summary_data.get('warnings', 0))
                 errors = int(summary_data.get('errors', 0))
-                csv_files_generated = int(summary_data.get('csv_files_generated', 0))
+                csv_files_generated = int(summary_data.get('csv_files_generated', processed_files))
                 execution_time = str(summary_data.get('execution_time', '0:00'))
                 
                 metrics_values = [
@@ -201,23 +201,26 @@ class CsvTab(QWidget):
             except Exception as e:
                 print(f"Error actualizando métricas CSV: {e}")
         
-        # Actualizar tabla de archivos con mejor validación
+        # CORRECCIÓN: Mejor manejo de archivos con múltiples fuentes
         try:
-            # Buscar datos de archivos en diferentes posibles ubicaciones
             files_data = []
             
-            # Prioridad 1: 'files' (formato estándar)
-            if 'files' in summary_data and isinstance(summary_data['files'], list):
-                files_data = summary_data['files']
-            # Prioridad 2: 'files_detail' (formato del controlador)
-            elif 'files_detail' in summary_data and isinstance(summary_data['files_detail'], list):
+            # Prioridad 1: 'files_detail' (formato del controlador)
+            if 'files_detail' in summary_data:
                 files_data = summary_data['files_detail']
+            # Prioridad 2: 'files' (formato estándar)
+            elif 'files' in summary_data:
+                files_data = summary_data['files']
             
-            if files_data:
+            # Validar que sea una lista
+            if isinstance(files_data, list) and files_data:
                 self.populate_files_table(self.csv_files_table, files_data)
                 print(f"✅ Tabla CSV actualizada con {len(files_data)} archivos")
             else:
                 print("ℹ️ No hay datos de archivos para mostrar en CSV tab")
+                # Limpiar tabla si no hay datos
+                if hasattr(self, 'csv_files_table'):
+                    self.csv_files_table.setRowCount(0)
                 
         except Exception as e:
             print(f"Error actualizando tabla de archivos CSV: {e}")
