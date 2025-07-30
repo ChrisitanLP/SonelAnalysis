@@ -99,20 +99,24 @@ class SonelDataExtractorGUI(QMainWindow):
     def setup_tab_references(self):
         """Configurar referencias a los tabs para actualizaciones directas"""
         try:
-            # Verificar si el status_panel tiene tabs
-            if hasattr(self.status_panel, 'tabs'):
-                # Obtener referencias a cada tab
-                for i in range(self.status_panel.tabs.count()):
-                    tab_widget = self.status_panel.tabs.widget(i)
-                    tab_text = self.status_panel.tabs.tabText(i)
-                    
-                    # Asignar referencias basadas en el nombre del tab
-                    if "General" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                        self.status_panel.general_tab = tab_widget
-                    elif "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                        self.status_panel.csv_tab = tab_widget
-                    elif "Base de Datos" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                        self.status_panel.db_tab = tab_widget
+            # Verificar si el status_panel tiene execution_summary_panel
+            if hasattr(self.status_panel, 'execution_summary_panel'):
+                panel = self.status_panel.execution_summary_panel
+                
+                # Verificar si tiene tab_widget (no 'tabs')
+                if hasattr(panel, 'tab_widget'):
+                    # Obtener referencias a cada tab
+                    for i in range(panel.tab_widget.count()):
+                        tab_widget = panel.tab_widget.widget(i)
+                        tab_text = panel.tab_widget.tabText(i)
+                        
+                        # Asignar referencias basadas en el nombre del tab
+                        if "General" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                            panel.general_tab_ref = tab_widget
+                        elif "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                            panel.csv_tab_ref = tab_widget
+                        elif "Base de Datos" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                            panel.db_tab_ref = tab_widget
             
             print("Referencias a tabs configuradas correctamente")
             
@@ -630,11 +634,11 @@ class SonelDataExtractorGUI(QMainWindow):
             self.status_panel.update_db_results(error_db_data)
             
             # Actualizar tabs con datos de error
-            if hasattr(self.status_panel, 'csv_tab') and hasattr(self.status_panel.csv_tab, 'update_csv_summary'):
-                self.status_panel.csv_tab.update_csv_summary(error_csv_data)
+            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'update_csv_summary'):
+                self.status_panel.update_csv_results(error_csv_data)
             
-            if hasattr(self.status_panel, 'db_tab') and hasattr(self.status_panel.db_tab, 'update_db_summary'):
-                self.status_panel.db_tab.update_db_summary(error_db_data)
+            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'update_db_summary'):
+                self.status_panel.update_db_results(error_db_data)
             
             print(f"Error en execute_all: {e}")
             traceback.print_exc()
@@ -645,21 +649,21 @@ class SonelDataExtractorGUI(QMainWindow):
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔄 Actualizando información de tabs...")
             
             # Refrescar CSV Tab
-            if hasattr(self.status_panel, 'csv_tab') and hasattr(self.status_panel.csv_tab, 'refresh_data'):
-                self.status_panel.csv_tab.refresh_data()
+            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'refresh_all_tabs'):
+                self.status_panel.execution_summary_panel.refresh_all_tabs()
                 print("CSV Tab actualizado")
             
             # Refrescar DB Tab  
-            if hasattr(self.status_panel, 'db_tab') and hasattr(self.status_panel.db_tab, 'refresh_data'):
-                self.status_panel.db_tab.refresh_data()
+            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'refresh_all_tabs'):
+                self.status_panel.execution_summary_panel.refresh_all_tabs()
                 print("DB Tab actualizado")
                 
             # Refrescar General Tab con método específico para proceso completo
-            if hasattr(self.status_panel, 'general_tab'):
-                if hasattr(self.status_panel.general_tab, 'refresh_data_after_complete_process'):
-                    self.status_panel.general_tab.refresh_data_after_complete_process()
-                elif hasattr(self.status_panel.general_tab, 'refresh_data'):
-                    self.status_panel.general_tab.refresh_data()
+            if hasattr(self.status_panel, 'execution_summary_panel'):
+                if hasattr(self.status_panel.execution_summary_panel, 'refresh_data_after_complete_process'):
+                    self.status_panel.execution_summary_panel.refresh_data_after_complete_process()
+                elif hasattr(self.status_panel.execution_summary_panel, 'refresh_data'):
+                    self.status_panel.execution_summary_panel.refresh_all_tabs()
                 print("General Tab actualizado")
             
             # Actualizar datos estáticos generales también  
