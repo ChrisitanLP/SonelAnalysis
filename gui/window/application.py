@@ -176,7 +176,7 @@ class SonelDataExtractorGUI(QMainWindow):
                 <b>Archivos Detectados:</b> {total_files} archivos .pqm<br>
                 <b>Procesados Exitosamente:</b> {processed_files} archivos<br>
                 <b>Con Advertencias:</b> {csv_summary.get('warnings', 0)} archivos<br>
-                <b>Con Errores:</b> {etl_summary.get('total_errors', 0)} archivos<br><br>
+                <b>Con Errores:</b> {csv_summary.get('errors', 0)} archivos<br><br>
                 <b>Performance:</b><br>
                 - Tiempo extracción CSV: {csv_summary.get('execution_time', '0:00')}<br>
                 - Tiempo carga BD: {etl_summary.get('total_time', '0:00')}<br>
@@ -316,6 +316,13 @@ class SonelDataExtractorGUI(QMainWindow):
         if not self.controller:
             self.control_panel.update_folder_info("❌ Error: Controlador no disponible")
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: Controlador no inicializado")
+            
+            UIHelpers.show_error_message(
+                self,
+                "Controlador No Disponible",
+                "El sistema de procesamiento no está disponible.",
+                "Reinicia la aplicación e intenta nuevamente."
+            )
             return
         
         self.control_panel.start_progress("Iniciando generación de CSV...")
@@ -324,7 +331,15 @@ class SonelDataExtractorGUI(QMainWindow):
         try:
             self.controller.rutas["input_directory"] = self.selected_folder
         except Exception as e:
+            error_msg = f"Error configurando ruta: {str(e)}"
             self.control_panel.update_folder_info(f"❌ Error configurando ruta: {str(e)}")
+            
+            UIHelpers.show_error_message(
+                self,
+                "Error de Configuración",
+                "No se pudo configurar la ruta de procesamiento.",
+                f"Detalles: {error_msg}\n\nSelecciona nuevamente la carpeta de archivos."
+            )
             return
         
         self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Iniciando generación de CSV...")
@@ -340,8 +355,6 @@ class SonelDataExtractorGUI(QMainWindow):
             
             # Extraer datos del resumen
             extracted_files = extraction_summary.get('extracted_files', 0)
-            procesados_exitosos = extraction_summary.get('procesados_exitosos', 0)
-            procesados_fallidos = extraction_summary.get('procesados_fallidos', 0)
             
             if success:
                 # Generar resultados basados en el resultado real
@@ -361,11 +374,18 @@ class SonelDataExtractorGUI(QMainWindow):
                 self.control_panel.set_progress_value(100)
                 
                 if extracted_files > 0:
-                    self.control_panel.update_progress_label("✅ Archivos nuevos procesados exitosamente")
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Extracción completada: {extracted_files} archivos nuevos procesados")
+                    self.control_panel.update_progress_label(" Archivos nuevos procesados exitosamente")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Extracción completada: {extracted_files} archivos nuevos procesados")
                 else:
-                    self.control_panel.update_progress_label("✅ Todos los archivos ya estaban procesados")
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Todos los archivos ya estaban procesados")
+                    self.control_panel.update_progress_label(" Archivos procesados exitosamente")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Todos los archivos ya estaban procesados")
+
+                UIHelpers.show_success_message(
+                    self,
+                    "Extracción CSV Completada",
+                    f"Se procesaron exitosamente los archivos nuevos.",
+                    f"Los archivos están listos para ser cargados a la base de datos."
+                )
             else:
                 error_message = extraction_summary.get('error_message', 'Error desconocido')
                 csv_results = {
@@ -385,6 +405,13 @@ class SonelDataExtractorGUI(QMainWindow):
                 self.control_panel.update_progress_label(f"❌ Error: {error_message}")
                 self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error en la extracción: {error_message}")
             
+                UIHelpers.show_error_message(
+                    self,
+                    "Error en la Extracción CSV",
+                    "No se pudo completar la extracción de archivos CSV.",
+                    f"Motivo: {error_message}\n\nRevisa los archivos de entrada y vuelve a intentar."
+                )
+
             # Actualizar panel de resultados
             self.status_panel.update_csv_results(csv_results)
             
@@ -422,6 +449,13 @@ class SonelDataExtractorGUI(QMainWindow):
         if not self.controller:
             self.control_panel.update_folder_info("❌ Error: Controlador no disponible")
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: Controlador no inicializado")
+            
+            UIHelpers.show_error_message(
+                self,
+                "Controlador No Disponible",
+                "El sistema de procesamiento no está disponible.",
+                "Reinicia la aplicación e intenta nuevamente."
+            )
             return
         
         self.control_panel.start_progress("Iniciando subida a base de datos...")
@@ -444,12 +478,19 @@ class SonelDataExtractorGUI(QMainWindow):
                 self.control_panel.set_progress_value(100)
 
                 if uploaded_files > 0:
-                    self.control_panel.update_progress_label("✅ Archivos nuevos procesados exitosamente")
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Procesamiento completado: {uploaded_files} archivos nuevos subidos")
+                    self.control_panel.update_progress_label(" Archivos nuevos procesados exitosamente")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}]  Procesamiento completado: {uploaded_files} archivos nuevos subidos")
                 else:
-                    self.control_panel.update_progress_label("✅ Todos los archivos ya estaban procesados")
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Todos los archivos ya estaban en la base de datos")
+                    self.control_panel.update_progress_label(" Archivos procesados exitosamente")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Todos los archivos ya estaban en la base de datos")
                 
+                UIHelpers.show_success_message(
+                    self,
+                    "Carga a Base de Datos Exitosa",
+                    f"Se subieron exitosamente los archivos a la base de datos.",
+                    f"Los datos están disponibles para consulta."
+                )
+
                 # Convertir el resumen del controlador al formato GUI
                 db_results = self._convert_summary_to_db_format(summary_data)
                 self.status_panel.update_db_results(db_results)
@@ -460,6 +501,13 @@ class SonelDataExtractorGUI(QMainWindow):
                 self.control_panel.update_progress_label(f"❌ Error: {error_message}")
                 self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error en el procesamiento: {error_message}")
                 
+                UIHelpers.show_error_message(
+                    self,
+                    "Error en la Carga a Base de Datos",
+                    "No se pudo completar la carga de datos a la base de datos.",
+                    f"Motivo: {error_message}\n\nVerifica la conexión a la base de datos y vuelve a intentar."
+                )
+
                 # Mostrar error en la GUI
                 error_data = {
                     'status': 'error',
@@ -480,6 +528,13 @@ class SonelDataExtractorGUI(QMainWindow):
             
             self.control_panel.reset_progress()
             self.control_panel.update_progress_label(f"❌ Error crítico: {error_msg}")
+
+            UIHelpers.show_error_message(
+                self,
+                "Error Crítico en Base de Datos",
+                "Ocurrió un error inesperado durante la carga a la base de datos.",
+                f"Detalles técnicos: {error_msg}\n\nContacta al administrador de la base de datos."
+            )
             
             # Mostrar error crítico en la GUI
             error_data = {
@@ -521,6 +576,13 @@ class SonelDataExtractorGUI(QMainWindow):
         if not self.controller:
             self.control_panel.update_folder_info("❌ Error: Controlador no disponible")
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: Controlador no inicializado")
+            
+            UIHelpers.show_error_message(
+                self,
+                "Controlador No Disponible",
+                "El sistema de procesamiento no está disponible.",
+                "Reinicia la aplicación e intenta nuevamente."
+            )
             return
         
         self.control_panel.start_progress("Iniciando proceso completo...")
@@ -570,20 +632,20 @@ class SonelDataExtractorGUI(QMainWindow):
                 uploaded_files = db_summary.get('uploaded_files', 0)
                 
                 if extracted_files > 0:
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Extracción CSV: {extracted_files} archivos procesados")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Extracción CSV: {extracted_files} archivos procesados")
                 else:
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Extracción CSV: Todos los archivos ya procesados")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Extracción CSV: Todos los archivos ya procesados")
                 
                 if uploaded_files > 0:
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Base de datos: {uploaded_files} archivos subidos")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Base de datos: {uploaded_files} archivos subidos")
                 else:
-                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ℹ️ Base de datos: Todos los archivos ya estaban procesados")
+                    self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Base de datos: Todos los archivos ya estaban procesados")
                 
-                self.control_panel.update_progress_label("✅ Proceso completo exitoso")
-                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Proceso completo finalizado exitosamente")
+                self.control_panel.update_progress_label("Proceso completo exitoso")
+                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Proceso completo finalizado exitosamente")
             else:
-                self.control_panel.update_progress_label("⚠️ Proceso completado con advertencias")
-                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Proceso completado con advertencias")
+                self.control_panel.update_progress_label("Proceso completado con advertencias")
+                self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Proceso completado con advertencias")
                 
             # Actualizar datos estáticos y resumen general
             self.update_static_data()
@@ -690,7 +752,7 @@ class SonelDataExtractorGUI(QMainWindow):
         general_data = {
             'total_processed': f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}",
             'total_time': csv_summary.get('warnings', 0),
-            'successful': etl_summary.get('total_errors', 0),
+            'successful': csv_summary.get('errors', 0),
             'failed': f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}",
             'history': self._generate_history_text(etl_data)
         }
