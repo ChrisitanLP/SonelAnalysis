@@ -35,7 +35,7 @@ class GeneralTab(QWidget):
         metrics_data = [
             ("📁", "Archivos Procesados", f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}", "#4CAF50"),
             ("⚠️", "Advertencias", str(csv_summary.get('warnings', 0)), "#FF9800"),
-            ("❌", "Errores", str(etl_summary.get('total_errors', 0)), "#F44336"),
+            ("❌", "Errores", str(csv_summary.get('errors', 0)), "#F44336"),
             ("🗄️", "Archivos Subidos", f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}", "#3F51B5"),
             ("📊", "Registros Totales", f"{db_summary.get('inserted_records', 0):,}", "#9C27B0"),
             ("💾", "Tamaño Procesado", etl_summary.get('data_size', '0 MB'), "#607D8B"),
