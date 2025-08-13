@@ -1,10 +1,12 @@
 import os
 import json
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView
+import traceback
 from PyQt5.QtCore import Qt
+from gui.utils.ui_helper import UIHelpers
 from gui.components.cards.modern_card import ModernCard
 from gui.components.cards.status_card import StatusCard
-
+from core.controller.sonel_controller import SonelController
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView, QPushButton
 
 class CsvTab(QWidget):
     def __init__(self, parent=None):
@@ -12,6 +14,13 @@ class CsvTab(QWidget):
         self.parent_app = parent
         self.setObjectName("CsvTab")
         self.csv_data = self.load_csv_summary()
+
+        try:
+            self.controller = SonelController()
+        except Exception as e:
+            print(f"⚠️ Error inicializando controlador: {e}")
+            self.controller = None
+
         self.init_ui()
         
     def init_ui(self):
@@ -26,6 +35,10 @@ class CsvTab(QWidget):
         
         # Obtener datos del JSON cargado
         summary = self.csv_data.get('csv_summary', {})
+
+        # Formatear tiempo de ejecución
+        execution_time_raw = summary.get('execution_time', '0:00')
+        execution_time_formatted = self.format_execution_time(execution_time_raw)
         
         # Crear tarjetas de métricas CSV con datos reales
         self.csv_cards = []
@@ -34,7 +47,7 @@ class CsvTab(QWidget):
             ("⚠️", "Advertencias", str(summary.get('warnings', 0)), "#FF9800"),
             ("❌", "Errores", str(summary.get('errors', 0)), "#F44336"),
             ("📄", "CSVs Generados", str(summary.get('csv_files_generated', 0)), "#3F51B5"),
-            ("⏱️", "Tiempo Extracción", summary.get('execution_time', '0:00'), "#9C27B0"),
+            ("⏱️", "Tiempo Extracción", execution_time_formatted, "#9C27B0"),
             ("🔗", "Conexión", 'Estable', "#607D8B"),
         ]
         
@@ -46,6 +59,13 @@ class CsvTab(QWidget):
             csv_metrics_layout.addWidget(status_card, row, col)
         
         layout.addWidget(csv_metrics_widget)
+
+        # === BOTÓN DE REPROCESAR SI HAY ERRORES ===
+        if summary.get('errors', 0) > 0:
+            self.reprocess_button = QPushButton("🔁 Reprocesar archivos")
+            self.reprocess_button.setStyleSheet("padding: 8px; background-color: #F44336; color: white; border-radius: 6px;")
+            self.reprocess_button.clicked.connect(self.confirm_reprocess_errors)
+            layout.addWidget(self.reprocess_button, alignment=Qt.AlignLeft)
         
         # === TABLA DE ARCHIVOS PROCESADOS ===
         files_card = ModernCard("Detalle de Archivos Procesados")
@@ -98,12 +118,17 @@ class CsvTab(QWidget):
         
         # Actualizar métricas
         summary = self.csv_data.get('csv_summary', {})
+
+        # Formatear tiempo de ejecución
+        execution_time_raw = summary.get('execution_time', '0:00')
+        execution_time_formatted = self.format_execution_time(execution_time_raw)
+
         metrics_values = [
             f"{summary.get('processed_files', 0)} / {summary.get('total_files', 0)}",
             str(summary.get('warnings', 0)),
             str(summary.get('errors', 0)),
             str(summary.get('csv_files_generated', 0)),
-            summary.get('execution_time', '0:00')
+            execution_time_formatted
         ]
         
         # Actualizar cards
@@ -181,7 +206,10 @@ class CsvTab(QWidget):
                 warnings = int(summary_data.get('warnings', 0))
                 errors = int(summary_data.get('errors', 0))
                 csv_files_generated = int(summary_data.get('csv_files_generated', processed_files))
-                execution_time = str(summary_data.get('execution_time', '0:00'))
+                
+                # Formatear tiempo de ejecución
+                execution_time_raw = summary_data.get('execution_time', '0:00')
+                execution_time = self.format_execution_time(execution_time_raw)
                 
                 metrics_values = [
                     f"{processed_files} / {total_files}",  # Archivos Procesados
@@ -227,3 +255,132 @@ class CsvTab(QWidget):
             # Limpiar tabla en caso de error
             if hasattr(self, 'csv_files_table'):
                 self.csv_files_table.setRowCount(0)
+
+    def on_reprocess_errors_clicked(self):
+        """Acción al hacer clic en el botón de reprocesar archivos con error"""
+        print("🔁 Reprocesando archivos con error...")
+
+        try:
+            # Llamar al controlador para ejecutar la extracción con coordenadas
+            success, extraction_summary = self.controller.run_pyguiauto_extraction()
+
+            # Validar que el resumen es un diccionario
+            if not isinstance(extraction_summary, dict):
+                raise ValueError(f"El controlador devolvió un tipo inválido: {type(extraction_summary)}")
+
+            extracted_files = extraction_summary.get('procesados_exitosos', 0)
+
+            if success:
+                csv_results = {
+                    'status': 'success' if extracted_files > 0 else 'completed',
+                    'total_files': extraction_summary.get('total_files', 0),
+                    'processed_files': extraction_summary.get('procesados_exitosos', 0),
+                    'errors': extraction_summary.get('procesados_fallidos', 0),
+                    'warnings': extraction_summary.get('warnings', 0),
+                    'csv_files_generated': extraction_summary.get('csvs_verificados', 0),
+                    'total_records': extraction_summary.get('csvs_verificados', 0) * 3278,
+                    'execution_time': extraction_summary.get('execution_time', '0:00'),
+                    'avg_speed': '6.7 archivos/min' if extracted_files > 0 else '0 archivos/min',
+                    'files': extraction_summary.get('files_detail', [])
+                }
+
+                UIHelpers.show_success_message(
+                    self,
+                    "Reprocesamiento Completado",
+                    "Los archivos con error han sido reprocesados exitosamente.",
+                    "Los CSV generados están listos para ser cargados."
+                )
+
+            else:
+                error_message = extraction_summary.get('mensaje_error', 'Error desconocido')
+                csv_results = {
+                    'status': 'error',
+                    'total_files': extraction_summary.get('total_files', 0),
+                    'processed_files': 0,
+                    'errors': extraction_summary.get('procesados_fallidos', 1),
+                    'warnings': 0,
+                    'csv_files_generated': 0,
+                    'total_records': 0,
+                    'execution_time': '0:00',
+                    'avg_speed': '0 archivos/min',
+                    'files': []
+                }
+
+                UIHelpers.show_error_message(
+                    self,
+                    "Error en el Reprocesamiento",
+                    "No se pudo completar la recuperación de archivos con coordenadas.",
+                    f"Motivo: {error_message}\n\nRevisa los archivos y vuelve a intentar."
+                )
+
+        except Exception as e:
+            print(f"Error en on_reprocess_errors_clicked: {e}")
+            traceback.print_exc()
+
+    def confirm_reprocess_errors(self):
+        """Solicita confirmación antes de reprocesar archivos con error."""
+        ok = UIHelpers.show_confirmation_dialog(
+            self,
+            title="Confirmar reprocesamiento",
+            message="¿Deseas reprocesar los archivos que tienen errores?",
+            details="Este proceso intentará nuevamente analizar los archivos marcados con error."
+        )
+        if ok:
+            self.on_reprocess_errors_clicked()
+
+    def format_execution_time(self, time_str):
+        """
+        Formatear tiempo de ejecución para mostrar:
+        - Segundos si < 60s (ej: "45.2s")
+        - Minutos:segundos si >= 60s y < 1h (ej: "1:30")
+        - Horas:minutos:segundos si >= 1h (ej: "1:01:05")
+        """
+        try:
+            if not time_str or time_str in ['0:00', '0', '']:
+                return "0s"
+            
+            # Si ya viene en formato numérico
+            if isinstance(time_str, (int, float)):
+                total_seconds = float(time_str)
+            else:
+                # Convertir string a segundos
+                time_str = str(time_str).strip()
+                
+                # Si contiene ":", es formato H:MM:SS o M:SS
+                if ':' in time_str:
+                    # Separar microsegundos si existen
+                    if '.' in time_str:
+                        time_part, _ = time_str.split('.', 1)
+                    else:
+                        time_part = time_str
+                    
+                    parts = [int(p) for p in time_part.split(':')]
+                    
+                    if len(parts) == 3:  # H:M:S
+                        hours, minutes, seconds = parts
+                        total_seconds = hours * 3600 + minutes * 60 + seconds
+                    elif len(parts) == 2:  # M:S
+                        minutes, seconds = parts
+                        total_seconds = minutes * 60 + seconds
+                    else:
+                        total_seconds = float(time_str.replace(':', ''))
+                else:
+                    # Es un número directo (segundos)
+                    total_seconds = float(time_str)
+            
+            # Formatear según la duración
+            if total_seconds < 60:
+                return f"{int(total_seconds)}s" if total_seconds.is_integer() else f"{total_seconds:.1f}s"
+            elif total_seconds < 3600:
+                minutes = int(total_seconds // 60)
+                seconds = int(total_seconds % 60)
+                return f"{minutes}:{seconds:02d}"
+            else:
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                seconds = int(total_seconds % 60)
+                return f"{hours}:{minutes:02d}:{seconds:02d}"
+                
+        except (ValueError, TypeError) as e:
+            print(f"Error formateando tiempo '{time_str}': {e}")
+            return str(time_str)
