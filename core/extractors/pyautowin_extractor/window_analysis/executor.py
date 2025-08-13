@@ -6,6 +6,7 @@ import time
 import logging
 from config.logger import get_logger
 from core.utils.text_normalize import TextUtils
+from core.utils.file_save import ComponentesGuardado
 from config.settings import get_full_config, get_all_possible_translations
 
 class SonelExecutor:
@@ -17,6 +18,8 @@ class SonelExecutor:
         config = get_full_config()
         self.logger = logger or get_logger("pywinauto", f"{__name__}_pywinauto")
         self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
+
+        self.save_file = ComponentesGuardado(logger=self.logger)
 
     def ejecutar_analisis(self):
         """Hace clic en el botón 'Análisis de datos' - ✅ VERSIÓN MULTIIDIOMA"""
@@ -39,6 +42,7 @@ class SonelExecutor:
                     if texto_boton and TextUtils.texto_coincide(texto_boton, analysis_data_texts):
                         analysis_button = button
                         self.logger.info(f"✅ Botón 'Análisis de datos' encontrado: '{texto_boton}'")
+                        self.save_file.guardar_coordenada_componente(button, "Button", "analysis_data")
                         break
                 except Exception as e:
                     self.logger.debug(f"Error procesando botón: {e}")
