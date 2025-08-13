@@ -3,7 +3,6 @@
 # ============================================
 from config.logger import logger
 from core.extractors.file_extractor import FileExtractor
-from core.extractors.pygui_extractor import GUIExtractor
 
 class DataExtractor:
     """Extractor de datos especializado"""
@@ -30,9 +29,6 @@ class DataExtractor:
                     return extractor.extract_all_files(force_reprocess=True)
                 else:
                     return extractor.extract()
-            elif method == 'gui':
-                extractor = GUIExtractor(self.config)
-                return extractor.extract()
             else:
                 logger.error(f"Método de extracción no válido: {method}")
                 return None
