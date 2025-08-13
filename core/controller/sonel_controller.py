@@ -20,7 +20,8 @@ from core.etl.sonel_etl import SonelETL
 from config.logger import get_logger
 from core.database.connection import DatabaseConnection
 from core.extractors.pywin_extractor import SonelExtractorCompleto
-from config.settings import get_full_config, validate_configuration, validate_screen_resolution
+from core.extractors.pygui_extractor import SonelGuiExtractorCompleto
+from config.settings import get_full_config, validate_configuration, validate_screen_resolution, get_portable_paths, find_sonel_exe
 
 
 class SonelController:
@@ -31,58 +32,106 @@ class SonelController:
 
     def __init__(self, config_file: Optional[str] = None):
         """
-        Inicializa el controlador
+        Inicializa el controlador de forma portable
         
         Args:
             config_file: Ruta al archivo de configuración (opcional)
         """
-        self.config_file = config_file or os.path.join("config", "config.ini")
+        # MODIFICACIÓN: Usar ruta portable para config_file
+        if config_file is None:
+            from config.settings import get_application_directory
+            app_dir = get_application_directory()
+            config_file = os.path.join(app_dir, "config", "config.ini")
+        
+        self.config_file = config_file
         self.win_config = get_full_config()
         
         # Configurar logger
         self.logger = get_logger("sonel_controller", f"{__name__}_controller")
         self.logger.setLevel(getattr(logging, self.win_config['LOGGING']['level']))
         
-        # Configurar rutas
-        self.rutas = self._configurar_rutas()
+        # Configurar rutas de forma portable
+        self.rutas = self._configurar_rutas_portable()
+        
+        # NUEVO: Verificar y crear directorios necesarios
+        self._asegurar_directorios()
         
         self.logger.info("🎯 Controlador Sonel inicializado correctamente")
 
-    def _configurar_rutas(self) -> Dict[str, str]:
+    def _configurar_rutas_portable(self) -> Dict[str, str]:
         """
-        Configura las rutas del sistema
+        Configura las rutas del sistema de forma portable
         
         Returns:
             dict: Diccionario con las rutas configuradas
         """
+        
+        # Obtener rutas portables
+        portable_paths = get_portable_paths()
+        
+        # Verificar que el ejecutable de Sonel exista
+        sonel_exe = portable_paths['sonel_exe_path']
+        if not os.path.exists(sonel_exe):
+            # Intentar encontrarlo nuevamente
+            found_exe = find_sonel_exe()
+            if found_exe:
+                sonel_exe = found_exe
+                self.logger.info(f"🔍 Ejecutable de Sonel encontrado en: {sonel_exe}")
+            else:
+                self.logger.warning(f"⚠️ Ejecutable de Sonel no encontrado. Configurado: {sonel_exe}")
+        
         return {
-            "input_directory": self.win_config['PATHS']['input_dir'],
-            "output_directory": self.win_config['PATHS']['export_dir'], 
-            "sonel_exe_path": self.win_config['PATHS']['sonel_exe_path']
+            "input_directory": portable_paths['input_dir'],
+            "output_directory": portable_paths['output_dir'],
+            "sonel_exe_path": sonel_exe
         }
+    
+    def _asegurar_directorios(self):
+        """
+        NUEVO MÉTODO: Asegura que todos los directorios necesarios existan
+        """
+        directorios = [
+            self.rutas["input_directory"],
+            self.rutas["output_directory"],
+            os.path.dirname(self.config_file)
+        ]
+        
+        for directorio in directorios:
+            if directorio and not os.path.exists(directorio):
+                try:
+                    os.makedirs(directorio, exist_ok=True)
+                    self.logger.info(f"📁 Directorio creado: {directorio}")
+                except Exception as e:
+                    self.logger.error(f"❌ Error creando directorio {directorio}: {e}")
 
     def validate_environment(self) -> bool:
         """
-        Valida que el entorno esté configurado correctamente
+        Valida que el entorno esté configurado correctamente (versión portable)
         
         Returns:
             bool: True si el entorno es válido
         """
-        self.logger.info("🔍 Validando entorno de ejecución...")
+        self.logger.info("🔍 Validando entorno de ejecución (modo portable)...")
         
         try:
             # Validar configuración general
             if not validate_configuration():
-                self.logger.error("❌ Configuración general inválida")
-                return False
+                self.logger.warning("⚠️ Algunas validaciones de configuración fallaron, continuando...")
             
             # Validar resolución de pantalla para GUI
             validate_screen_resolution()
             
-            # Crear directorio de salida si no existe
-            os.makedirs(self.rutas["output_directory"], exist_ok=True)
+            # MODIFICACIÓN: Asegurar que los directorios existan
+            self._asegurar_directorios()
             
-            self.logger.info("✅ Entorno validado correctamente")
+            # Validar ejecutable de Sonel (no crítico para el funcionamiento)
+            sonel_exe = self.rutas["sonel_exe_path"]
+            if not os.path.exists(sonel_exe):
+                self.logger.warning(f"⚠️ Ejecutable de Sonel no encontrado: {sonel_exe}")
+                self.logger.warning("   El procesamiento CSV se omitirá hasta que se configure correctamente")
+                # No retornar False, permitir que continúe
+            
+            self.logger.info("✅ Entorno validado correctamente (modo portable)")
             return True
             
         except Exception as e:
@@ -106,7 +155,7 @@ class SonelController:
             
             # Crear instancia del extractor
             self.logger.info("🔧 Inicializando extractor...")
-            extractor = SonelExtractorCompleto(
+            pywin_extractor = SonelExtractorCompleto(
                 input_dir=self.rutas["input_directory"],
                 output_dir=self.rutas["output_directory"], 
                 ruta_exe=self.rutas["sonel_exe_path"]
@@ -114,14 +163,14 @@ class SonelController:
             
             # Ejecutar procesamiento completo dinámico
             self.logger.info("🎯 Iniciando procesamiento completo...")
-            resultados = extractor.ejecutar_extraccion_completa_dinamica()
+            resultados = pywin_extractor.ejecutar_extraccion_completa_dinamica()
             
             # Validar resultados
             if not self._validar_resultados_extraccion(resultados):
                 return False, self._get_empty_extraction_summary("Error en validación de resultados")
             
             # Obtener resumen de extracción del extractor
-            extraction_summary = extractor.get_extraction_summary_for_gui()
+            extraction_summary = pywin_extractor.get_extraction_summary_for_gui()
             
             # Procesar resultados y determinar éxito
             archivos_exitosos = resultados.get('procesados_exitosos', 0)
@@ -156,6 +205,187 @@ class SonelController:
             self.logger.error(f"❌ Error durante extracción PYWIN: {e}")
             self.logger.error(traceback.format_exc())
             return False, self._get_empty_extraction_summary(f"Error crítico: {str(e)}")
+        
+    def run_pyguiauto_extraction(self) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Ejecuta recuperación de archivos con errores usando el extractor GUI
+        
+        Returns:
+            dict: Resultados del procesamiento de recuperación
+        """
+        self.logger.info("🔧 === INICIANDO RECUPERACIÓN CON COORDENADAS GUI === ")
+
+        try:
+            # Verificar requisitos
+            if not self.validate_environment():
+                self.logger.error("❌ No se pueden cumplir los requisitos del sistema")
+                return False, self._get_empty_extraction_summary("Error en validación de entorno")
+            
+            # Crear instancia del extractor GUI
+            self.logger.info("🔧 Inicializando extractor GUI...")
+            pygui_extractor = SonelGuiExtractorCompleto(
+                input_dir=self.rutas["input_directory"],
+                output_dir=self.rutas["output_directory"], 
+                ruta_exe=self.rutas["sonel_exe_path"]
+            )
+            
+            # Ejecutar recuperación de archivos con errores
+            resultados_recuperacion = pygui_extractor.ejecutar_extraccion_archivos_con_errores()
+            
+            # Validar resultados
+            if not self._validar_resultados_extraccion(resultados_recuperacion):
+                return False, self._get_empty_extraction_summary("Error en validación de resultados")
+            
+            # Obtener resumen de extracción para GUI
+            extraction_summary = pygui_extractor.get_extraction_summary_for_gui()
+            
+            # Procesar resultados y determinar éxito
+            archivos_exitosos = resultados_recuperacion.get('procesados_exitosos', 0)
+            archivos_saltados = resultados_recuperacion.get('saltados', 0)
+            archivos_fallidos = resultados_recuperacion.get('procesados_fallidos', 0)
+
+            if archivos_exitosos > 0:
+                success = True
+                extracted_files = archivos_exitosos
+            elif archivos_saltados > 0 and archivos_fallidos == 0:
+                success = True
+                extracted_files = 0  # Ya procesados previamente
+            else:
+                success = False
+                extracted_files = 0
+
+            # Agregar datos adicionales al resumen
+            extraction_summary.update({
+                'success': success,
+                'extracted_files': extracted_files,
+                'procesados_exitosos': archivos_exitosos,
+                'procesados_fallidos': archivos_fallidos,
+                'saltados': archivos_saltados
+            })
+            self.logger.info(f"✅ Recuperación completada - Éxito: {success}, Archivos: {extracted_files}")
+
+            return success, extraction_summary
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error durante recuperación GUI: {e}")
+            self.logger.error(traceback.format_exc())
+            return False, self._get_empty_extraction_summary(f"Error crítico: {str(e)}")
+        
+    def ejecutar_extraccion_hibrida(self, intentar_recuperacion=True):
+        """
+        Ejecuta extracción híbrida: primero componentes, luego coordenadas para errores
+        
+        Args:
+            intentar_recuperacion (bool): Si debe intentar recuperación con coordenadas
+            
+        Returns:
+            dict: Resultados combinados del procesamiento
+        """
+        self.logger.info("🔄 INICIANDO EXTRACCIÓN HÍBRIDA (COMPONENTES + COORDENADAS)")
+
+        try:
+            # FASE 1: Extracción normal con componentes
+            self.logger.info("📋 FASE 1: Extracción con componentes")
+            pywin_extractor = SonelExtractorCompleto(
+                input_dir=self.rutas["input_directory"],
+                output_dir=self.rutas["output_directory"], 
+                ruta_exe=self.rutas["sonel_exe_path"]
+            )
+            resultados_componentes = pywin_extractor.ejecutar_extraccion_completa_dinamica()
+            
+            # FASE 2: Recuperación con coordenadas (solo si hay errores y está habilitado)
+            resultados_recuperacion = None
+            if intentar_recuperacion and (resultados_componentes.get('procesados_fallidos', 0) > 0):
+                self.logger.info("\n📋 FASE 2: Recuperación con coordenadas")
+                pygui_extractor = SonelGuiExtractorCompleto(
+                    input_dir=self.rutas["input_directory"],
+                    output_dir=self.rutas["output_directory"], 
+                    ruta_exe=self.rutas["sonel_exe_path"]
+                )
+                resultados_recuperacion = pygui_extractor.ejecutar_extraccion_archivos_con_errores
+            
+            # Combinar resultados
+            resultados_finales = self._combinar_resultados_hibridos(
+                resultados_componentes, 
+                resultados_recuperacion
+            )
+            
+            self._log_resumen_hibrido(resultados_finales)
+            
+            return resultados_finales
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error en extracción híbrida: {e}")
+            return resultados_componentes if 'resultados_componentes' in locals() else {
+                "error_critico": True,
+                "mensaje_error": str(e)
+            }
+        
+    def _combinar_resultados_hibridos(self, resultados_componentes, resultados_recuperacion):
+        """
+        Combina los resultados de extracción por componentes y recuperación por coordenadas
+        
+        Args:
+            resultados_componentes: Resultados de la extracción normal
+            resultados_recuperacion: Resultados de la recuperación GUI (puede ser None)
+            
+        Returns:
+            dict: Resultados combinados
+        """
+        try:
+            # Base: resultados de componentes
+            resultados_finales = resultados_componentes.copy()
+            
+            if resultados_recuperacion:
+                # Agregar estadísticas de recuperación
+                resultados_finales["recuperacion"] = {
+                    "ejecutada": True,
+                    "archivos_recuperados": resultados_recuperacion.get('procesados_exitosos', 0),
+                    "fallos_recuperacion": resultados_recuperacion.get('procesados_fallidos', 0),
+                    "csvs_recuperados": resultados_recuperacion.get('csvs_verificados', 0)
+                }
+                
+                # Actualizar totales finales
+                archivos_recuperados = resultados_recuperacion.get('procesados_exitosos', 0)
+                csvs_recuperados = resultados_recuperacion.get('csvs_verificados', 0)
+                
+                # Los archivos recuperados exitosamente ya no cuentan como fallidos
+                resultados_finales["procesados_exitosos"] += archivos_recuperados
+                resultados_finales["csvs_verificados"] += csvs_recuperados
+                resultados_finales["procesados_fallidos"] = max(0, 
+                    resultados_finales["procesados_fallidos"] - archivos_recuperados)
+                
+            else:
+                resultados_finales["recuperacion"] = {
+                    "ejecutada": False,
+                    "razon": "No había errores o recuperación deshabilitada"
+                }
+            
+            # Agregar indicador de modo híbrido
+            resultados_finales["modo"] = "hibrido_componentes_coordenadas"
+            
+            return resultados_finales
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error combinando resultados híbridos: {e}")
+            return resultados_componentes
+
+    def _log_resumen_hibrido(self, resultados_finales):
+        """Log específico para el resumen híbrido"""
+        self.logger.info("📊 RESUMEN HÍBRIDO:")
+        self.logger.info(f"✅ Total procesados exitosos: {resultados_finales.get('procesados_exitosos', 0)}")
+        self.logger.info(f"📄 Total CSVs verificados: {resultados_finales.get('csvs_verificados', 0)}")
+        self.logger.info(f"❌ Total fallidos finales: {resultados_finales.get('procesados_fallidos', 0)}")
+        
+        recuperacion = resultados_finales.get('recuperacion', {})
+        if recuperacion.get('ejecutada', False):
+            self.logger.info(f"🔧 Archivos recuperados: {recuperacion.get('archivos_recuperados', 0)}")
+            self.logger.info(f"📄 CSVs recuperados: {recuperacion.get('csvs_recuperados', 0)}")
+            
+            if recuperacion.get('archivos_recuperados', 0) > 0:
+                tasa_recuperacion = (recuperacion.get('archivos_recuperados', 0) / 
+                                (recuperacion.get('archivos_recuperados', 0) + recuperacion.get('fallos_recuperacion', 0))) * 100
+                self.logger.info(f"📈 Tasa de recuperación: {tasa_recuperacion:.1f}%")
 
     def _get_empty_extraction_summary(self, error_message: str = "") -> Dict[str, Any]:
         """Genera un resumen de extracción vacío para casos de error"""
@@ -380,7 +610,7 @@ class SonelController:
 
     def get_folder_info(self, folder_path: str) -> Dict[str, Any]:
         """
-        Obtiene información de una carpeta de archivos PQM
+        Obtiene información de una carpeta de archivos PQM (versión mejorada)
         
         Args:
             folder_path: Ruta de la carpeta
@@ -389,26 +619,38 @@ class SonelController:
             dict: Información de la carpeta
         """
         try:
-            if not os.path.exists(folder_path):
-                return {"error": "La carpeta no existe", "count": 0, "files": []}
+            if not folder_path or not os.path.exists(folder_path):
+                return {"error": "La carpeta no existe o es inválida", "count": 0, "files": []}
+            
+            if not os.path.isdir(folder_path):
+                return {"error": "La ruta no es una carpeta válida", "count": 0, "files": []}
             
             # Extensiones válidas
             valid_extensions = ('.pqm702', '.pqm710', '.pqm711')
             
-            # Obtener archivos válidos
-            files = [f for f in os.listdir(folder_path) 
-                    if f.lower().endswith(valid_extensions)]
+            # Obtener archivos válidos de forma segura
+            files = []
+            try:
+                for filename in os.listdir(folder_path):
+                    if filename.lower().endswith(valid_extensions):
+                        full_path = os.path.join(folder_path, filename)
+                        if os.path.isfile(full_path):
+                            files.append(filename)
+            except PermissionError:
+                return {"error": "Sin permisos para leer la carpeta", "count": 0, "files": []}
+            except Exception as e:
+                return {"error": f"Error leyendo carpeta: {str(e)}", "count": 0, "files": []}
             
             return {
                 "count": len(files),
-                "files": files,
+                "files": sorted(files),  # Ordenar alfabéticamente
                 "path": folder_path,
                 "valid_extensions": valid_extensions
             }
             
         except Exception as e:
             self.logger.error(f"Error obteniendo info de carpeta: {e}")
-            return {"error": str(e), "count": 0, "files": []}
+            return {"error": f"Error inesperado: {str(e)}", "count": 0, "files": []}
 
     # Métodos auxiliares privados
     def _validar_resultados_extraccion(self, resultados: Any) -> bool:
