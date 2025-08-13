@@ -1,7 +1,7 @@
 # componentes_guardado.py
 import os
 import json
-import datetime
+from datetime import datetime
 
 class ComponentesGuardado:
     def __init__(self, logger=None, ruta_salida="componentes_configuracion.json", ruta_coordenadas="component_positions.json"):
@@ -170,3 +170,46 @@ class ComponentesGuardado:
             self._guardar_en_archivo(todos)
         except Exception as e:
             self.logger.error(f"❌ Error al actualizar componentes '{tipo}': {e}")
+
+    def verificar_primera_ejecucion(self):
+        """
+        Verifica si es la primera ejecución basándose en la existencia de archivos de coordenadas.
+        Retorna True si es la primera ejecución, False en caso contrario.
+        """
+        import os
+        
+        # Verificar si existe el archivo de coordenadas
+        if os.path.exists(self.ruta_coordenadas):
+            self.logger.info("📁 Archivo de coordenadas existe, no es primera ejecución")
+            return False
+        else:
+            self.logger.info("🆕 Primera ejecución detectada, se capturarán coordenadas")
+            return True
+        
+    def obtener_resumen_coordenadas_guardadas(self):
+        """
+        Retorna un resumen de las coordenadas guardadas
+        """
+        coordenadas = self.cargar_coordenadas_guardadas()
+        
+        resumen = {
+            'total_componentes': len(coordenadas),
+            'tipos_componentes': {},
+            'componentes_por_tipo': {}
+        }
+        
+        for clave, datos in coordenadas.items():
+            # Extraer tipo del componente de la clave (formato: tipo_identificador)
+            if '_' in clave:
+                tipo = clave.split('_')[0]
+                resumen['tipos_componentes'][tipo] = resumen['tipos_componentes'].get(tipo, 0) + 1
+                
+                if tipo not in resumen['componentes_por_tipo']:
+                    resumen['componentes_por_tipo'][tipo] = []
+                resumen['componentes_por_tipo'][tipo].append(clave)
+        
+        self.logger.info(f"📊 Resumen de coordenadas: {resumen['total_componentes']} componentes guardados")
+        for tipo, cantidad in resumen['tipos_componentes'].items():
+            self.logger.info(f"  📍 {tipo}: {cantidad} componentes")
+        
+        return resumen
