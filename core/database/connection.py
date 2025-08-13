@@ -18,31 +18,99 @@ class DatabaseConnection:
         
     def connect(self):
         """
-        Establece conexión con la base de datos PostgreSQL
+        Establece conexión con la base de datos PostgreSQL de forma portable
         
         Returns:
             Connection: Objeto de conexión a la base de datos o None si hay error
         """
         try:
-            # Priorizar variables de entorno si existen
-            host = os.getenv('DB_HOST') or self.config['DATABASE']['host']
-            port = os.getenv('DB_PORT') or self.config['DATABASE']['port']
-            database = os.getenv('DB_NAME') or self.config['DATABASE']['database']
-            user = os.getenv('DB_USER') or self.config['DATABASE']['user']
-            password = os.getenv('DB_PASSWORD') or self.config['DATABASE']['password']
+            # MODIFICACIÓN: Manejo más robusto de configuración
+            db_config = self._get_database_config()
+            
+            logger.info(f"Intentando conectar a la base de datos: {db_config['host']}:{db_config['port']}")
             
             self.connection = psycopg2.connect(
-                host=host,
-                port=port,
-                database=database,
-                user=user,
-                password=password
+                host=db_config['host'],
+                port=int(db_config['port']),
+                database=db_config['database'],
+                user=db_config['user'],
+                password=db_config['password'],
+                connect_timeout=10  # Timeout de 10 segundos
             )
-            logger.info("Conexión exitosa a la base de datos PostgreSQL")
+            
+            # Verificar que la conexión funcione
+            cursor = self.connection.cursor()
+            cursor.execute("SELECT 1")
+            cursor.close()
+            
+            logger.info("✅ Conexión exitosa a la base de datos PostgreSQL")
             return self.connection
-        except Exception as e:
-            logger.error(f"Error al conectar a la base de datos: {e}")
+            
+        except psycopg2.OperationalError as e:
+            error_msg = str(e)
+            if "could not connect to server" in error_msg.lower():
+                logger.error("❌ No se pudo conectar al servidor PostgreSQL")
+                logger.error("   Verifica que PostgreSQL esté ejecutándose y sea accesible")
+            elif "authentication failed" in error_msg.lower():
+                logger.error("❌ Error de autenticación con la base de datos")
+                logger.error("   Verifica las credenciales de usuario y contraseña")
+            elif "database" in error_msg.lower() and "does not exist" in error_msg.lower():
+                logger.error("❌ La base de datos especificada no existe")
+                logger.error("   Verifica que la base de datos 'sonel_data' exista")
+            else:
+                logger.error(f"❌ Error de conexión PostgreSQL: {e}")
             return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error inesperado al conectar a la base de datos: {e}")
+            return None
+
+    def _get_database_config(self) -> dict:
+        """
+        NUEVO MÉTODO: Obtiene la configuración de base de datos de forma portable
+        
+        Returns:
+            dict: Configuración de base de datos
+        """
+        # Prioridad: Variables de entorno > Archivo de configuración > Valores por defecto
+        
+        # Valores por defecto
+        defaults = {
+            'host': 'localhost',
+            'port': '5432',
+            'database': 'sonel_data',
+            'user': 'postgres',
+            'password': '123456'
+        }
+        
+        # Mapeo de variables de entorno
+        env_mapping = {
+            'host': 'DB_HOST',
+            'port': 'DB_PORT',
+            'database': 'DB_NAME',
+            'user': 'DB_USER',
+            'password': 'DB_PASSWORD'
+        }
+        
+        config = {}
+        
+        # 1. Partir de valores por defecto
+        config.update(defaults)
+        
+        # 2. Sobrescribir con valores del archivo de configuración si existen
+        if self.config and 'DATABASE' in self.config:
+            for key in defaults.keys():
+                if key in self.config['DATABASE']:
+                    config[key] = self.config['DATABASE'][key]
+        
+        # 3. Sobrescribir con variables de entorno si existen (máxima prioridad)
+        for key, env_var in env_mapping.items():
+            env_value = os.getenv(env_var)
+            if env_value:
+                config[key] = env_value
+                logger.info(f"Usando variable de entorno {env_var} para {key}")
+        
+        return config
 
     def get_connection(self):
         """
