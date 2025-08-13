@@ -10,6 +10,7 @@ from pyautogui import moveTo, click
 from pywinauto.keyboard import send_keys
 from config.logger import get_logger
 from core.utils.text_normalize import TextUtils
+from core.utils.file_save import ComponentesGuardado
 from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
 from config.settings import get_full_config, get_all_possible_translations
 
@@ -25,6 +26,8 @@ class SonelExecutor:
         config = get_full_config()
         self.logger = get_logger("pywinauto", f"{__name__}_pywinauto")
         self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
+
+        self.save_file = ComponentesGuardado(logger=self.logger)
 
     def extraer_configuracion_principal_mediciones(self):
         """
@@ -61,6 +64,7 @@ class SonelExecutor:
                         if tipo_control == "CheckBox":
                             componentes_encontrados['select_all'] = control
                             self.logger.info(f"✅ 'Seleccionar todo' encontrado: '{texto}' ({tipo_control})")
+                            self.save_file.guardar_coordenada_componente(control, "CheckBox", "select_all")
                         else:
                             self.logger.warning(f"⚠️ Texto coincide pero tipo incorrecto para 'Seleccionar todo': {tipo_control}")
 
@@ -69,6 +73,7 @@ class SonelExecutor:
                         if tipo_control == "Button":
                             componentes_encontrados['expand_all'] = control
                             self.logger.info(f"✅ 'Expandir todo' encontrado: '{texto}' ({tipo_control})")
+                            self.save_file.guardar_coordenada_componente(control, "Button", "expand_all")
                         else:
                             self.logger.warning(f"⚠️ Texto coincide pero tipo incorrecto para 'Expandir todo': {tipo_control}")
 
@@ -461,6 +466,8 @@ class SonelExecutor:
                         if detalles.get('seleccionado', False):
                             arbol_componentes[f"Seleccionado_Clave_{index}"] = detalles
                             self.logger.info(f"🎯 Elemento seleccionado: '{texto}' - Acción: {detalles.get('accion', 'N/A')}")
+
+                            self.save_file.guardar_coordenada_componente(item, "TreeItem", f"componentes_mediciones_{index}")
                         else:
                             arbol_componentes[f"NoSeleccionado_Clave_{index}"] = detalles
                             self.logger.info(f"⚠️ Elemento clave no seleccionado: '{texto}' - Razón: {detalles.get('accion', 'N/A')}")
@@ -544,6 +551,8 @@ class SonelExecutor:
                         try:
                             detalles = self._log_control_details(tabla, index, tipo_tabla)
 
+                            self.save_file.guardar_coordenada_componente(tabla, tipo_tabla, f"table_{index}")
+
                             # Mover mouse y hacer clic en esquina superior izquierda del rectángulo con offset +3 en X
                             rect = tabla.rectangle()
                             x = rect.left + 3
@@ -591,6 +600,9 @@ class SonelExecutor:
                         detalles = self._log_control_details(texto, index, "Text")
                         if detalles:
                             detalles['contenido_relevante'] = texto_content
+
+                            self.save_file.guardar_coordenada_componente(texto, "Text", f"reports_{index}")
+
                             informes_encontrados[f"Text_Relacionado_{index}"] = detalles
                             index += 1
                             self.logger.info(f"   📋 TEXTO relacionado: {texto_content}")
@@ -651,6 +663,7 @@ class SonelExecutor:
                     if detalles:
                         detalles['metodo_deteccion'] = "Por texto botón multiidioma"
                         detalles['termino_encontrado'] = texto
+                        self.save_file.guardar_coordenada_componente(button, "Button", f"reports_{index}")
 
                         try:
                             self.logger.info(f"🖱️ Haciendo clic en botón de informes: '{texto}'")
@@ -683,6 +696,7 @@ class SonelExecutor:
                             detalles['funcionalidad'] = "Abre vista gráfica del análisis"
                             detalles['metodo_deteccion'] = "Por contenido de texto multiidioma"
                             detalles['termino_encontrado'] = texto_button
+                            self.save_file.guardar_coordenada_componente(button, "Button", f"reports_fallback_{index}")
                             
                             # Detectar si es CSV específicamente
                             if any(term in texto_button.upper() for term in ['CSV']):
@@ -777,6 +791,8 @@ class SonelExecutor:
                         if padre and es_campo_imagenes(padre.window_text(), image_terms):
                             campo_control = ctrl
                             self._log_control_details(ctrl, index=idx, tipo_esperado="Campo Nombre (EditWrapper)")
+                            
+                            self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
                             break
                     except Exception as e:
                         self.logger.warning(f"⚠️ No se pudo evaluar padre de componente Edit #{idx}: {e}")
@@ -856,6 +872,7 @@ class SonelExecutor:
                     if isinstance(ctrl, ButtonWrapper) and es_boton_guardar(ctrl.window_text()):
                         boton_guardar_control = ctrl
                         self._log_control_details(ctrl, index=idx, tipo_esperado="Botón Guardar (multiidioma)")
+                        self.save_file.guardar_coordenada_componente(boton_guardar_control, "ButtonWrapper", "boton_guardar")
                         break
             except Exception as e:
                 self.logger.warning(f"⚠️ Error buscando botón 'Guardar': {e}")
