@@ -111,15 +111,19 @@ class SonelDataExtractorGUI(QMainWindow):
                         tab_text = panel.tab_widget.tabText(i)
                         
                         # Asignar referencias basadas en el nombre del tab
-                        if "General" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                            panel.general_tab_ref = tab_widget
+                        if "General" in tab_text:
+                            if hasattr(tab_widget, 'refresh_data'):
+                                panel.general_tab_ref = tab_widget
+                            # Verificar si tiene el nuevo método de actualización CSV
+                            if hasattr(tab_widget, 'update_after_csv_processing'):
+                                panel.general_tab_csv_update_ref = tab_widget
                         elif "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
                             panel.csv_tab_ref = tab_widget
                         elif "Base de Datos" in tab_text and hasattr(tab_widget, 'refresh_data'):
                             panel.db_tab_ref = tab_widget
             
-            print("Referencias a tabs configuradas correctamente")
-            
+            print("Referencias a tabs configuradas correctamente (incluyendo actualización CSV)")
+        
         except Exception as e:
             print(f"Error configurando referencias a tabs: {e}")
 
@@ -414,6 +418,52 @@ class SonelDataExtractorGUI(QMainWindow):
 
             # Actualizar panel de resultados
             self.status_panel.update_csv_results(csv_results)
+
+            # === Actualizar tab general después del procesamiento CSV ===
+            try:
+                if success and hasattr(self.status_panel, 'execution_summary_panel'):
+                    # Obtener referencia al tab general
+                    execution_panel = self.status_panel.execution_summary_panel
+                    
+                    # Verificar si tiene tab_widget y encontrar el tab general
+                    if hasattr(execution_panel, 'tab_widget'):
+                        for i in range(execution_panel.tab_widget.count()):
+                            tab_widget = execution_panel.tab_widget.widget(i)
+                            tab_text = execution_panel.tab_widget.tabText(i)
+                            
+                            # Si es el tab general, actualizarlo
+                            if "General" in tab_text and hasattr(tab_widget, 'update_after_csv_processing'):
+                                # Preparar datos para actualización del tab general
+                                csv_update_data = {
+                                    'processed_files': csv_results.get('processed_files', 0),
+                                    'total_files': csv_results.get('total_files', 0),
+                                    'errors': csv_results.get('errors', 0),
+                                    'warnings': csv_results.get('warnings', 0),
+                                    'execution_time': csv_results.get('execution_time', '0:00'),
+                                    'status': csv_results.get('status', 'unknown'),
+                                    'extracted_files': extraction_summary.get('extracted_files', 0)
+                                }
+                                
+                                # Actualizar el tab general con los datos CSV
+                                tab_widget.update_after_csv_processing(csv_update_data)
+                                
+                                # Log de la actualización
+                                self.status_panel.add_log_entry(
+                                    f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                                    f"📊 Tab General actualizado con datos CSV"
+                                )
+                                break
+                                
+                # También actualizar los datos estáticos generales
+                self.update_static_data()
+                
+            except Exception as update_error:
+                # Error no crítico - solo log
+                self.status_panel.add_log_entry(
+                    f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                    f"⚠️ Error actualizando tab general: {str(update_error)}"
+                )
+                print(f"Error actualizando tab general después de CSV: {update_error}")
             
         except Exception as e:
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: {str(e)}")
@@ -494,6 +544,55 @@ class SonelDataExtractorGUI(QMainWindow):
                 # Convertir el resumen del controlador al formato GUI
                 db_results = self._convert_summary_to_db_format(summary_data)
                 self.status_panel.update_db_results(db_results)
+
+                # === Actualizar tab general después del procesamiento DB ===
+                try:
+                    if success and hasattr(self.status_panel, 'execution_summary_panel'):
+                        # Obtener referencia al tab general
+                        execution_panel = self.status_panel.execution_summary_panel
+                        
+                        # Verificar si tiene tab_widget y encontrar el tab general
+                        if hasattr(execution_panel, 'tab_widget'):
+                            for i in range(execution_panel.tab_widget.count()):
+                                tab_widget = execution_panel.tab_widget.widget(i)
+                                tab_text = execution_panel.tab_widget.tabText(i)
+                                
+                                # Si es el tab general, actualizarlo
+                                if "General" in tab_text and hasattr(tab_widget, 'update_after_db_processing'):
+                                    # Preparar datos para actualización del tab general
+                                    db_update_data = {
+                                        'uploaded_files': db_results.get('uploaded_files', 0),
+                                        'failed_uploads': db_results.get('failed_uploads', 0),
+                                        'inserted_records': db_results.get('inserted_records', 0),
+                                        'upload_time': db_results.get('upload_time', '0:00'),
+                                        'connection_status': db_results.get('connection_status', 'Desconocido'),
+                                        'data_size': db_results.get('data_size', '0 MB'),
+                                        'success_rate': db_results.get('success_rate', 0),
+                                        'status': db_results.get('status', 'unknown'),
+                                        'total_files': summary_data.get('total_files', 0)
+                                    }
+                                    
+                                    # Actualizar el tab general con los datos DB
+                                    tab_widget.update_after_db_processing(db_update_data)
+                                    
+                                    # Log de la actualización
+                                    self.status_panel.add_log_entry(
+                                        f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                                        f"📊 Tab General actualizado con datos de BD"
+                                    )
+                                    break
+                                    
+                    # También actualizar los datos estáticos generales
+                    self.update_static_data()
+                    
+                except Exception as update_error:
+                    # Error no crítico - solo log
+                    self.status_panel.add_log_entry(
+                        f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                        f"⚠️ Error actualizando tab general: {str(update_error)}"
+                    )
+                    print(f"Error actualizando tab general después de DB: {update_error}")
+
             else:
                 error_message = summary_data.get('error_message', 'Error desconocido en el procesamiento')
             
