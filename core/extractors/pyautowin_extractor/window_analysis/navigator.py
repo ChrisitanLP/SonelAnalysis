@@ -8,6 +8,7 @@ import pyautogui
 from config.logger import get_logger
 from core.utils.text_normalize import TextUtils
 from core.utils.wait_handler import WaitHandler
+from core.utils.file_save import ComponentesGuardado
 from config.settings import get_full_config, get_all_possible_translations
 
 class SonelNavigator:
@@ -21,6 +22,8 @@ class SonelNavigator:
         config = get_full_config()
         self.logger = logger or get_logger("pywinauto", f"{__name__}_pywinauto")
         self.logger.setLevel(getattr(logging, config['LOGGING']['level']))
+
+        self.save_file = ComponentesGuardado(logger=self.logger)
 
     def navegar_configuracion(self):
         """Navega al árbol de configuración y expande 'Configuración 1' - ✅ VERSIÓN MULTIIDIOMA"""
@@ -50,6 +53,7 @@ class SonelNavigator:
                     texto = tree.window_text()
                     if texto and TextUtils.texto_coincide(texto, configuration_texts):
                         self.logger.info(f"✅ TreeItem 'Configuración 1' encontrado: '{texto}'")
+                        self.save_file.guardar_coordenada_componente(tree, "TreeItem", "configuration_1")
                         return self._expandir_configuracion(tree)
                 except Exception as e:
                     self.logger.debug(f"Error procesando TreeItem: {e}")
