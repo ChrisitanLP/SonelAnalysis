@@ -127,7 +127,11 @@ class DbTab(QWidget):
                 
                 conflicts = int(summary_data.get('conflicts', 0))
                 inserted_records = int(summary_data.get('inserted_records', 0))
-                upload_time = str(summary_data.get('upload_time', '0:00'))
+
+                # Formatear tiempo de ejecución
+                upload_time_raw = summary_data.get('upload_time', '0:00')
+                upload_time = self.format_execution_time(upload_time_raw)
+
                 connection_status = str(summary_data.get('connection_status', 'Desconocido'))
                 
                 metrics_values = [
@@ -229,23 +233,72 @@ class DbTab(QWidget):
         success_rate = db_summary.get('success_rate', 0)
         files_color = "#4CAF50" if success_rate >= 90 else "#FF9800" if success_rate >= 70 else "#F44336"
         
+        # Formatear tiempo de ejecución
+        upload_time = db_summary.get('upload_time', '0:00')
+        upload_time_formatted = self.format_execution_time(upload_time)
+        
         return [
-            ("🗄️", "Archivos Subidos", 
-             f"{db_summary.get('uploaded_files', 0)} / {db_summary.get('total_files', 0)}", 
-             files_color),
-            ("⚠️", "Advertencias", 
-             str(db_summary.get('conflicts', 0)), 
-             "#FF9800"),
-            ("❌", "Errores", 
-             str(db_summary.get('failed_uploads', 0)), 
-             "#F44336"),
-            ("📊", "Registros Insertados", 
-             f"{db_summary.get('inserted_records', 0):,}", 
-             "#2196F3"),
-            ("⏱️", "Tiempo Subida", 
-             db_summary.get('upload_time', '0:00'), 
-             "#9C27B0"),
-            ("🔗", "Conexión", 
-             connection_status, 
-             connection_color)
+            ("🗄️", "Archivos Subidos", f"{db_summary.get('uploaded_files', 0)} / {db_summary.get('total_files', 0)}", files_color),
+            ("⚠️", "Advertencias", str(db_summary.get('conflicts', 0)), "#FF9800"),
+            ("❌", "Errores", str(db_summary.get('failed_uploads', 0)), "#F44336"),
+            ("📊", "Registros Insertados", f"{db_summary.get('inserted_records', 0):,}", "#2196F3"),
+            ("⏱️", "Tiempo Subida", upload_time_formatted, "#9C27B0"),
+            ("🔗", "Conexión", connection_status, connection_color)
         ]
+    
+    def format_execution_time(self, time_str):
+        """
+        Formatear tiempo de ejecución para mostrar:
+        - Segundos si < 60s (ej: "45.2s")
+        - Minutos:segundos si >= 60s y < 1h (ej: "1:30")
+        - Horas:minutos:segundos si >= 1h (ej: "1:01:05")
+        """
+        try:
+            if not time_str or time_str in ['0:00', '0', '']:
+                return "0s"
+            
+            # Si ya viene en formato numérico
+            if isinstance(time_str, (int, float)):
+                total_seconds = float(time_str)
+            else:
+                # Convertir string a segundos
+                time_str = str(time_str).strip()
+                
+                # Si contiene ":", es formato H:MM:SS o M:SS
+                if ':' in time_str:
+                    # Separar microsegundos si existen
+                    if '.' in time_str:
+                        time_part, _ = time_str.split('.', 1)
+                    else:
+                        time_part = time_str
+                    
+                    parts = [int(p) for p in time_part.split(':')]
+                    
+                    if len(parts) == 3:  # H:M:S
+                        hours, minutes, seconds = parts
+                        total_seconds = hours * 3600 + minutes * 60 + seconds
+                    elif len(parts) == 2:  # M:S
+                        minutes, seconds = parts
+                        total_seconds = minutes * 60 + seconds
+                    else:
+                        total_seconds = float(time_str.replace(':', ''))
+                else:
+                    # Es un número directo (segundos)
+                    total_seconds = float(time_str)
+            
+            # Formatear según la duración
+            if total_seconds < 60:
+                return f"{int(total_seconds)}s" if total_seconds.is_integer() else f"{total_seconds:.1f}s"
+            elif total_seconds < 3600:
+                minutes = int(total_seconds // 60)
+                seconds = int(total_seconds % 60)
+                return f"{minutes}:{seconds:02d}"
+            else:
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                seconds = int(total_seconds % 60)
+                return f"{hours}:{minutes:02d}:{seconds:02d}"
+                
+        except (ValueError, TypeError) as e:
+            print(f"Error formateando tiempo '{time_str}': {e}")
+            return str(time_str)

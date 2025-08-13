@@ -362,3 +362,243 @@ class GeneralTab(QWidget):
             
         except Exception as e:
             print(f"Error en refresh_data_after_complete_process: {e}")
+
+    def update_after_csv_processing(self, csv_data):
+        """Actualizar tab general después del procesamiento de CSV"""
+        try:
+            if not csv_data:
+                return
+            
+            # Actualizar cards con datos del procesamiento CSV
+            processed_files = csv_data.get('processed_files', 0)
+            total_files = csv_data.get('total_files', 0)
+            errors = csv_data.get('errors', 0)
+            warnings = csv_data.get('warnings', 0)
+            extracted_files = csv_data.get('extracted_files', 0)
+            
+            # Actualizar los primeros 3 cards (Archivos Procesados, Advertencias, Errores)
+            if len(self.general_cards) >= 3:
+                # Card 0: Archivos Procesados
+                self.general_cards[0].update_value(f"{processed_files} / {total_files}")
+                
+                # Card 1: Advertencias  
+                self.general_cards[1].update_value(str(warnings))
+                
+                # Card 2: Errores
+                self.general_cards[2].update_value(str(errors))
+            
+            # Actualizar resumen ejecutivo con información CSV
+            self._update_executive_summary_after_csv(csv_data)
+            
+            # Log interno
+            print(f"Tab General actualizado: {processed_files}/{total_files} archivos, "
+                f"{errors} errores, {warnings} advertencias")
+                
+        except Exception as e:
+            print(f"Error en update_after_csv_processing: {e}")
+
+    def _update_executive_summary_after_csv(self, csv_data):
+        """Actualizar resumen ejecutivo con datos frescos de CSV"""
+        try:
+            # Recargar datos JSON para obtener información más reciente
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
+            # Obtener datos combinados (JSON + datos recientes de CSV)
+            csv_summary = self.csv_data.get('csv_summary', {})
+            etl_summary = self.etl_data.get('overall_summary', {})
+            
+            # Usar datos más recientes si están disponibles
+            processed_files = max(csv_data.get('processed_files', 0), 
+                                csv_summary.get('processed_files', 0))
+            total_files = max(csv_data.get('total_files', 0), 
+                            csv_summary.get('total_files', 0))
+            errors = max(csv_data.get('errors', 0), 
+                        csv_summary.get('errors', 0))
+            warnings = max(csv_data.get('warnings', 0), 
+                        csv_summary.get('warnings', 0))
+            execution_time = csv_data.get('execution_time', 
+                                        csv_summary.get('execution_time', '0:00'))
+            
+            # Calcular porcentaje de completado
+            completion_percentage = (processed_files / total_files * 100) if total_files > 0 else 0
+            
+            # Determinar estado basado en errores
+            if errors > 0:
+                status_text = "⚠️ Completado con errores"
+            elif warnings > 0:
+                status_text = "⚠️ Completado con advertencias"
+            elif processed_files > 0:
+                status_text = "✅ Procesamiento exitoso"
+            else:
+                status_text = "ℹ️ Sin cambios"
+            
+            # Generar resumen actualizado
+            updated_summary = f"""
+                <b>Estado General:</b> {status_text} ({completion_percentage:.1f}% completado)<br>
+                <b>Archivos Detectados:</b> {total_files} archivos .pqm<br>
+                <b>Procesados Exitosamente:</b> {processed_files} archivos<br>
+                <b>Con Advertencias:</b> {warnings} archivos<br>
+                <b>Con Errores:</b> {errors} archivos<br><br>
+                <b>Performance CSV:</b><br>
+                - Tiempo extracción: {execution_time}<br>
+                - Archivos nuevos: {csv_data.get('extracted_files', 0)}<br>
+                - Estado: {'✅ Completado' if csv_data.get('status') == 'success' else '⚠️ Con problemas'}<br><br>
+                <b>Base de Datos:</b><br>
+                - Estado conexión: {etl_summary.get('connection_status', 'Pendiente')}<br>
+                - Tamaño procesado: {etl_summary.get('data_size', 'Pendiente')}<br><br>
+                <b>Última Actualización CSV:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """
+            
+            # Actualizar label de resumen
+            if hasattr(self, 'summary_label'):
+                self.summary_label.setText(updated_summary)
+            
+            # Actualizar historial con info del procesamiento CSV
+            if csv_data.get('extracted_files', 0) > 0:
+                history_text = f"""
+                    <b>✅ Procesamiento CSV completado</b><br>
+                    <b>Archivos nuevos procesados:</b> {csv_data.get('extracted_files', 0)}<br>
+                    <b>Total acumulado:</b> {processed_files}/{total_files}<br>
+                    <b>Tiempo de procesamiento:</b> {execution_time}<br>
+                    <b>Estado:</b> {status_text}
+                """
+            else:
+                history_text = f"""
+                    <b>ℹ️ Procesamiento CSV verificado</b><br>
+                    <b>Archivos ya procesados:</b> {processed_files}<br>
+                    <b>Sin archivos nuevos para procesar</b><br>
+                    <b>Estado:</b> Sistema actualizado
+                """
+            
+            if hasattr(self, 'general_history_label'):
+                self.general_history_label.setText(history_text)
+                
+        except Exception as e:
+            print(f"Error actualizando resumen ejecutivo después de CSV: {e}")
+
+    def update_after_db_processing(self, db_data):
+        """Actualizar tab general después del procesamiento de base de datos"""
+        try:
+            if not db_data:
+                return
+            
+            # Actualizar cards con datos del procesamiento DB
+            uploaded_files = db_data.get('uploaded_files', 0)
+            total_files = db_data.get('total_files', uploaded_files)  # Usar uploaded como fallback
+            inserted_records = db_data.get('inserted_records', 0)
+            failed_uploads = db_data.get('failed_uploads', 0)
+            data_size = db_data.get('data_size', '0 MB')
+            
+            # Actualizar cards específicas de BD (cards 3, 4 y 5)
+            if len(self.general_cards) >= 6:
+                # Card 3: Archivos Subidos (🗄️)
+                self.general_cards[3].update_value(f"{uploaded_files} / {max(total_files, uploaded_files)}")
+                
+                # Card 4: Registros Totales (📊) 
+                self.general_cards[4].update_value(f"{inserted_records:,}")
+                
+                # Card 5: Tamaño Procesado (💾)
+                self.general_cards[5].update_value(data_size)
+            
+            # Actualizar resumen ejecutivo con información DB
+            self._update_executive_summary_after_db(db_data)
+            
+            # Log interno
+            print(f"Tab General actualizado después de DB: {uploaded_files} archivos subidos, "
+                f"{inserted_records:,} registros, {data_size}")
+                
+        except Exception as e:
+            print(f"Error en update_after_db_processing: {e}")
+
+    def _update_executive_summary_after_db(self, db_data):
+        """Actualizar resumen ejecutivo con datos frescos de BD"""
+        try:
+            # Recargar datos JSON para obtener información más reciente
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
+            # Obtener datos combinados (JSON + datos recientes de DB)
+            csv_summary = self.csv_data.get('csv_summary', {})
+            etl_summary = self.etl_data.get('overall_summary', {})
+            
+            # Usar datos más recientes si están disponibles
+            uploaded_files = max(db_data.get('uploaded_files', 0), 
+                            etl_summary.get('db_uploaded', 0))
+            inserted_records = max(db_data.get('inserted_records', 0), 
+                                etl_summary.get('data_processed', 0))
+            connection_status = db_data.get('connection_status', 
+                                        etl_summary.get('connection_status', 'Desconocido'))
+            data_size = db_data.get('data_size', etl_summary.get('data_size', '0 MB'))
+            upload_time = db_data.get('upload_time', etl_summary.get('total_time', '0:00'))
+            success_rate = db_data.get('success_rate', 0)
+            
+            # Datos CSV para mantener contexto completo
+            processed_files = csv_summary.get('processed_files', 0)
+            total_files = csv_summary.get('total_files', 0)
+            csv_errors = csv_summary.get('errors', 0)
+            csv_warnings = csv_summary.get('warnings', 0)
+            csv_time = csv_summary.get('execution_time', '0:00')
+            
+            # Calcular porcentaje de completado total
+            completion_percentage = (processed_files / total_files * 100) if total_files > 0 else 100
+            
+            # Determinar estado basado en el procesamiento DB
+            db_errors = db_data.get('failed_uploads', 0)
+            if db_errors > 0:
+                status_text = "⚠️ BD completada con errores"
+            elif uploaded_files > 0:
+                status_text = "✅ BD actualizada exitosamente"
+            elif success_rate >= 100:
+                status_text = "ℹ️ BD sin cambios (ya actualizada)"
+            else:
+                status_text = "⚠️ BD con problemas"
+            
+            # Generar resumen actualizado que incluya ambas fases
+            updated_summary = f"""
+                <b>Estado General:</b> {status_text} ({completion_percentage:.1f}% completado)<br>
+                <b>Archivos Detectados:</b> {total_files} archivos .pqm<br>
+                <b>Procesados Exitosamente:</b> {processed_files} archivos<br>
+                <b>Con Advertencias CSV:</b> {csv_warnings} archivos<br>
+                <b>Con Errores:</b> {csv_errors + db_errors} archivos<br><br>
+                <b>Performance:</b><br>
+                - Tiempo extracción CSV: {csv_time}<br>
+                - Tiempo carga BD: {upload_time}<br>
+                - Velocidad promedio: {csv_summary.get('avg_speed', '0 archivos/min')}<br>
+                - Registros procesados: {inserted_records:,}<br><br>
+                <b>Base de Datos:</b><br>
+                - Estado conexión: {connection_status}<br>
+                - Archivos subidos: {uploaded_files}<br>
+                - Tamaño procesado: {data_size}<br>
+                - Tasa de éxito: {success_rate}%<br><br>
+                <b>Última Actualización BD:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+            """
+            
+            # Actualizar label de resumen
+            if hasattr(self, 'summary_label'):
+                self.summary_label.setText(updated_summary)
+            
+            # Actualizar historial con info del procesamiento BD
+            if uploaded_files > 0:
+                history_text = f"""
+                    <b>✅ Procesamiento BD completado</b><br>
+                    <b>Archivos subidos:</b> {uploaded_files}<br>
+                    <b>Registros insertados:</b> {inserted_records:,}<br>
+                    <b>Tiempo de carga:</b> {upload_time}<br>
+                    <b>Tasa de éxito:</b> {success_rate}%<br>
+                    <b>Estado conexión:</b> {connection_status}
+                """
+            else:
+                history_text = f"""
+                    <b>ℹ️ Procesamiento BD verificado</b><br>
+                    <b>Sin archivos nuevos para subir</b><br>
+                    <b>Base de datos actualizada</b><br>
+                    <b>Estado conexión:</b> {connection_status}<br>
+                    <b>Sistema sincronizado</b>
+                """
+            
+            if hasattr(self, 'general_history_label'):
+                self.general_history_label.setText(history_text)
+                
+        except Exception as e:
+            print(f"Error actualizando resumen ejecutivo después de BD: {e}")
