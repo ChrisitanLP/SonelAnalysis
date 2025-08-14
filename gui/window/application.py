@@ -223,96 +223,7 @@ class SonelDataExtractorGUI(QMainWindow):
         """Aplicar tema claro u oscuro"""
         stylesheet = self.theme_manager.get_stylesheet(self.is_dark_mode)
         self.setStyleSheet(stylesheet)
-        
-    def select_folder(self):
-        """Seleccionar carpeta de archivos .pqm702, .pqm710 y .pqm711"""
-        try:
-            folder = QFileDialog.getExistingDirectory(
-                self, 
-                "Seleccionar carpeta con archivos .pqm",
-                "",
-                QFileDialog.ShowDirsOnly | QFileDialog.DontResolveSymlinks
-            )
-            
-            if folder:
-                self.selected_folder = folder
-                
-                # Mostrar mensaje de procesamiento inmediatamente
-                self.control_panel.update_folder_info("🔍 Analizando carpeta seleccionada...")
-                
-                # Procesar información de la carpeta de forma segura
-                try:
-                    folder_info = self._get_folder_info_safe(folder)
-                    
-                    if 'error' in folder_info:
-                        info_text = f"❌ Error: {folder_info['error']}"
-                    else:
-                        count = folder_info['count']
-                        files_list = folder_info.get('files', [])
-                        
-                        if count > 0:
-                            # Mostrar información detallada
-                            info_text = f"📂 Carpeta seleccionada:\n{folder}\n\n✅ {count} archivo(s) .pqm detectado(s)"
-                            
-                            # Agregar ejemplos de archivos si hay muchos
-                            if len(files_list) > 5:
-                                info_text += f"\n\nEjemplos:\n• " + "\n• ".join(files_list[:3])
-                                info_text += f"\n... y {len(files_list) - 3} más"
-                            elif files_list:
-                                info_text += f"\n\nArchivos:\n• " + "\n• ".join(files_list)
-                        else:
-                            info_text = f"📂 Carpeta seleccionada:\n{folder}\n\n⚠️ No se encontraron archivos .pqm válidos"
-                    
-                    self.control_panel.update_folder_info(info_text)
-                    
-                except Exception as e:
-                    error_msg = f"❌ Error procesando carpeta: {str(e)}"
-                    self.control_panel.update_folder_info(error_msg)
-                    print(f"Error en select_folder: {e}")
-                    
-        except Exception as e:
-            error_msg = f"❌ Error seleccionando carpeta: {str(e)}"
-            self.control_panel.update_folder_info(error_msg)
-            print(f"Error crítico en select_folder: {e}")
 
-    def _get_folder_info_safe(self, folder_path):
-        """
-        Versión segura para obtener información de carpeta sin depender del controlador
-        """
-        try:
-            if not os.path.exists(folder_path):
-                return {"error": "La carpeta no existe", "count": 0, "files": []}
-            
-            if not os.path.isdir(folder_path):
-                return {"error": "La ruta no es una carpeta válida", "count": 0, "files": []}
-            
-            # Extensiones válidas
-            valid_extensions = ('.pqm702', '.pqm710', '.pqm711')
-            
-            # Obtener archivos válidos de forma segura
-            files = []
-            try:
-                for filename in os.listdir(folder_path):
-                    if filename.lower().endswith(valid_extensions):
-                        # Verificar que sea un archivo y no un directorio
-                        full_path = os.path.join(folder_path, filename)
-                        if os.path.isfile(full_path):
-                            files.append(filename)
-            except PermissionError:
-                return {"error": "Sin permisos para leer la carpeta", "count": 0, "files": []}
-            except Exception as e:
-                return {"error": f"Error leyendo carpeta: {str(e)}", "count": 0, "files": []}
-            
-            return {
-                "count": len(files),
-                "files": sorted(files),  # Ordenar para mejor presentación
-                "path": folder_path,
-                "valid_extensions": valid_extensions
-            }
-            
-        except Exception as e:
-            return {"error": f"Error inesperado: {str(e)}", "count": 0, "files": []}
-            
     def generate_csv(self):
         """Generar archivos CSV usando el controlador"""
         
@@ -917,3 +828,21 @@ class SonelDataExtractorGUI(QMainWindow):
         else:
             self.progress_timer.stop()
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Proceso completado exitosamente")
+
+    def closeEvent(self, event):
+        """Manejar cierre de la aplicación - limpiar recursos"""
+        try:
+            # Limpiar el analyzer de carpetas
+            if hasattr(self.control_panel, 'cleanup_folder_analyzer'):
+                self.control_panel.cleanup_folder_analyzer()
+            
+            # Limpiar otros recursos si existen
+            if hasattr(self, 'progress_timer') and self.progress_timer.isActive():
+                self.progress_timer.stop()
+                
+            print("Aplicación cerrada correctamente")
+            event.accept()
+            
+        except Exception as e:
+            print(f"Error al cerrar aplicación: {e}")
+            event.accept()
