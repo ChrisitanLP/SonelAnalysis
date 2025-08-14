@@ -1,10 +1,10 @@
 import os
 import json
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel
 from PyQt5.QtCore import Qt
-from gui.components.panels.modules.general_tab import GeneralTab
-from gui.components.panels.modules.csv_tab import CsvTab
 from gui.components.panels.modules.db_tab import DbTab
+from gui.components.panels.modules.csv_tab import CsvTab
+from gui.components.panels.modules.general_tab import GeneralTab
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTabWidget, QLabel
 
 class ExecutionSummaryPanel(QWidget):
     def __init__(self, parent=None):

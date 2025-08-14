@@ -3,12 +3,16 @@ from gui.components.cards.modern_card import ModernCard
 from gui.components.controls.action_button import ActionButton
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar
 from gui.utils.ui_helper import UIHelpers
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, 
+                             QHBoxLayout, QFileDialog, QApplication)
+from gui.utils.folder_analyzer import FolderAnalyzer
 
 class ControlPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.parent_app = parent
         self.setObjectName("ControlPanel")
+        self.folder_analyzer = None
         self.init_ui()
         
     def init_ui(self):
@@ -26,13 +30,14 @@ class ControlPanel(QWidget):
         # Info de carpeta
         self.folder_info = QLabel("📂 Ninguna carpeta seleccionada")
         self.folder_info.setObjectName("FolderInfo")
-        self.folder_info.setMinimumHeight(60)
-        self.folder_info.setAlignment(Qt.AlignCenter)
+        self.folder_info.setFixedHeight(65)  # Altura fija en lugar de mínima
+        self.folder_info.setAlignment(Qt.AlignCenter | Qt.AlignTop)  # Alinear arriba-izquierda
         self.folder_info.setWordWrap(True)
+        self.folder_info.setScaledContents(False)
         
         # Botón seleccionar
         self.select_folder_btn = ActionButton("Seleccionar Carpeta PQM", "📁", "secondary")
-        self.select_folder_btn.clicked.connect(self.parent_app.select_folder)
+        self.select_folder_btn.clicked.connect(self.select_folder)
         
         file_layout.addWidget(self.folder_info)
         file_layout.addWidget(self.select_folder_btn)
@@ -44,7 +49,7 @@ class ControlPanel(QWidget):
         actions_content = QWidget()
         actions_layout = QVBoxLayout(actions_content)
         actions_layout.setContentsMargins(0, 0, 0, 0)
-        actions_layout.setSpacing(12)
+        actions_layout.setSpacing(10)
         
         # Botones de acción
         self.csv_btn = ActionButton("Generar Archivos CSV", "📊", "secondary")
@@ -59,7 +64,7 @@ class ControlPanel(QWidget):
         
         actions_layout.addWidget(self.csv_btn)
         actions_layout.addWidget(self.upload_btn)
-        actions_layout.addSpacing(8)
+        actions_layout.addSpacing(6)
         actions_layout.addWidget(self.execute_all_btn)
         
         actions_card.layout().addWidget(actions_content)
@@ -103,7 +108,33 @@ class ControlPanel(QWidget):
         panel_layout.addStretch()
         
     def update_folder_info(self, text):
-        self.folder_info.setText(text)
+        """Actualizar información de carpeta - Versión optimizada"""
+        try:
+            # Truncar texto si es muy largo para mantener diseño
+            max_chars = 120  # Límite de caracteres
+            if len(text) > max_chars:
+                # Encontrar el último espacio antes del límite
+                truncate_pos = text.rfind(' ', 0, max_chars - 3)
+                if truncate_pos == -1:  # No hay espacios, cortar directamente
+                    truncate_pos = max_chars - 3
+                text = text[:truncate_pos] + "..."
+            
+            self.folder_info.setText(text)
+            
+            # Procesar eventos de forma más eficiente
+            QApplication.processEvents()
+            
+            # Ajustar altura de forma más inteligente
+            text_length = len(text)
+            if text_length > 80:  # Texto muy largo
+                self.folder_info.setMinimumHeight(140)
+            elif text_length > 50:  # Texto mediano
+                self.folder_info.setMinimumHeight(100)
+            else:  # Texto corto
+                self.folder_info.setMinimumHeight(60)
+                
+        except Exception as e:
+            print(f"Error actualizando folder info: {e}")
         
     def get_progress_value(self):
         return self.progress_bar.value()
@@ -274,3 +305,90 @@ class ControlPanel(QWidget):
         """Iniciar el progreso con un mensaje inicial"""
         self.set_progress_value(0)
         self.update_progress_label(initial_message)
+
+    def select_folder(self):
+        """Seleccionar carpeta de archivos .pqm - Versión optimizada sin bloqueos"""
+        try:
+            # Detener cualquier análisis previo en progreso
+            if self.folder_analyzer and self.folder_analyzer.isRunning():
+                self.folder_analyzer.stop_analysis()
+            
+            # Abrir diálogo de selección
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+            folder = QFileDialog.getExistingDirectory(
+                self,
+                "Seleccionar carpeta con archivos .pqm",
+                self.parent_app.selected_folder if hasattr(self.parent_app, 'selected_folder') and self.parent_app.selected_folder else "",
+                options
+            )
+            
+            if folder:
+                # Actualizar carpeta seleccionada inmediatamente
+                self.parent_app.selected_folder = folder
+                
+                # Mostrar estado de análisis
+                self.update_folder_info(f"📂 {folder}\n🔄 Analizando contenido...")
+                
+                # Crear y configurar worker thread
+                self.folder_analyzer = FolderAnalyzer(folder)
+                self.folder_analyzer.analysis_completed.connect(self._on_analysis_completed)
+                self.folder_analyzer.analysis_failed.connect(self._on_analysis_failed)
+                
+                # Iniciar análisis en segundo plano
+                self.folder_analyzer.start()
+                
+            else:
+                # Usuario canceló - restaurar estado anterior
+                if hasattr(self.parent_app, 'selected_folder') and self.parent_app.selected_folder:
+                    self.update_folder_info(f"📂 {self.parent_app.selected_folder}")
+                else:
+                    self.update_folder_info("📂 Ninguna carpeta seleccionada")
+                        
+        except Exception as e:
+            error_msg = f"❌ Error al abrir selector: {str(e)}"
+            self.update_folder_info(error_msg)
+            print(f"Error crítico en select_folder: {e}")
+
+    def _on_analysis_completed(self, result):
+        """Callback cuando el análisis se completa exitosamente"""
+        try:
+            folder_path = result['path']
+            file_count = result['count']
+            max_reached = result['max_reached']
+            
+            # Construir mensaje de resultado
+            if file_count > 0:
+                info_text = f"📂 {folder_path}\n"
+            else:
+                info_text = f"📂 {folder_path}\n⚠️ No se encontraron archivos válidos"
+            
+            self.update_folder_info(info_text)
+            
+            # Log del resultado
+            QApplication.processEvents()  # Procesar eventos pendientes
+            
+        except Exception as e:
+            self._on_analysis_failed(f"Error procesando resultado: {str(e)}")
+
+    def _on_analysis_failed(self, error_message):
+        """Callback cuando el análisis falla"""
+        try:
+            if hasattr(self.parent_app, 'selected_folder') and self.parent_app.selected_folder:
+                folder_name = self.parent_app.selected_folder.split('/')[-1] or self.parent_app.selected_folder.split('\\')[-1]
+                short_text = f"📂 {folder_name}\n❌ Error en análisis"
+                full_text = f"📂 {self.parent_app.selected_folder}\nError: {error_message}"
+            else:
+                short_text = "❌ Error en análisis"
+                full_text = f"Error: {error_message}"
+                
+            self.set_folder_info_with_tooltip(short_text, full_text)
+            print(f"Error en análisis de carpeta: {error_message}")
+            
+        except Exception as e:
+            print(f"Error crítico en callback de fallo: {e}")
+
+    def cleanup_folder_analyzer(self):
+        """Limpiar resources del analyzer al cerrar la aplicación"""
+        if self.folder_analyzer and self.folder_analyzer.isRunning():
+            self.folder_analyzer.stop_analysis()

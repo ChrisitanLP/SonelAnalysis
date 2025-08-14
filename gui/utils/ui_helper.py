@@ -100,30 +100,6 @@ class UIHelpers:
                         padding: 10px;
                     }
                     
-                    QMessageBox QPushButton {
-                        background-color: #1976D2;
-                        color: white;
-                        border: none;
-                        border-radius: 6px;
-                        padding: 8px 20px;
-                        font-size: 13px;
-                        font-weight: 600;
-                        min-width: 80px;
-                    }
-                    
-                    QMessageBox QPushButton:hover {
-                        background-color: #1565C0;
-                    }
-                    
-                    QMessageBox QPushButton:pressed {
-                        background-color: #0d47a1;
-                    }
-                    
-                    QMessageBox QPushButton:default {
-                        background-color: #1976D2;
-                        border: 2px solid #42A5F5;
-                    }
-                    
                     QMessageBox QLabel#qt_msgbox_label {
                         font-weight: 600;
                         font-size: 15px;

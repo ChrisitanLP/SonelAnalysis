@@ -95,12 +95,15 @@ class ThemeManager:
                 }
                 
                 QLabel#FolderInfo {
-                    font-size: 13px;
+                    font-size: 12px;
                     color: #b0b0b0;
-                    padding: 12px;
+                    padding: 8px 12px;
                     background-color: #3d3d3d;
                     border: 1px solid #505050;
                     border-radius: 8px;
+                    line-height: 1.3;
+                    min-height: 80px;
+                    max-height: 80px;
                 }
                 
                 QLabel#ProgressLabel {
@@ -539,12 +542,15 @@ class ThemeManager:
                 }
                 
                 QLabel#FolderInfo {
-                    font-size: 13px;
+                    font-size: 12px;
                     color: #666666;
-                    padding: 12px;
+                    padding: 8px 12px;
                     background-color: #f8f9fa;
                     border: 1px solid #e1e5e9;
                     border-radius: 8px;
+                    line-height: 1.3;
+                    min-height: 80px;
+                    max-height: 80px;
                 }
                 
                 QLabel#ProgressLabel {

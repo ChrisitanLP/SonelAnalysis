@@ -1,13 +1,20 @@
 # componentes_guardado.py
 import os
 import json
+from pathlib import Path
 from datetime import datetime
+from config.settings import get_full_config, load_config
 
 class ComponentesGuardado:
-    def __init__(self, logger=None, ruta_salida="componentes_configuracion.json", ruta_coordenadas="component_positions.json"):
+    def __init__(self, logger=None, ruta_salida="componentes_configuracion.json", ruta_coordenadas=None):
         self.logger = logger or self._get_default_logger()
+
+        # Cargar configuración global
+        config_file = 'config.ini'
+        self.config = load_config(config_file)
+
         self.ruta_salida = ruta_salida
-        self.ruta_coordenadas = ruta_coordenadas
+        self.ruta_coordenadas = ruta_coordenadas or os.path.join(self.config['PATHS']['output_dir'], "component_positions.json")
     
     def _get_default_logger(self):
         import logging
