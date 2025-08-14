@@ -288,7 +288,10 @@ class DbTab(QWidget):
             
             # Formatear según la duración
             if total_seconds < 60:
-                return f"{int(total_seconds)}s" if total_seconds.is_integer() else f"{total_seconds:.1f}s"
+                if isinstance(total_seconds, float):
+                    return f"{int(total_seconds)}s" if total_seconds.is_integer() else f"{total_seconds:.1f}s"
+                else: 
+                    return f"{total_seconds}s"
             elif total_seconds < 3600:
                 minutes = int(total_seconds // 60)
                 seconds = int(total_seconds % 60)
