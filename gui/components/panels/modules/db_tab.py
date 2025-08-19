@@ -10,7 +10,7 @@ class DbTab(QWidget):
         super().__init__(parent)
         self.parent_app = parent
         self.setObjectName("DbTab")
-        self.json_file_path = ".\\data\\archivos_csv\\resumen_etl.json"
+        self.json_file_path = ".\\exports\\resumen_etl.json"
         self.init_ui()
         
     def init_ui(self):

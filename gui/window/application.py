@@ -129,8 +129,8 @@ class SonelDataExtractorGUI(QMainWindow):
 
     def load_summary_data(self):
         """Cargar datos de resumen desde archivos JSON"""
-        csv_data = self.load_json_file("data/archivos_csv/resumen_csv.json")
-        etl_data = self.load_json_file("data/archivos_csv/resumen_etl.json")
+        csv_data = self.load_json_file("exports/resumen_csv.json")
+        etl_data = self.load_json_file("exports/resumen_etl.json")
         return csv_data, etl_data
 
     def load_json_file(self, file_path):
@@ -341,6 +341,13 @@ class SonelDataExtractorGUI(QMainWindow):
                         for i in range(execution_panel.tab_widget.count()):
                             tab_widget = execution_panel.tab_widget.widget(i)
                             tab_text = execution_panel.tab_widget.tabText(i)
+
+                            if "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                                tab_widget.refresh_data()  # Esto actualizará el botón dinámicamente
+                                self.status_panel.add_log_entry(
+                                    f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                                    f"🔄 Tab CSV actualizado - Botón reprocesamiento verificado"
+                                )
                             
                             # Si es el tab general, actualizarlo
                             if "General" in tab_text and hasattr(tab_widget, 'update_after_csv_processing'):
@@ -720,16 +727,20 @@ class SonelDataExtractorGUI(QMainWindow):
         try:
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔄 Actualizando información de tabs...")
             
-            # Refrescar CSV Tab
-            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'refresh_all_tabs'):
-                self.status_panel.execution_summary_panel.refresh_all_tabs()
-                print("CSV Tab actualizado")
+            # Refrescar CSV Tab CON BOTÓN DE REPROCESAMIENTO
+            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'tab_widget'):
+                execution_panel = self.status_panel.execution_summary_panel
+                for i in range(execution_panel.tab_widget.count()):
+                    tab_widget = execution_panel.tab_widget.widget(i)
+                    tab_text = execution_panel.tab_widget.tabText(i)
+                    
+                    if "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
+                        tab_widget.refresh_data()  # Actualiza métricas Y botón de reprocesamiento
+                        print("CSV Tab actualizado con botón de reprocesamiento")
+                    elif hasattr(tab_widget, 'refresh_data'):
+                        tab_widget.refresh_data()
+                        print(f"{tab_text} Tab actualizado")
             
-            # Refrescar DB Tab  
-            if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'refresh_all_tabs'):
-                self.status_panel.execution_summary_panel.refresh_all_tabs()
-                print("DB Tab actualizado")
-                
             # Refrescar General Tab con método específico para proceso completo
             if hasattr(self.status_panel, 'execution_summary_panel'):
                 if hasattr(self.status_panel.execution_summary_panel, 'refresh_data_after_complete_process'):
@@ -746,7 +757,7 @@ class SonelDataExtractorGUI(QMainWindow):
         except Exception as refresh_error:
             print(f"Error refrescando tabs después del proceso completo: {refresh_error}")
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Error actualizando información de tabs")
-
+            
     def update_general_summary(self):
         """Actualizar resumen general con datos reales desde JSON"""
         

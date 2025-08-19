@@ -75,7 +75,7 @@ class GeneralTab(QWidget):
         
     def load_csv_data(self):
         """Cargar datos del resumen CSV desde el archivo JSON"""
-        json_path = "data/archivos_csv/resumen_csv.json"
+        json_path = "exports/resumen_csv.json"
         
         try:
             if os.path.exists(json_path):
@@ -90,7 +90,7 @@ class GeneralTab(QWidget):
 
     def load_etl_data(self):
         """Cargar datos del resumen ETL desde el archivo JSON"""
-        json_path = "data/archivos_csv/resumen_etl.json"
+        json_path = "exports/resumen_etl.json"
         
         try:
             if os.path.exists(json_path):

@@ -61,11 +61,8 @@ class CsvTab(QWidget):
         layout.addWidget(csv_metrics_widget)
 
         # === BOTÓN DE REPROCESAR SI HAY ERRORES ===
-        if summary.get('errors', 0) > 0:
-            self.reprocess_button = QPushButton("🔁 Reprocesar archivos")
-            self.reprocess_button.setStyleSheet("padding: 8px; background-color: #F44336; color: white; border-radius: 6px;")
-            self.reprocess_button.clicked.connect(self.confirm_reprocess_errors)
-            layout.addWidget(self.reprocess_button, alignment=Qt.AlignLeft)
+        current_errors = summary.get('errors', 0)
+        self._update_reprocess_button_visibility(current_errors > 0)
         
         # === TABLA DE ARCHIVOS PROCESADOS ===
         files_card = ModernCard("Detalle de Archivos Procesados")
@@ -80,9 +77,37 @@ class CsvTab(QWidget):
         files_card.layout().addWidget(self.csv_files_table)
         layout.addWidget(files_card)
 
+    def _update_reprocess_button_visibility(self, has_errors):
+        """Actualiza la visibilidad del botón de reprocesamiento según errores"""
+        try:
+            # Remover botón existente si existe
+            if hasattr(self, 'reprocess_button'):
+                self.reprocess_button.setParent(None)
+                self.reprocess_button.deleteLater()
+                delattr(self, 'reprocess_button')
+            
+            # Crear botón si hay errores
+            if has_errors:
+                self.reprocess_button = QPushButton("🔁 Reprocesar archivos con errores")
+                self.reprocess_button.setStyleSheet(
+                    "padding: 8px; background-color: #F44336; color: white; border-radius: 6px; font-weight: bold;"
+                )
+                self.reprocess_button.clicked.connect(self.confirm_reprocess_errors)
+                
+                # Insertar el botón después de las métricas (posición 1)
+                layout = self.layout()
+                layout.insertWidget(1, self.reprocess_button, alignment=Qt.AlignLeft)
+                
+                print(f"✅ Botón de reprocesamiento creado - Errores detectados")
+            else:
+                print("ℹ️ No hay errores - Botón de reprocesamiento no necesario")
+                
+        except Exception as e:
+            print(f"Error actualizando botón de reprocesamiento: {e}")
+
     def load_csv_summary(self):
         """Cargar datos del resumen CSV desde el archivo JSON"""
-        json_path = "data/archivos_csv/resumen_csv.json"
+        json_path = "exports/resumen_csv.json"
         
         try:
             if os.path.exists(json_path):
@@ -136,6 +161,9 @@ class CsvTab(QWidget):
             if i < len(self.csv_cards):
                 self.csv_cards[i].update_value(value)
         
+        current_errors = summary.get('errors', 0)
+        self._update_reprocess_button_visibility(current_errors > 0)
+
         # Actualizar tabla
         files_data = self.csv_data.get('files_processed', [])
         self.populate_files_table(self.csv_files_table, files_data)
@@ -225,6 +253,7 @@ class CsvTab(QWidget):
                         self.csv_cards[i].update_value(str(value))
                         
                 print(f"✅ CSV Cards actualizadas: {metrics_values}")
+                self._update_reprocess_button_visibility(errors > 0)
                             
             except Exception as e:
                 print(f"Error actualizando métricas CSV: {e}")
