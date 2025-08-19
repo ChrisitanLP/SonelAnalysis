@@ -85,10 +85,29 @@ class VoltageTransformer:
                 
                 try:
                     if df[source_col].dtype == object:  # Si es string
-                        # Extraer valores numéricos del texto incluyendo el signo negativo
-                        # Patrón mejorado para capturar: signo opcional + dígitos + punto decimal opcional + más dígitos
-                        values = df[source_col].astype(str).str.replace(',', '.').str.extract(r'(-?[\d\.]+)')[0]
-                        return pd.to_numeric(values, errors='coerce')
+                        # Convertir la serie a string y manejar notación científica y decimales
+                        values_series = df[source_col].astype(str)
+                        
+                        # Reemplazar comas por puntos para decimales
+                        values_series = values_series.str.replace(',', '.')
+                        
+                        # Patrón mejorado para capturar números incluyendo notación científica
+                        # Captura: signo opcional + dígitos + punto decimal opcional + más dígitos + notación científica opcional
+                        pattern = r'(-?[\d\.]+(?:[eE][+-]?\d+)?)'
+                        values = values_series.str.extract(pattern)[0]
+                        
+                        # Convertir a numérico, manejando automáticamente la notación científica
+                        numeric_values = pd.to_numeric(values, errors='coerce')
+                        
+                        # Log para debug si hay valores en notación científica
+                        scientific_notation = values_series[values_series.str.contains(r'[eE][+-]?\d+', na=False, regex=True)]
+                        if not scientific_notation.empty:
+                            logger.debug(f"Valores en notación científica encontrados en columna {source_col}: {len(scientific_notation)} valores")
+                            # Mostrar algunos ejemplos de conversión
+                            for i, (original, converted) in enumerate(zip(scientific_notation.head(3), numeric_values[scientific_notation.index[:3]])):
+                                logger.debug(f"  Ejemplo {i+1}: '{original}' -> {converted}")
+                        
+                        return numeric_values
                     else:
                         # Ya es numérico
                         return df[source_col]

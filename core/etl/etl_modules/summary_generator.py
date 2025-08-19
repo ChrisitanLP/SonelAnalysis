@@ -241,16 +241,16 @@ class SummaryGenerator:
         try:
             # Definir archivo de salida por defecto
             if output_file is None:
-                data_dir = self.config['PATHS']['data_dir']
-                output_file = os.path.join(data_dir, f"resumen_etl.json")
-            
+                export_dir = self.config['PATHS']['export_dir']
+                output_file = os.path.join(export_dir, f"resumen_etl.json")
+                
             # Obtener resúmenes
             complete_summary = self.get_complete_summary_for_gui()
             db_summary = self.get_db_summary_for_gui()
             csv_summary = self.get_csv_summary_for_gui()
             stats = self.registry.get_processing_stats()
             
-            # NUEVA LÓGICA: Obtener archivos fallidos
+            # Obtener archivos fallidos
             error_files = self.registry.get_files_by_status(ProcessingStatus.ERROR)
             
             # Crear estructura de datos completa
@@ -266,7 +266,6 @@ class SummaryGenerator:
                 "csv_summary": csv_summary,
                 "processing_statistics": stats,
                 "files_processed": [],
-                # NUEVOS CAMPOS:
                 "failed_files_count": len(error_files),
                 "failed_files_list": [os.path.basename(f) for f in error_files]
             }

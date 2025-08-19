@@ -21,12 +21,50 @@ def validate_voltage_columns(df):
     # Mapeo de nombres de columnas estándar a nombres encontrados
     column_mapping = {}
 
-    for std_name, pattern in COLUMN_PATTERNS.items():
-        matched = [col for col in df.columns if re.search(pattern, col)]
-        if matched:
-            column_mapping[std_name] = matched[0]
-        else:
-            logger.debug(f"No se encontró columna que coincida con patrón: {pattern}")
+    # Procesar patrones en orden específico para evitar conflictos
+    # Procesar primero Sn (potencia aparente compleja) antes de S (potencia aparente)
+    ordered_patterns = [
+        'time', 'u_l1', 'u_l2', 'u_l3', 'u_l12',
+        'i_l1', 'i_l2', 
+        'p_l1', 'p_l2', 'p_l3', 'p_e',
+        'q1_l1', 'q1_l2', 'q1_e',
+        'sn_l1', 'sn_l2', 'sn_e',  # Procesar Sn antes que S
+        's_l1', 's_l2', 's_e'      # Procesar S después
+    ]
+
+    for std_name in ordered_patterns:
+        if std_name in COLUMN_PATTERNS:
+            pattern = COLUMN_PATTERNS[std_name]
+            # Buscar todas las columnas que coinciden con el patrón
+            matched = [col for col in df.columns if re.search(pattern, col)]
+            
+            if matched:
+                # Para potencia aparente S, asegurarnos de no tomar columnas Sn
+                if std_name in ['s_l1', 's_l2', 's_e']:
+                    # Filtrar columnas que contengan "Sn" (potencia aparente compleja)
+                    filtered_matches = []
+                    for col in matched:
+                        # Verificar que no sea una columna ya asignada a Sn
+                        if not any(col == column_mapping.get(sn_key) for sn_key in ['sn_l1', 'sn_l2', 'sn_e']):
+                            # Verificar que no contenga "Sn" explícitamente
+                            if not re.search(r'(?i)sn\s', col):
+                                filtered_matches.append(col)
+                    
+                    if filtered_matches:
+                        column_mapping[std_name] = filtered_matches[0]
+                        logger.debug(f"Columna {std_name} mapeada a: {filtered_matches[0]} (filtrada de Sn)")
+                    else:
+                        logger.debug(f"No se encontró columna válida para {std_name} después del filtrado")
+                else:
+                    column_mapping[std_name] = matched[0]
+                    logger.debug(f"Columna {std_name} mapeada a: {matched[0]}")
+            else:
+                logger.debug(f"No se encontró columna que coincida con patrón {std_name}: {pattern}")
+
+    # Log del mapeo final para debug
+    logger.info("Mapeo final de columnas:")
+    for key, value in column_mapping.items():
+        logger.info(f"  {key} -> {value}")
 
     # Verificar columnas requeridas mínimas (tiempo y al menos dos voltajes)
     required_minimum = ['time', 'u_l1', 'u_l2', 'p_l1', 'p_l2']

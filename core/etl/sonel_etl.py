@@ -33,8 +33,8 @@ class SonelETL:
             self.db_connection = DatabaseConnection(self.config)
         
         # Inicializar registro de procesamiento
-        data_dir = self.config['PATHS']['data_dir']
-        self.registry_file = registry_file or os.path.join(data_dir, "registro_procesamiento.json")
+        export_dir = self.config['PATHS']['export_dir']
+        self.registry_file = registry_file or os.path.join(export_dir, "registro_procesamiento.json")
         self.registry = ProcessingRegistry(self.registry_file)
         
         # Inicializar componentes especializados

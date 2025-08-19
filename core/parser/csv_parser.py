@@ -41,6 +41,10 @@ class CSVParser:
                         
                         # Convertir todos los nombres de columnas a string para evitar problemas
                         df.columns = df.columns.astype(str)
+
+                        # Limpiar problemas de codificación y nombres de columnas
+                        df = CSVParser._detect_and_fix_encoding_issues(df)
+                        df = CSVParser._clean_column_names(df)
                         
                         # Imprimir las columnas para debug
                         valid, column_map = validate_voltage_columns(df)
@@ -295,3 +299,86 @@ class CSVParser:
         except Exception as e:
             logger.debug(f"Error en análisis línea por línea: {e}")
             return None
+        
+    @staticmethod
+    def _clean_column_names(df):
+        """
+        Limpia y normaliza los nombres de columnas para mejor detección
+        
+        Args:
+            df: DataFrame con columnas a limpiar
+            
+        Returns:
+            DataFrame con columnas limpiadas
+        """
+        if df is None or df.empty:
+            return df
+            
+        # Crear una copia para no modificar el original
+        cleaned_df = df.copy()
+        
+        # Limpiar nombres de columnas
+        new_columns = []
+        for col in df.columns:
+            # Convertir a string y limpiar espacios extra
+            clean_col = str(col).strip()
+            
+            # Remover espacios múltiples y reemplazar con espacio único
+            clean_col = re.sub(r'\s+', ' ', clean_col)
+            
+            # Remover caracteres problemáticos pero mantener estructura
+            clean_col = re.sub(r'[\r\n\t]', ' ', clean_col)
+            
+            # Limpiar caracteres especiales problemáticos pero mantener símbolos importantes
+            # Reemplazar caracteres Unicode problemáticos con sus equivalentes
+            clean_col = clean_col.replace('��', 'Σ')  # Reemplazar caracteres corruptos con símbolo suma
+            
+            new_columns.append(clean_col)
+        
+        cleaned_df.columns = new_columns
+        
+        # Log de las columnas para debug
+        logger.debug("Columnas después de limpieza:")
+        for i, col in enumerate(cleaned_df.columns):
+            logger.debug(f"  [{i}]: '{col}'")
+        
+        return cleaned_df
+    
+    @staticmethod
+    def _detect_and_fix_encoding_issues(df):
+        """
+        Detecta y corrige problemas de codificación en los nombres de columnas
+        
+        Args:
+            df: DataFrame con posibles problemas de codificación
+            
+        Returns:
+            DataFrame con columnas corregidas
+        """
+        if df is None or df.empty:
+            return df
+            
+        cleaned_df = df.copy()
+        
+        # Mapeo de caracteres problemáticos comunes
+        char_replacements = {
+            '��': 'Σ',     # Símbolo suma
+            'ï¿½': 'Σ',    # Otro encoding del símbolo suma
+            'âˆ': 'Σ',    # Otro encoding del símbolo suma
+            'Î£': 'Σ',     # Otro encoding del símbolo suma
+        }
+        
+        # Limpiar nombres de columnas
+        new_columns = []
+        for col in cleaned_df.columns:
+            clean_col = str(col)
+            
+            # Aplicar reemplazos de caracteres problemáticos
+            for problematic, replacement in char_replacements.items():
+                clean_col = clean_col.replace(problematic, replacement)
+            
+            new_columns.append(clean_col)
+        
+        cleaned_df.columns = new_columns
+        
+        return cleaned_df
