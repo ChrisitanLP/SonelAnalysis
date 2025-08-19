@@ -34,9 +34,8 @@ class SonelGuiExtractorCompleto:
         self.PATHS = {
             'input_dir': input_dir or config['PATHS']['input_dir'],
             'output_dir': output_dir or config['PATHS']['output_dir'],
-            'export_dir': output_dir or config['PATHS']['output_dir'],
+            'export_dir': output_dir or config['PATHS']['export_dir'],
             'sonel_exe_path': ruta_exe or config['PATHS']['sonel_exe_path'],
-            'temp_dir': config['PATHS']['temp_dir'],
             'process_file_dir': Path(input_dir or config['PATHS']['input_dir']).resolve(),
             'coordinates_file': coordinates_file or os.path.join(config['PATHS']['output_dir'], 'component_positions.json')
         }
@@ -52,7 +51,6 @@ class SonelGuiExtractorCompleto:
         create_directories()
         os.makedirs(self.PATHS['output_dir'], exist_ok=True)
         os.makedirs(self.PATHS['process_file_dir'], exist_ok=True)
-        os.makedirs(self.PATHS['temp_dir'], exist_ok=True)
     
         # Logger específico para GUI extractor
         self.gui_logger = get_logger("pygui", f"{__name__}_pygui")

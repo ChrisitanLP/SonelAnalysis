@@ -32,10 +32,9 @@ class SonelExtractorCompleto:
         # Configuración de paths por defecto
         self.PATHS = {
             'input_dir': input_dir or config['PATHS']['input_dir'],
-            'output_dir': output_dir or config['PATHS']['export_dir'],
-            'export_dir': output_dir or config['PATHS']['export_dir'],
+            'output_dir': output_dir or config['PATHS']['output_dir'],
+            'export_dir': config['PATHS']['export_dir'],
             'sonel_exe_path': ruta_exe or config['PATHS']['sonel_exe_path'],
-            'temp_dir': config['PATHS']['temp_dir'],
             'process_file_dir': Path(input_dir or config['PATHS']['input_dir']).resolve()
         }
         
@@ -52,7 +51,6 @@ class SonelExtractorCompleto:
         # Crear directorios si no existen
         os.makedirs(self.PATHS['output_dir'], exist_ok=True)
         os.makedirs(self.PATHS['process_file_dir'], exist_ok=True)
-        os.makedirs(self.PATHS['temp_dir'], exist_ok=True)
     
         # ✅ Logger específico para pywinauto (para usar en clases hijas)
         self.pywinauto_logger = get_logger("pywinauto", f"{__name__}_pywinauto")
@@ -255,10 +253,19 @@ class SonelExtractorCompleto:
             # Obtener lista de archivos
             archivos_pqm = self.get_pqm_files()
             if not archivos_pqm:
-                self.pywinauto_logger.warning("⚠️  No se encontraron archivos .pqm702 para procesar")
-                # ✅ AGREGAR: Generar resumen incluso sin archivos
+                self.pywinauto_logger.warning("⚠️ No se encontraron archivos .pqm702 para procesar")
+                # ✅ ASEGURAR: Generar resumen incluso sin archivos
                 summary = self._generate_extraction_summary(resultados_globales, archivos_pqm)
                 self._log_extraction_summary(summary)
+                
+                # ✅ NUEVO: Intentar generar archivo de resumen incluso sin procesamiento
+                try:
+                    output_file = self.save_csv_summary_to_file()
+                    if output_file:
+                        self.pywinauto_logger.info(f"📄 Resumen básico guardado en: {output_file}")
+                except Exception as summary_error:
+                    self.pywinauto_logger.warning(f"⚠️ Error generando resumen básico: {summary_error}")
+                
                 return resultados_globales
             
             self.total_files_attempted = len(archivos_pqm)
@@ -277,10 +284,17 @@ class SonelExtractorCompleto:
                 self.pywinauto_logger.info("✅ Todos los archivos ya han sido procesados")
                 summary = self._generate_extraction_summary(resultados_globales, archivos_pqm)
                 self._log_extraction_summary(summary)
+                
+                # ✅ ASEGURAR: Generar resumen con archivos ya procesados
+                output_file = self.save_csv_summary_to_file()
+                if output_file:
+                    self.pywinauto_logger.info(f"📄 Resumen actualizado guardado en: {output_file}")
+                
                 return resultados_globales
             
             self.pywinauto_logger.info(f"🔄 Archivos pendientes de procesar: {len(archivos_pendientes)}")
             
+            # [RESTO DEL CÓDIGO DE PROCESAMIENTO PERMANECE IGUAL...]
             # Procesar cada archivo
             for i, archivo in enumerate(archivos_pendientes, 1):
                 nombre_archivo = os.path.basename(archivo)
@@ -362,13 +376,23 @@ class SonelExtractorCompleto:
             except Exception as e:
                 self.pywinauto_logger.warning(f"⚠️ Error en limpieza final: {e}")
 
-            # Generar resumen CSV para GUI
-            csv_summary = self.get_csv_summary_for_gui()
-            resultados_globales["csv_summary"] = csv_summary
-
-            output_file = self.save_csv_summary_to_file()
-            if output_file:
-                print(f"Resumen guardado en: {output_file}")
+            # ✅ CRÍTICO: Generar resumen CSV para GUI - SIEMPRE
+            try:
+                csv_summary = self.get_csv_summary_for_gui()
+                resultados_globales["csv_summary"] = csv_summary
+                
+                # ✅ ASEGURAR: Guardar archivo de resumen
+                output_file = self.save_csv_summary_to_file()
+                if output_file:
+                    self.pywinauto_logger.info(f"✅ Resumen final guardado exitosamente en: {output_file}")
+                    resultados_globales["resumen_archivo"] = output_file
+                else:
+                    self.pywinauto_logger.error("❌ No se pudo guardar el archivo de resumen")
+                    
+            except Exception as resumen_error:
+                self.pywinauto_logger.error(f"❌ Error crítico generando resumen final: {resumen_error}")
+                import traceback
+                self.pywinauto_logger.error(traceback.format_exc())
 
             return resultados_globales
             
@@ -376,8 +400,17 @@ class SonelExtractorCompleto:
             self.pywinauto_logger.error(f"❌ Error crítico en extracción completa dinámica: {e}")
             self.pywinauto_logger.error(traceback.format_exc())
 
-            summary = self._generate_extraction_summary(resultados_globales, [])
+            summary = self._generate_extraction_summary(resultados_globales, archivos_pqm if 'archivos_pqm' in locals() else [])
             self._log_extraction_summary(summary)
+            
+            # ✅ ASEGURAR: Generar resumen incluso en caso de error crítico
+            try:
+                output_file = self.save_csv_summary_to_file()
+                if output_file:
+                    self.pywinauto_logger.info(f"📄 Resumen de error guardado en: {output_file}")
+                    resultados_globales["resumen_archivo"] = output_file
+            except Exception as error_summary:
+                self.pywinauto_logger.error(f"❌ Error guardando resumen de error: {error_summary}")
             
             # Devolver estructura con información de error
             resultados_globales.update({
@@ -482,13 +515,13 @@ class SonelExtractorCompleto:
             except:
                 file_size_str = "0 MB"
             
-            # Normalizar ruta para búsqueda
-            file_path_normalized = os.path.abspath(archivo_pqm)
+            # Usar nueva clave global en lugar de ruta absoluta
+            file_key = self.file_tracker._generate_file_key(archivo_pqm)
             
-            # Obtener información del procesamiento
-            processed_info = processed_data.get(file_path_normalized, {})
+            # Obtener información del procesamiento usando la nueva clave
+            processed_info = processed_data.get(file_key, {})
             
-            if file_path_normalized in processed_data:
+            if file_key in processed_data:
                 status = processed_info.get('status', '')
                 csv_output = processed_info.get('csv_output', {})
                 csv_verified = csv_output.get('verified', False)
@@ -499,6 +532,12 @@ class SonelExtractorCompleto:
                     status_display = "✅ Procesado"
                     csv_output_name = csv_output.get('filename', f"{file_stem}.csv")
                     message = "Procesado correctamente"
+                    
+                    # Mostrar información adicional de ubicaciones múltiples
+                    source_paths = processed_info.get('source_paths', [])
+                    if len(source_paths) > 1:
+                        message += f" (Visto en {len(source_paths)} ubicaciones)"
+                        
                 elif status == "exitoso" and not csv_verified:
                     status_display = "⚠️ Advertencia"
                     csv_output_name = "CSV no verificado"
@@ -585,10 +624,15 @@ class SonelExtractorCompleto:
             total_files = len(archivos_pqm)
             
             if total_files == 0:
+                self.pywinauto_logger.info("📄 No hay archivos PQM para procesar")
                 return CSVSummaryUtils._get_empty_csv_summary()
             
-            # Cargar datos de procesamiento desde JSON
+            # ✅ CORREGIDO: Cargar datos de procesamiento desde JSON usando nueva estructura
             processed_data = self.file_tracker._load_processed_files_data()
+            
+            if not processed_data:
+                self.pywinauto_logger.info("📊 No hay datos de procesamiento registrados aún")
+                return CSVSummaryUtils._get_empty_csv_summary()
             
             # Inicializar contadores
             processed_files = 0
@@ -599,7 +643,7 @@ class SonelExtractorCompleto:
             execution_times = []
             files_details = []
             
-            # Procesar cada archivo
+            # ✅ CORREGIDO: Procesar cada archivo con el nuevo sistema de claves
             for archivo_pqm in archivos_pqm:
                 file_detail = self._process_file_for_summary(archivo_pqm, processed_data)
                 
@@ -634,6 +678,9 @@ class SonelExtractorCompleto:
             # Calcular total de registros estimado (basado en archivos exitosos)
             total_records = csv_files_generated * 3278  # Estimación promedio por archivo
             
+            # ✅ NUEVO: Log de resumen generado para debugging
+            self.pywinauto_logger.info(f"📊 Resumen CSV generado - Procesados: {processed_files}/{total_files}, CSVs: {csv_files_generated}, Errores: {errors}, Advertencias: {warnings}")
+            
             return {
                 "processed_files": processed_files,
                 "total_files": total_files,
@@ -650,6 +697,8 @@ class SonelExtractorCompleto:
             
         except Exception as e:
             self.pywinauto_logger.error(f"❌ Error generando resumen CSV para GUI: {e}")
+            import traceback
+            self.pywinauto_logger.error(traceback.format_exc())
             return CSVSummaryUtils._get_empty_csv_summary()
         
     def get_extraction_summary_for_gui(self):
@@ -664,18 +713,20 @@ class SonelExtractorCompleto:
         # Obtener estadísticas de archivos procesados
         stats = self.obtener_estadisticas_procesados()
         
-        # Cargar datos detallados de procesamiento
+        # Cargar datos detallados de procesamiento con nueva estructura
         processed_data = self.file_tracker._load_processed_files_data()
         
-        # Contar archivos por estado
+        # Contar archivos por estado usando las nuevas claves
         procesados_exitosos = 0
         procesados_fallidos = 0
         csvs_verificados = 0
         
         for archivo_path in archivos_pqm:
-            file_path_normalized = os.path.abspath(archivo_path)
-            if file_path_normalized in processed_data:
-                processed_info = processed_data[file_path_normalized]
+            # Usar nueva clave global en lugar de ruta absoluta
+            file_key = self.file_tracker._generate_file_key(archivo_path)
+            
+            if file_key in processed_data:
+                processed_info = processed_data[file_key]
                 status = processed_info.get('status', '')
                 csv_output = processed_info.get('csv_output', {})
                 csv_verified = csv_output.get('verified', False)
@@ -709,14 +760,14 @@ class SonelExtractorCompleto:
         file_exists = os.path.exists(archivo_pqm)
         file_size_bytes = os.path.getsize(archivo_pqm) if file_exists else 0
         
-        # Normalizar ruta para búsqueda
-        file_path_normalized = os.path.abspath(archivo_pqm)
+        # ✅ USAR: la nueva función de generación de claves globales
+        file_key = self.file_tracker._generate_file_key(archivo_pqm)
         
-        # Obtener información del procesamiento usando la nueva estructura
-        processed_info = processed_data.get(file_path_normalized, {})
+        # Obtener información del procesamiento usando la nueva clave
+        processed_info = processed_data.get(file_key, {})
         
         # Determinar estado y mensaje
-        if file_path_normalized in processed_data:
+        if file_key in processed_data:
             processed = True
             status = processed_info.get('status', '')
             csv_output = processed_info.get('csv_output', {})
@@ -736,6 +787,11 @@ class SonelExtractorCompleto:
                 status_type = "error"
                 error_msg = processed_info.get('error_message', 'Error desconocido')
                 message = f"Error en procesamiento: {error_msg}"
+                
+            # Mostrar información de rutas fuente si está disponible
+            source_paths = processed_info.get('source_paths', [])
+            if len(source_paths) > 1:
+                message += f" (Encontrado en {len(source_paths)} ubicaciones)"
         else:
             processed = False
             status_display = "⏳ Pendiente"
@@ -772,32 +828,45 @@ class SonelExtractorCompleto:
         Se apoya en get_csv_summary_for_gui para obtener los datos.
         """
         try:
-            # Definir archivo de salida por defecto
+            # ✅ CORREGIDO: Definir archivo de salida usando export_dir correctamente
             if output_file is None:
-                data_dir = self.config['PATHS']['data_dir']
-                output_file = os.path.join(data_dir, "resumen_csv.json")
+                export_dir = self.PATHS.get('export_dir')
+                if not export_dir:
+                    # Fallback si no está definido export_dir
+                    export_dir = self.PATHS.get('export_dir', os.path.join(os.getcwd(), 'export'))
+                
+                os.makedirs(export_dir, exist_ok=True)
+                output_file = os.path.join(export_dir, "resumen_csv.json")
 
+            # ✅ ASEGURAR: que el directorio existe
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
             # Obtener resumen de CSV
             csv_summary = self.get_csv_summary_for_gui()
+            
+            if not csv_summary:
+                self.pywinauto_logger.warning("⚠️ No se pudo generar el resumen CSV")
+                return None
 
             # Construir estructura de salida
             summary_data = {
                 "metadata": {
-                    "generated_at": datetime.now().isoformat() + 'Z',
-                    "etl_version": "1.0",
-                    "config_file": getattr(self, 'config_file', 'config.ini')
+                    "generated_at": datetime.now().isoformat(),
+                    "etl_version": "1.1",  # Actualizar versión por los cambios
+                    "config_file": getattr(self, 'config_file', 'config.ini'),
+                    "registry_file": self.file_tracker.processed_files_json  # ✅ NUEVO: Referencia al registro
                 },
                 "csv_summary": {
-                    "processed_files": csv_summary.get("processed_files"),
-                    "total_files": csv_summary.get("total_files"),
-                    "errors": csv_summary.get("errors"),
-                    "warnings": csv_summary.get("warnings"),
-                    "csv_files_generated": csv_summary.get("csv_files_generated"),
-                    "execution_time": csv_summary.get("execution_time"),
-                    "avg_speed": csv_summary.get("avg_speed"),
-                    "total_size": csv_summary.get("total_size"),
-                    "success_rate": csv_summary.get("success_rate"),
-                    "total_records": csv_summary.get("total_records")
+                    "processed_files": csv_summary.get("processed_files", 0),
+                    "total_files": csv_summary.get("total_files", 0),
+                    "errors": csv_summary.get("errors", 0),
+                    "warnings": csv_summary.get("warnings", 0),
+                    "csv_files_generated": csv_summary.get("csv_files_generated", 0),
+                    "execution_time": csv_summary.get("execution_time", "0:00"),
+                    "avg_speed": csv_summary.get("avg_speed", "0.00 arch/min"),
+                    "total_size": csv_summary.get("total_size", "0 MB"),
+                    "success_rate": csv_summary.get("success_rate", 0.0),
+                    "total_records": csv_summary.get("total_records", 0)
                 },
                 "files_processed": []
             }
@@ -806,19 +875,36 @@ class SonelExtractorCompleto:
             if include_files_detail:
                 summary_data["files_processed"] = csv_summary.get("files", [])
 
-            # Crear directorio si no existe
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            # ✅ CORREGIDO: Guardar archivo JSON con manejo de errores mejorado
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    json.dump(summary_data, f, indent=2, ensure_ascii=False)
+            except Exception as write_error:
+                self.pywinauto_logger.error(f"❌ Error escribiendo archivo JSON: {write_error}")
+                return None
 
-            # Guardar archivo JSON
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(summary_data, f, indent=2, ensure_ascii=False)
-
-            self.pywinauto_logger.info(f"Resumen CSV guardado en: {output_file}")
-            self.pywinauto_logger.info(f"Tamaño del archivo: {os.path.getsize(output_file)} bytes")
-
-            return output_file
+            # Verificar que el archivo se creó correctamente
+            if os.path.exists(output_file):
+                file_size = os.path.getsize(output_file)
+                self.pywinauto_logger.info(f"✅ Resumen CSV guardado exitosamente en: {output_file}")
+                self.pywinauto_logger.info(f"📄 Tamaño del archivo: {file_size} bytes")
+                
+                # ✅ NUEVO: Validar contenido del archivo
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        verification_data = json.load(f)
+                        files_count = len(verification_data.get("files_processed", []))
+                        self.pywinauto_logger.info(f"📊 Archivo verificado - Contiene {files_count} registros de archivos")
+                except Exception as verify_error:
+                    self.pywinauto_logger.warning(f"⚠️ Error verificando archivo guardado: {verify_error}")
+                
+                return output_file
+            else:
+                self.pywinauto_logger.error(f"❌ El archivo no se creó correctamente: {output_file}")
+                return None
 
         except Exception as e:
-            self.pywinauto_logger.error(f"Error guardando resumen CSV: {e}")
+            self.pywinauto_logger.error(f"❌ Error crítico guardando resumen CSV: {e}")
+            import traceback
             self.pywinauto_logger.error(traceback.format_exc())
             return None
