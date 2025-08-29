@@ -110,7 +110,7 @@ class GuiConfiguracion:
             
             # Hacer clic en el radiobutton
             pyautogui.click(x, y)
-            time.sleep(1)
+            time.sleep(2)
             
             self.logger.info("✅ Radiobutton configurado")
             return True
@@ -168,7 +168,8 @@ class GuiConfiguracion:
         """
         try:
             self.logger.info("📊 Extrayendo configuración principal de mediciones...")
-            
+            time.sleep(3)
+
             # Buscar checkbox principal de mediciones
             main_checkbox_key = "CheckBox_measurements_0"
             if main_checkbox_key in self.coordinates:
@@ -180,7 +181,7 @@ class GuiConfiguracion:
                 
                 # Hacer clic para expandir/activar mediciones
                 pyautogui.click(x, y)
-                time.sleep(1)
+                time.sleep(2)
                 
                 self.logger.info("✅ Configuración principal de mediciones extraída")
                 return True
@@ -315,7 +316,7 @@ class GuiConfiguracion:
                     # Hacer clic en la esquina superior izquierda para activarla
                     pyautogui.moveTo(x, y, duration=0.3)
                     pyautogui.click()
-                    time.sleep(1)
+                    time.sleep(2)
 
                     self.logger.info("✅ Tabla de mediciones seleccionada correctamente")
                     return True
@@ -351,12 +352,12 @@ class GuiConfiguracion:
                 
                 # Hacer clic en reportes
                 pyautogui.click(x, y)
-                time.sleep(2)
+                time.sleep(3)
 
                 new_y = y + 50
                 self.logger.info(f"🖱️ Haciendo segundo clic en coordenada desplazada ({x}, {new_y})")
                 pyautogui.click(x, new_y)
-                time.sleep(2)
+                time.sleep(3)
                 
                 self.logger.info("✅ Informes gráficos extraídos")
                 return True
@@ -408,20 +409,20 @@ class GuiConfiguracion:
             x, y = CoordinatesUtils.get_coordinate_center(name_coord)
             self.logger.info(f"🎯 Haciendo clic en campo nombre en ({x}, {y})")
             pyautogui.click(x, y)
-            time.sleep(0.5)
+            time.sleep(0.9)
 
             # Limpiar y pegar
             pyautogui.hotkey('ctrl', 'a')
-            time.sleep(0.2)
-            pyautogui.hotkey('ctrl', 'v')
             time.sleep(0.5)
+            pyautogui.hotkey('ctrl', 'v')
+            time.sleep(0.9)
 
             # === Clic en botón guardar ===
             save_coord = self.coordinates[save_button_key]
             x, y = CoordinatesUtils.get_coordinate_center(save_coord)
             self.logger.info(f"🎯 Haciendo clic en 'Guardar' en ({x}, {y})")
             pyautogui.click(x, y)
-            time.sleep(3)
+            time.sleep(4)
 
             self.logger.info("✅ Comando de guardado ejecutado")
             return True

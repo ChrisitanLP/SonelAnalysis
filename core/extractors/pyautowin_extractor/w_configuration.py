@@ -50,13 +50,6 @@ class SonelConfiguracion:
             self.logger.error("❌ Navigator no inicializado. Conectar primero.")
             return False
         return self.navigator.extraer_navegacion_lateral()
-
-    def configurar_filtros_datos(self):
-        """Configura filtros de datos (Usuario, Prom., etc.)"""
-        if not self.navigator:
-            self.logger.error("❌ Navigator no inicializado. Conectar primero.")
-            return False
-        return self.navigator.configurar_filtros_datos()
     
     def configurar_radiobutton(self):
         """Configura filtros de datos (Usuario)"""
