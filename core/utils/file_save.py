@@ -220,3 +220,109 @@ class ComponentesGuardado:
             self.logger.info(f"  📍 {tipo}: {cantidad} componentes")
         
         return resumen
+    
+    def detectar_cambio_idioma(self, ventana_configuracion, componentes_requeridos):
+        """
+        Detecta si ha ocurrido un cambio de idioma comparando los textos actuales
+        con los textos guardados en las coordenadas.
+        """
+        try:
+            # Si no existen coordenadas guardadas, no puede haber cambio de idioma
+            if not os.path.exists(self.ruta_coordenadas):
+                self.logger.info("📄 No hay coordenadas previas, no se puede detectar cambio de idioma")
+                return False
+                
+            coordenadas = self.cargar_coordenadas_guardadas()
+            
+            # Verificar RadioButtons
+            if "RadioButton" in componentes_requeridos:
+                for identificador in componentes_requeridos["RadioButton"]:
+                    clave = f"RadioButton_{identificador}"
+                    if clave in coordenadas and self._verificar_componente_cambio_idioma(
+                        ventana_configuracion, "RadioButton", coordenadas[clave]
+                    ):
+                        return True
+
+            # Verificar CheckBoxes - MEJORADO para todos los tipos
+            if "CheckBox" in componentes_requeridos:
+                for identificador in componentes_requeridos["CheckBox"]:
+                    clave = f"CheckBox_{identificador}"
+                    if clave in coordenadas and self._verificar_componente_cambio_idioma(
+                        ventana_configuracion, "CheckBox", coordenadas[clave]
+                    ):
+                        return True
+            
+            self.logger.info("✅ No se detectó cambio de idioma")
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error detectando cambio de idioma: {e}")
+            # En caso de error, asumir que hay cambio para forzar actualización
+            return True
+        
+    def _verificar_componente_cambio_idioma(self, ventana_configuracion, tipo_componente, datos_guardados):
+        """
+        Verifica si un componente específico ha cambiado de idioma.
+        
+        Returns:
+            bool: True si se detecta cambio de idioma
+        """
+        try:
+            texto_guardado = datos_guardados.get("texto", "").strip()
+            rect_guardado = datos_guardados["rect"]
+            
+            # Buscar componentes del tipo especificado
+            controles = ventana_configuracion.descendants(control_type=tipo_componente)
+            
+            for control in controles:
+                rect_actual = control.rectangle()
+                
+                # Comparar posición aproximada (tolerancia de ±20 pixels)
+                if (abs(rect_actual.left - rect_guardado["left"]) <= 20 and
+                    abs(rect_actual.top - rect_guardado["top"]) <= 20):
+                    
+                    texto_actual = control.window_text().strip()
+                    if texto_actual != texto_guardado:
+                        self.logger.info(f"🌐 Cambio de idioma detectado en {tipo_componente}: '{texto_guardado}' -> '{texto_actual}'")
+                        return True
+                    return False  # Mismo texto, no hay cambio
+            
+            # Si no se encuentra el componente en la posición esperada
+            self.logger.info(f"🌐 Componente {tipo_componente} no encontrado en posición esperada, posible cambio de idioma")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"❌ Error verificando cambio de idioma para {tipo_componente}: {e}")
+            return True
+
+    def limpiar_coordenadas_componentes(self, componentes_requeridos):
+        """
+        Elimina las coordenadas de componentes específicos del archivo de coordenadas.
+        
+        Args:
+            componentes_requeridos: dict con formato {"tipo_componente": ["id1", "id2"]}
+        """
+        try:
+            coordenadas = self.cargar_coordenadas_guardadas()
+            coordenadas_actualizadas = coordenadas.copy()
+            
+            componentes_eliminados = 0
+            for tipo, identificadores in componentes_requeridos.items():
+                for identificador in identificadores:
+                    clave = f"{tipo}_{identificador}"
+                    if clave in coordenadas_actualizadas:
+                        del coordenadas_actualizadas[clave]
+                        componentes_eliminados += 1
+                        self.logger.info(f"🗑️ Coordenada eliminada: {clave}")
+            
+            if componentes_eliminados > 0:
+                # Guardar archivo actualizado
+                with open(self.ruta_coordenadas, "w", encoding="utf-8") as f:
+                    json.dump(coordenadas_actualizadas, f, indent=4, ensure_ascii=False)
+                
+                self.logger.info(f"✅ Se eliminaron {componentes_eliminados} coordenadas del archivo")
+            else:
+                self.logger.info("ℹ️ No se encontraron coordenadas para eliminar")
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error limpiando coordenadas: {e}")

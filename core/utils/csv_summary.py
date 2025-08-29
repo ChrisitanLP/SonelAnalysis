@@ -80,7 +80,7 @@ class CSVSummaryUtils:
         Retorna un resumen vacío para casos de error o sin archivos
         
         Returns:
-            dict: Resumen vacío con estructura correcta
+            dict: Resumen vacío con estructura correctaa
         """
         return {
             "processed_files": 0,
@@ -95,3 +95,26 @@ class CSVSummaryUtils:
             "total_records": 0,
             "files": []
         }
+    
+    @staticmethod
+    def _format_execution_time_consolidated(total_seconds):
+        """
+        Formatea tiempo de ejecución consolidado para múltiples directorios
+        
+        Args:
+            total_seconds (float): Tiempo total en segundos
+            
+        Returns:
+            str: Tiempo formateado
+        """
+        if total_seconds <= 0:
+            return "0:00"
+            
+        if total_seconds < 3600:  # Menos de 1 hora
+            minutes = int(total_seconds // 60)
+            seconds = int(total_seconds % 60)
+            return f"{minutes}:{seconds:02d}"
+        else:  # Más de 1 hora
+            hours = int(total_seconds // 3600)
+            minutes = int((total_seconds % 3600) // 60)
+            return f"{hours}:{minutes:02d}"

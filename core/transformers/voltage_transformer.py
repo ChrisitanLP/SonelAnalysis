@@ -77,6 +77,54 @@ class VoltageTransformer:
             else:
                 logger.error("No se encontró columna de tiempo para la transformación")
                 return None
+        
+            date_col = column_map.get('date')
+            if date_col:
+                try:
+                    transformed_df['date_field'] = pd.to_datetime(df[date_col], errors='coerce').dt.date
+                    logger.info(f"Campo Date procesado correctamente desde columna: {date_col}")
+                except Exception as e:
+                    logger.warning(f"Error al procesar campo Date: {e}")
+                    transformed_df['date_field'] = None
+            else:
+                logger.info("No se encontró columna Date separada")
+                transformed_df['date_field'] = None
+            
+            time_utc5_col = column_map.get('time_utc5')
+            if time_utc5_col:
+                try:
+                    # Procesar tiempo UTC-5, puede venir como string con formato HH:MM:SS.mmm
+                    time_series = df[time_utc5_col].astype(str)
+                    
+                    # Intentar convertir a tiempo
+                    def parse_time(time_str):
+                        try:
+                            # Manejar formatos como "07:20:00.050"
+                            time_parts = time_str.split(':')
+                            if len(time_parts) >= 3:
+                                hours = int(time_parts[0])
+                                minutes = int(time_parts[1])
+                                # Manejar segundos con decimales
+                                seconds_part = float(time_parts[2])
+                                seconds = int(seconds_part)
+                                microseconds = int((seconds_part - seconds) * 1000000)
+                                
+                                return pd.Timestamp(
+                                    year=1900, month=1, day=1,
+                                    hour=hours, minute=minutes, second=seconds, microsecond=microseconds
+                                ).time()
+                            return None
+                        except:
+                            return None
+                    
+                    transformed_df['time_utc5'] = time_series.apply(parse_time)
+                    logger.info(f"Campo Time (UTC-5) procesado correctamente desde columna: {time_utc5_col}")
+                except Exception as e:
+                    logger.warning(f"Error al procesar campo Time (UTC-5): {e}")
+                    transformed_df['time_utc5'] = None
+            else:
+                logger.info("No se encontró columna Time (UTC-5) separada")
+                transformed_df['time_utc5'] = None
             
             # Función auxiliar para convertir valores a numéricos
             def convert_to_numeric(df, source_col):
@@ -85,31 +133,18 @@ class VoltageTransformer:
                 
                 try:
                     if df[source_col].dtype == object:  # Si es string
-                        # Convertir la serie a string y manejar notación científica y decimales
                         values_series = df[source_col].astype(str)
-                        
-                        # Reemplazar comas por puntos para decimales
                         values_series = values_series.str.replace(',', '.')
-                        
-                        # Patrón mejorado para capturar números incluyendo notación científica
-                        # Captura: signo opcional + dígitos + punto decimal opcional + más dígitos + notación científica opcional
                         pattern = r'(-?[\d\.]+(?:[eE][+-]?\d+)?)'
                         values = values_series.str.extract(pattern)[0]
-                        
-                        # Convertir a numérico, manejando automáticamente la notación científica
                         numeric_values = pd.to_numeric(values, errors='coerce')
                         
-                        # Log para debug si hay valores en notación científica
                         scientific_notation = values_series[values_series.str.contains(r'[eE][+-]?\d+', na=False, regex=True)]
                         if not scientific_notation.empty:
                             logger.debug(f"Valores en notación científica encontrados en columna {source_col}: {len(scientific_notation)} valores")
-                            # Mostrar algunos ejemplos de conversión
-                            for i, (original, converted) in enumerate(zip(scientific_notation.head(3), numeric_values[scientific_notation.index[:3]])):
-                                logger.debug(f"  Ejemplo {i+1}: '{original}' -> {converted}")
                         
                         return numeric_values
                     else:
-                        # Ya es numérico
                         return df[source_col]
                 except Exception as e:
                     logger.debug(f"Error al transformar columna {source_col}: {e}")

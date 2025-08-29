@@ -22,9 +22,9 @@ def validate_voltage_columns(df):
     column_mapping = {}
 
     # Procesar patrones en orden específico para evitar conflictos
-    # Procesar primero Sn (potencia aparente compleja) antes de S (potencia aparente)
     ordered_patterns = [
-        'time', 'u_l1', 'u_l2', 'u_l3', 'u_l12',
+        'time', 'date', 'time_utc5',  # NUEVOS CAMPOS AGREGADOS
+        'u_l1', 'u_l2', 'u_l3', 'u_l12',
         'i_l1', 'i_l2', 
         'p_l1', 'p_l2', 'p_l3', 'p_e',
         'q1_l1', 'q1_l2', 'q1_e',
