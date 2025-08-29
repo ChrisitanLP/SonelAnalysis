@@ -10,6 +10,7 @@ Fecha: 2025
 
 import os
 import sys
+import json
 import time
 import logging
 import traceback
@@ -208,10 +209,11 @@ class SonelController:
         
     def run_pyguiauto_extraction(self) -> Tuple[bool, Dict[str, Any]]:
         """
-        Ejecuta recuperación de archivos con errores usando el extractor GUI
+        Ejecuta recuperación de archivos con errores usando el extractor GUI.
+        Maneja archivos desde múltiples directorios correctamente.
         
         Returns:
-            dict: Resultados del procesamiento de recuperación
+            tuple: (success: bool, extraction_summary: dict)
         """
         self.logger.info("🔧 === INICIANDO RECUPERACIÓN CON COORDENADAS GUI === ")
 
@@ -221,13 +223,31 @@ class SonelController:
                 self.logger.error("❌ No se pueden cumplir los requisitos del sistema")
                 return False, self._get_empty_extraction_summary("Error en validación de entorno")
             
-            # Crear instancia del extractor GUI
+            # MODIFICACIÓN: Crear instancia del extractor GUI con paths configurados correctamente
             self.logger.info("🔧 Inicializando extractor GUI...")
             pygui_extractor = SonelGuiExtractorCompleto(
                 input_dir=self.rutas["input_directory"],
                 output_dir=self.rutas["output_directory"], 
                 ruta_exe=self.rutas["sonel_exe_path"]
             )
+            
+            # VERIFICACIÓN: Comprobar que el archivo de registro existe y es accesible
+            registro_path = pygui_extractor.file_tracker.processed_files_json
+            self.logger.info(f"📄 Verificando archivo de registro: {registro_path}")
+            
+            if not os.path.exists(registro_path):
+                self.logger.warning(f"⚠️ Archivo de registro no existe: {registro_path}")
+                return False, self._get_empty_extraction_summary("Archivo de registro no encontrado")
+            
+            try:
+                # Intentar leer el archivo para verificar que es válido
+                with open(registro_path, 'r', encoding='utf-8') as f:
+                    test_data = json.load(f)
+                    files_count = len(test_data.get('files', {}))
+                    self.logger.info(f"✅ Archivo de registro válido con {files_count} archivos registrados")
+            except Exception as e:
+                self.logger.error(f"❌ Error leyendo archivo de registro: {e}")
+                return False, self._get_empty_extraction_summary("Archivo de registro corrupto o inaccesible")
             
             # Ejecutar recuperación de archivos con errores
             resultados_recuperacion = pygui_extractor.ejecutar_extraccion_archivos_con_errores()
@@ -247,12 +267,15 @@ class SonelController:
             if archivos_exitosos > 0:
                 success = True
                 extracted_files = archivos_exitosos
+                self.logger.info(f"✅ Recuperación exitosa: {archivos_exitosos} archivos reprocesados")
             elif archivos_saltados > 0 and archivos_fallidos == 0:
                 success = True
                 extracted_files = 0  # Ya procesados previamente
+                self.logger.info("ℹ️ No había archivos con errores que reprocesar")
             else:
                 success = False
                 extracted_files = 0
+                self.logger.warning(f"⚠️ Recuperación completada con fallos: {archivos_fallidos}")
 
             # Agregar datos adicionales al resumen
             extraction_summary.update({
@@ -260,10 +283,10 @@ class SonelController:
                 'extracted_files': extracted_files,
                 'procesados_exitosos': archivos_exitosos,
                 'procesados_fallidos': archivos_fallidos,
-                'saltados': archivos_saltados
+                'saltados': archivos_saltados,
+                'modo_operacion': 'recuperacion_errores'
             })
-            self.logger.info(f"✅ Recuperación completada - Éxito: {success}, Archivos: {extracted_files}")
-
+            
             return success, extraction_summary
             
         except Exception as e:
@@ -271,122 +294,6 @@ class SonelController:
             self.logger.error(traceback.format_exc())
             return False, self._get_empty_extraction_summary(f"Error crítico: {str(e)}")
         
-    def ejecutar_extraccion_hibrida(self, intentar_recuperacion=True):
-        """
-        Ejecuta extracción híbrida: primero componentes, luego coordenadas para errores
-        
-        Args:
-            intentar_recuperacion (bool): Si debe intentar recuperación con coordenadas
-            
-        Returns:
-            dict: Resultados combinados del procesamiento
-        """
-        self.logger.info("🔄 INICIANDO EXTRACCIÓN HÍBRIDA (COMPONENTES + COORDENADAS)")
-
-        try:
-            # FASE 1: Extracción normal con componentes
-            self.logger.info("📋 FASE 1: Extracción con componentes")
-            pywin_extractor = SonelExtractorCompleto(
-                input_dir=self.rutas["input_directory"],
-                output_dir=self.rutas["output_directory"], 
-                ruta_exe=self.rutas["sonel_exe_path"]
-            )
-            resultados_componentes = pywin_extractor.ejecutar_extraccion_completa_dinamica()
-            
-            # FASE 2: Recuperación con coordenadas (solo si hay errores y está habilitado)
-            resultados_recuperacion = None
-            if intentar_recuperacion and (resultados_componentes.get('procesados_fallidos', 0) > 0):
-                self.logger.info("\n📋 FASE 2: Recuperación con coordenadas")
-                pygui_extractor = SonelGuiExtractorCompleto(
-                    input_dir=self.rutas["input_directory"],
-                    output_dir=self.rutas["output_directory"], 
-                    ruta_exe=self.rutas["sonel_exe_path"]
-                )
-                resultados_recuperacion = pygui_extractor.ejecutar_extraccion_archivos_con_errores
-            
-            # Combinar resultados
-            resultados_finales = self._combinar_resultados_hibridos(
-                resultados_componentes, 
-                resultados_recuperacion
-            )
-            
-            self._log_resumen_hibrido(resultados_finales)
-            
-            return resultados_finales
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error en extracción híbrida: {e}")
-            return resultados_componentes if 'resultados_componentes' in locals() else {
-                "error_critico": True,
-                "mensaje_error": str(e)
-            }
-        
-    def _combinar_resultados_hibridos(self, resultados_componentes, resultados_recuperacion):
-        """
-        Combina los resultados de extracción por componentes y recuperación por coordenadas
-        
-        Args:
-            resultados_componentes: Resultados de la extracción normal
-            resultados_recuperacion: Resultados de la recuperación GUI (puede ser None)
-            
-        Returns:
-            dict: Resultados combinados
-        """
-        try:
-            # Base: resultados de componentes
-            resultados_finales = resultados_componentes.copy()
-            
-            if resultados_recuperacion:
-                # Agregar estadísticas de recuperación
-                resultados_finales["recuperacion"] = {
-                    "ejecutada": True,
-                    "archivos_recuperados": resultados_recuperacion.get('procesados_exitosos', 0),
-                    "fallos_recuperacion": resultados_recuperacion.get('procesados_fallidos', 0),
-                    "csvs_recuperados": resultados_recuperacion.get('csvs_verificados', 0)
-                }
-                
-                # Actualizar totales finales
-                archivos_recuperados = resultados_recuperacion.get('procesados_exitosos', 0)
-                csvs_recuperados = resultados_recuperacion.get('csvs_verificados', 0)
-                
-                # Los archivos recuperados exitosamente ya no cuentan como fallidos
-                resultados_finales["procesados_exitosos"] += archivos_recuperados
-                resultados_finales["csvs_verificados"] += csvs_recuperados
-                resultados_finales["procesados_fallidos"] = max(0, 
-                    resultados_finales["procesados_fallidos"] - archivos_recuperados)
-                
-            else:
-                resultados_finales["recuperacion"] = {
-                    "ejecutada": False,
-                    "razon": "No había errores o recuperación deshabilitada"
-                }
-            
-            # Agregar indicador de modo híbrido
-            resultados_finales["modo"] = "hibrido_componentes_coordenadas"
-            
-            return resultados_finales
-            
-        except Exception as e:
-            self.logger.error(f"❌ Error combinando resultados híbridos: {e}")
-            return resultados_componentes
-
-    def _log_resumen_hibrido(self, resultados_finales):
-        """Log específico para el resumen híbrido"""
-        self.logger.info("📊 RESUMEN HÍBRIDO:")
-        self.logger.info(f"✅ Total procesados exitosos: {resultados_finales.get('procesados_exitosos', 0)}")
-        self.logger.info(f"📄 Total CSVs verificados: {resultados_finales.get('csvs_verificados', 0)}")
-        self.logger.info(f"❌ Total fallidos finales: {resultados_finales.get('procesados_fallidos', 0)}")
-        
-        recuperacion = resultados_finales.get('recuperacion', {})
-        if recuperacion.get('ejecutada', False):
-            self.logger.info(f"🔧 Archivos recuperados: {recuperacion.get('archivos_recuperados', 0)}")
-            self.logger.info(f"📄 CSVs recuperados: {recuperacion.get('csvs_recuperados', 0)}")
-            
-            if recuperacion.get('archivos_recuperados', 0) > 0:
-                tasa_recuperacion = (recuperacion.get('archivos_recuperados', 0) / 
-                                (recuperacion.get('archivos_recuperados', 0) + recuperacion.get('fallos_recuperacion', 0))) * 100
-                self.logger.info(f"📈 Tasa de recuperación: {tasa_recuperacion:.1f}%")
-
     def _get_empty_extraction_summary(self, error_message: str = "") -> Dict[str, Any]:
         """Genera un resumen de extracción vacío para casos de error"""
         return {
@@ -809,4 +716,255 @@ class SonelController:
             'db_summary': db_summary
         }
     
-    
+    def export_mediciones_to_csv(self, file_path: str = None) -> Tuple[bool, str]:
+        """
+        Exporta todos los registros de mediciones_planas a CSV con formato empresarial EEASA
+        
+        Args:
+            file_path: Ruta donde guardar el archivo CSV (opcional)
+            
+        Returns:
+            tuple: (success: bool, message: str) - Estado y mensaje de resultado
+        """
+        self.logger.info("📊 Iniciando exportación de mediciones_planas a CSV")
+        
+        db_connection = None
+        
+        try:
+            # Inicializar conexión a base de datos
+            from config.settings import load_config
+            etl_config = load_config(self.config_file)
+            
+            db_connection = DatabaseConnection(etl_config)
+            if not db_connection.connect():
+                self.logger.error("No se pudo establecer conexión con la base de datos")
+                return False, "Error de conexión a la base de datos"
+            
+            # Generar nombre de archivo si no se proporciona
+            if file_path is None:
+                timestamp = time.strftime("%Y%m%d_%H%M%S")
+                output_dir = self.rutas.get("output_directory", ".")
+                file_path = os.path.join(output_dir, f"mediciones_planas_EEASA_{timestamp}.csv")
+            
+            # Extraer datos de la base de datos
+            success, message = self._extract_and_save_eeasa_csv(db_connection, file_path)
+            
+            if success:
+                self.logger.info(f"Exportación exitosa a: {file_path}")
+            else:
+                self.logger.error(f"Error en exportación: {message}")
+            
+            return success, message if success else f"Error: {message}"
+            
+        except Exception as e:
+            self.logger.error(f"Error durante exportación CSV: {e}")
+            return False, f"Error crítico durante exportación: {str(e)}"
+            
+        finally:
+            if db_connection:
+                db_connection.close()
+
+    def _extract_and_save_eeasa_csv(self, db_connection: DatabaseConnection, file_path: str) -> Tuple[bool, str]:
+        """
+        Extrae datos de mediciones_planas y los guarda en formato CSV empresarial EEASA
+        
+        Args:
+            db_connection: Conexión a la base de datos
+            file_path: Ruta donde guardar el archivo CSV
+            
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            # Query para extraer todos los datos con información del código
+            query = """
+                SELECT 
+                    mp.id,
+                    c.codigo,
+                    mp.fecha,
+                    mp.date_field,
+                    mp.time_utc5,
+                    mp.u_l1_avg,
+                    mp.u_l2_avg,
+                    mp.u_l3_avg,
+                    mp.u_l12_avg,
+                    mp.i_l1_avg,
+                    mp.i_l2_avg,
+                    mp.p_l1_avg,
+                    mp.p_l2_avg,
+                    mp.p_l3_avg,
+                    mp.p_e_avg,
+                    mp.q1_l1_avg,
+                    mp.q1_l2_avg,
+                    mp.q1_e_avg,
+                    mp.sn_l1_avg,
+                    mp.sn_l2_avg,
+                    mp.sn_e_avg,
+                    mp.s_l1_avg,
+                    mp.s_l2_avg,
+                    mp.s_e_avg,
+                    mp.fecha_subida
+                FROM mediciones_planas mp
+                LEFT JOIN codigo c ON mp.codigo_id = c.id
+                ORDER BY mp.fecha DESC;
+            """
+            
+            cursor = db_connection.execute_query(query, commit=False)
+            
+            if not cursor:
+                return False, "No se pudo ejecutar la consulta de exportación"
+            
+            # Obtener datos
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            if not rows:
+                return True, "Exportación completada - No hay registros para exportar"
+            
+            # Escribir CSV con formato empresarial EEASA
+            self._write_eeasa_format_csv(file_path, rows)
+            
+            return True, f"Exportación exitosa: {len(rows)} registros exportados"
+            
+        except Exception as e:
+            self.logger.error(f"Error durante la exportación CSV: {e}")
+            return False, f"Error técnico: {str(e)}"
+
+    def _write_eeasa_format_csv(self, file_path: str, rows: list) -> None:
+        """
+        Escribe el archivo CSV siguiendo el formato empresarial de EEASA
+        
+        Args:
+            file_path: Ruta del archivo CSV
+            rows: Datos a escribir
+        """
+        import csv
+        from datetime import datetime
+        
+        with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.writer(csvfile, delimiter=';')
+            
+            # ENCABEZADO CORPORATIVO EEASA
+            writer.writerow(['EMPRESA ELÉCTRICA AMBATO REGIONAL CENTRO NORTE S.A.'])
+            writer.writerow(['Reporte de Mediciones Eléctricas - Sistema de Monitoreo SONEL'])
+            writer.writerow([])  # Línea en blanco
+            
+            # METADATOS DEL REPORTE
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            writer.writerow([f'Fecha de Generación: {timestamp}'])
+            writer.writerow([f'Total de Registros: {len(rows)}'])
+            writer.writerow([f'Sistema: SONEL Extractor v2.0'])
+            writer.writerow([])  # Línea en blanco
+            
+            # ENCABEZADOS DE DATOS
+            headers = [
+                'ID Registro',
+                'Código Cliente', 
+                'Fecha y Hora Completa',
+                'Fecha',
+                'Hora UTC-5',
+                'Voltaje L1 Promedio (V)',
+                'Voltaje L2 Promedio (V)',
+                'Voltaje L3 Promedio (V)',
+                'Voltaje L12 Promedio (V)',
+                'Corriente L1 Promedio (A)',
+                'Corriente L2 Promedio (A)',
+                'Potencia L1 Promedio (W)',
+                'Potencia L2 Promedio (W)',
+                'Potencia L3 Promedio (W)',
+                'Potencia Total Promedio (W)',
+                'Reactiva Q1 L1 Promedio (VAR)',
+                'Reactiva Q1 L2 Promedio (VAR)',
+                'Reactiva Q1 Total Promedio (VAR)',
+                'Potencia Aparente L1 Promedio (VA)',
+                'Potencia Aparente L2 Promedio (VA)',
+                'Potencia Aparente Total Promedio (VA)',
+                'Factor Potencia L1 Promedio',
+                'Factor Potencia L2 Promedio',
+                'Factor Potencia Total Promedio',
+                'Fecha de Carga en Sistema'
+            ]
+            writer.writerow(headers)
+            
+            # DATOS
+            for row in rows:
+                # Formatear valores None como cadena vacía y aplicar formato numérico
+                formatted_row = []
+                for i, value in enumerate(row):
+                    if value is None:
+                        formatted_row.append('')
+                    elif i in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]:  # Columnas numéricas
+                        # Formatear números con 2 decimales
+                        try:
+                            formatted_row.append(f"{float(value):.2f}" if value != '' else '')
+                        except (ValueError, TypeError):
+                            formatted_row.append(str(value))
+                    else:
+                        formatted_row.append(str(value))
+                
+                writer.writerow(formatted_row)
+            
+            # PIE DEL REPORTE
+            writer.writerow([])
+            writer.writerow([f'Fin del reporte - EEASA {datetime.now().year}'])
+            writer.writerow(['Generado automáticamente por Sistema SONEL'])
+
+    def get_mediciones_export_info(self) -> Dict[str, Any]:
+        """
+        Obtiene información sobre los datos disponibles para exportación
+        
+        Returns:
+            dict: Información de los datos disponibles
+        """
+        self.logger.info("Obteniendo información de datos disponibles para exportación")
+        
+        db_connection = None
+        
+        try:
+            # Inicializar conexión
+            from config.settings import load_config
+            etl_config = load_config(self.config_file)
+            
+            db_connection = DatabaseConnection(etl_config)
+            if not db_connection.connect():
+                return {"error": "No se pudo conectar a la base de datos", "count": 0}
+            
+            # Consulta para obtener estadísticas
+            query = """
+                SELECT 
+                    COUNT(*) as total_registros,
+                    COUNT(DISTINCT c.codigo) as clientes_unicos,
+                    MIN(mp.fecha) as fecha_mas_antigua,
+                    MAX(mp.fecha) as fecha_mas_reciente,
+                    MIN(mp.fecha_subida) as primera_carga,
+                    MAX(mp.fecha_subida) as ultima_carga
+                FROM mediciones_planas mp
+                LEFT JOIN codigo c ON mp.codigo_id = c.id;
+            """
+            
+            cursor = db_connection.execute_query(query, commit=False)
+            
+            if cursor:
+                row = cursor.fetchone()
+                cursor.close()
+                
+                if row:
+                    return {
+                        "total_registros": row[0] or 0,
+                        "clientes_unicos": row[1] or 0,
+                        "fecha_mas_antigua": str(row[2]) if row[2] else "N/A",
+                        "fecha_mas_reciente": str(row[3]) if row[3] else "N/A",
+                        "primera_carga": str(row[4]) if row[4] else "N/A",
+                        "ultima_carga": str(row[5]) if row[5] else "N/A",
+                        "conexion_status": "Activa"
+                    }
+            
+            return {"error": "No se pudieron obtener estadísticas", "count": 0}
+            
+        except Exception as e:
+            self.logger.error(f"Error obteniendo información de exportación: {e}")
+            return {"error": f"Error: {str(e)}", "count": 0}
+            
+        finally:
+            if db_connection:
+                db_connection.close()

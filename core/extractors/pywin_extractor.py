@@ -5,7 +5,7 @@ import psutil
 import logging
 import traceback
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from config.logger import get_logger
 from core.utils.csv_summary import CSVSummaryUtils
 from config.settings import get_full_config, create_directories, load_config, PATHS
@@ -824,58 +824,121 @@ class SonelExtractorCompleto:
     
     def save_csv_summary_to_file(self, output_file=None, include_files_detail=True):
         """
-        Guarda un resumen del procesamiento CSV en un archivo JSON.
+        Guarda un resumen del procesamiento CSV en un archivo JSON de forma consolidada.
         Se apoya en get_csv_summary_for_gui para obtener los datos.
         """
         try:
-            # ✅ CORREGIDO: Definir archivo de salida usando export_dir correctamente
+            # Definir archivo de salida usando export_dir correctamente
             if output_file is None:
                 export_dir = self.PATHS.get('export_dir')
                 if not export_dir:
-                    # Fallback si no está definido export_dir
                     export_dir = self.PATHS.get('export_dir', os.path.join(os.getcwd(), 'export'))
                 
                 os.makedirs(export_dir, exist_ok=True)
                 output_file = os.path.join(export_dir, "resumen_csv.json")
 
-            # ✅ ASEGURAR: que el directorio existe
+            # Asegurar que el directorio existe
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
-            # Obtener resumen de CSV
-            csv_summary = self.get_csv_summary_for_gui()
+            # Obtener resumen actual
+            csv_summary_actual = self.get_csv_summary_for_gui()
             
-            if not csv_summary:
+            if not csv_summary_actual:
                 self.pywinauto_logger.warning("⚠️ No se pudo generar el resumen CSV")
                 return None
 
-            # Construir estructura de salida
+            # **NUEVA LÓGICA: Cargar datos existentes si el archivo ya existe**
+            existing_data = {}
+            if os.path.exists(output_file):
+                try:
+                    with open(output_file, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                    self.pywinauto_logger.info(f"📊 Cargando datos existentes desde: {output_file}")
+                except Exception as e:
+                    self.pywinauto_logger.warning(f"⚠️ Error cargando datos existentes: {e}. Creando archivo nuevo.")
+                    existing_data = {}
+
+            # **NUEVA LÓGICA: Consolidar archivos por directorio**
+            consolidated_files = {}
+            
+            # 1. Cargar archivos existentes si los hay
+            existing_files = existing_data.get("files_processed", [])
+            for file_data in existing_files:
+                if isinstance(file_data, dict) and 'filename' in file_data:
+                    filename = file_data['filename']
+                    source_dir = file_data.get('source_directory', 'directorio_desconocido')
+                    # Usar filename + directorio como clave única
+                    file_key = f"{filename}#{source_dir}"
+                    consolidated_files[file_key] = file_data
+
+            # 2. Agregar/actualizar archivos del procesamiento actual
+            current_input_dir = os.path.basename(self.PATHS.get('input_dir', 'directorio_actual'))
+            current_files = csv_summary_actual.get("files", [])
+            
+            for file_data in current_files:
+                if isinstance(file_data, dict) and 'filename' in file_data:
+                    filename = file_data['filename']
+                    # Agregar información del directorio de origen
+                    file_data['source_directory'] = current_input_dir
+                    file_data['processing_date'] = datetime.now().isoformat()
+                    
+                    file_key = f"{filename}#{current_input_dir}"
+                    consolidated_files[file_key] = file_data
+
+            # **NUEVA LÓGICA: Calcular métricas consolidadas**
+            total_files = len(consolidated_files)
+            processed_files = sum(1 for f in consolidated_files.values() if f.get('processed', False))
+            errors = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'error')
+            warnings = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'warning')
+            csv_files_generated = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'success')
+            
+            # Calcular tiempo total y tamaño total
+            total_execution_time = sum(f.get('execution_time_seconds', 0) for f in consolidated_files.values())
+            total_size_bytes = sum(f.get('size_bytes', 0) for f in consolidated_files.values())
+            
+            # Formatear métricas
+            execution_time_str = self._format_execution_time_win(
+                datetime.now() - timedelta(seconds=total_execution_time)
+            ) if total_execution_time > 0 else "0:00"
+            
+            total_size_str = CSVSummaryUtils._format_file_size(total_size_bytes)
+            success_rate = (csv_files_generated / total_files * 100) if total_files > 0 else 0
+            avg_speed = CSVSummaryUtils._calculate_average_speed(csv_files_generated, total_execution_time)
+            total_records = csv_files_generated * 3278  # Estimación promedio por archivo
+
+            # **NUEVA ESTRUCTURA: Mantener compatibilidad pero agregar información consolidada**
             summary_data = {
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
-                    "etl_version": "1.1",  # Actualizar versión por los cambios
+                    "etl_version": "1.2",  # Actualizar versión por los cambios de consolidación
                     "config_file": getattr(self, 'config_file', 'config.ini'),
-                    "registry_file": self.file_tracker.processed_files_json  # ✅ NUEVO: Referencia al registro
+                    "registry_file": self.file_tracker.processed_files_json,
+                    "consolidation_info": {
+                        "total_directories_processed": len(set(f.get('source_directory', '') for f in consolidated_files.values())),
+                        "current_directory": current_input_dir,
+                        "last_consolidation": datetime.now().isoformat()
+                    }
                 },
                 "csv_summary": {
-                    "processed_files": csv_summary.get("processed_files", 0),
-                    "total_files": csv_summary.get("total_files", 0),
-                    "errors": csv_summary.get("errors", 0),
-                    "warnings": csv_summary.get("warnings", 0),
-                    "csv_files_generated": csv_summary.get("csv_files_generated", 0),
-                    "execution_time": csv_summary.get("execution_time", "0:00"),
-                    "avg_speed": csv_summary.get("avg_speed", "0.00 arch/min"),
-                    "total_size": csv_summary.get("total_size", "0 MB"),
-                    "success_rate": csv_summary.get("success_rate", 0.0),
-                    "total_records": csv_summary.get("total_records", 0)
+                    "processed_files": processed_files,
+                    "total_files": total_files,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "csv_files_generated": csv_files_generated,
+                    "execution_time": execution_time_str,
+                    "avg_speed": avg_speed,
+                    "total_size": total_size_str,
+                    "success_rate": success_rate,
+                    "total_records": total_records
                 },
-                "files_processed": []
+                "files_processed": list(consolidated_files.values())
             }
 
             # Incluir detalle de archivos si se solicita
-            if include_files_detail:
-                summary_data["files_processed"] = csv_summary.get("files", [])
+            if not include_files_detail:
+                summary_data["files_processed"] = []
 
-            # ✅ CORREGIDO: Guardar archivo JSON con manejo de errores mejorado
+            # Guardar archivo JSON consolidado
             try:
                 with open(output_file, 'w', encoding='utf-8') as f:
                     json.dump(summary_data, f, indent=2, ensure_ascii=False)
@@ -886,15 +949,17 @@ class SonelExtractorCompleto:
             # Verificar que el archivo se creó correctamente
             if os.path.exists(output_file):
                 file_size = os.path.getsize(output_file)
-                self.pywinauto_logger.info(f"✅ Resumen CSV guardado exitosamente en: {output_file}")
+                self.pywinauto_logger.info(f"✅ Resumen CSV consolidado guardado en: {output_file}")
                 self.pywinauto_logger.info(f"📄 Tamaño del archivo: {file_size} bytes")
+                self.pywinauto_logger.info(f"📊 Archivos consolidados: {total_files} de {len(set(f.get('source_directory', '') for f in consolidated_files.values()))} directorios")
                 
-                # ✅ NUEVO: Validar contenido del archivo
+                # Validar contenido del archivo
                 try:
                     with open(output_file, 'r', encoding='utf-8') as f:
                         verification_data = json.load(f)
                         files_count = len(verification_data.get("files_processed", []))
-                        self.pywinauto_logger.info(f"📊 Archivo verificado - Contiene {files_count} registros de archivos")
+                        directories_count = verification_data.get("metadata", {}).get("consolidation_info", {}).get("total_directories_processed", 0)
+                        self.pywinauto_logger.info(f"📊 Archivo verificado - {files_count} archivos de {directories_count} directorios")
                 except Exception as verify_error:
                     self.pywinauto_logger.warning(f"⚠️ Error verificando archivo guardado: {verify_error}")
                 
@@ -904,7 +969,7 @@ class SonelExtractorCompleto:
                 return None
 
         except Exception as e:
-            self.pywinauto_logger.error(f"❌ Error crítico guardando resumen CSV: {e}")
+            self.pywinauto_logger.error(f"❌ Error crítico guardando resumen CSV consolidado: {e}")
             import traceback
             self.pywinauto_logger.error(traceback.format_exc())
             return None

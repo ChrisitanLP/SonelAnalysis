@@ -88,10 +88,8 @@ class CsvTab(QWidget):
             
             # Crear botón si hay errores
             if has_errors:
-                self.reprocess_button = QPushButton("🔁 Reprocesar archivos con errores")
-                self.reprocess_button.setStyleSheet(
-                    "padding: 8px; background-color: #F44336; color: white; border-radius: 6px; font-weight: bold;"
-                )
+                self.reprocess_button = QPushButton("⟳ Reprocesar archivos con errores")
+                self.reprocess_button.setObjectName("ActionButton_danger")  # estilo coherente
                 self.reprocess_button.clicked.connect(self.confirm_reprocess_errors)
                 
                 # Insertar el botón después de las métricas (posición 1)
@@ -138,7 +136,7 @@ class CsvTab(QWidget):
         }
     
     def refresh_data(self):
-        """Refrescar datos desde el archivo JSON"""
+        """Refrescar datos desde el archivo JSON con soporte para consolidación"""
         self.csv_data = self.load_csv_summary()
         
         # Actualizar métricas
@@ -164,8 +162,19 @@ class CsvTab(QWidget):
         current_errors = summary.get('errors', 0)
         self._update_reprocess_button_visibility(current_errors > 0)
 
-        # Actualizar tabla
+        # Manejo de archivos consolidados con logging mejorado
         files_data = self.csv_data.get('files_processed', [])
+        
+        # Log información de consolidación si está disponible
+        consolidation_info = self.csv_data.get('metadata', {}).get('consolidation_info', {})
+        if consolidation_info:
+            total_dirs = consolidation_info.get('total_directories_processed', 0)
+            current_dir = consolidation_info.get('current_directory', '')
+            print(f"📊 CSV Tab refrescado - Datos consolidados: {len(files_data)} archivos de {total_dirs} directorios")
+            print(f"📁 Directorio actual: {current_dir}")
+            print(f"📈 Métricas consolidadas: {metrics_values}")
+        
+        # Actualizar tabla con datos consolidados
         self.populate_files_table(self.csv_files_table, files_data)
                 
     def setup_files_table(self, table):
@@ -187,7 +196,7 @@ class CsvTab(QWidget):
         header.setSectionResizeMode(5, QHeaderView.Stretch)    
         
     def populate_files_table(self, table, files_data):
-        """Poblar tabla de archivos CSV con validación mejorada"""
+        """Poblar tabla de archivos CSV con validación mejorada y soporte para directorio origen"""
         if not isinstance(files_data, list):
             print(f"Warning: files_data no es una lista: {type(files_data)}")
             return
@@ -204,7 +213,12 @@ class CsvTab(QWidget):
                 status = file_data.get('status', '')
                 records = file_data.get('records', file_data.get('duration', '0'))
                 csv_output = file_data.get('filename_csv', file_data.get('csv_output', ''))
+                
+                # **NUEVA LÓGICA: Incluir directorio origen en el mensaje**
                 message = file_data.get('message', '')
+                source_directory = file_data.get('source_directory', '')
+                if source_directory and source_directory != 'directorio_desconocido':
+                    message = f"{message} (Dir: {source_directory})"
                 
                 # Poblar tabla
                 table.setItem(row, 0, QTableWidgetItem(str(index)))
@@ -216,35 +230,40 @@ class CsvTab(QWidget):
                 
         except Exception as e:
             print(f"Error poblando tabla de archivos: {e}")
-            # Limpiar tabla en caso de error
             table.setRowCount(0)
 
     def update_csv_summary(self, summary_data):
-        """Actualizar resumen de extracción CSV con validación robusta"""
+        """Actualizar resumen de extracción CSV con validación robusta y datos consolidados"""
         if not summary_data or not isinstance(summary_data, dict):
             print("Warning: summary_data inválido en CSV tab")
             return
         
-        # Actualizar cards de métricas con validación
+        # NUEVA LÓGICA: Recargar datos JSON para obtener valores consolidados
+        self.refresh_data()  # Esto actualiza con los datos acumulados reales
+        
+        # Usar datos consolidados del JSON en lugar de solo summary_data
+        consolidated_summary = self.csv_data.get('csv_summary', {})
+        
+        # Actualizar cards de métricas con datos consolidados
         if hasattr(self, 'csv_cards') and len(self.csv_cards) >= 5:
             try:
-                # Extraer valores de forma segura
-                processed_files = int(summary_data.get('processed_files', 0))
-                total_files = int(summary_data.get('total_files', processed_files))
-                warnings = int(summary_data.get('warnings', 0))
-                errors = int(summary_data.get('errors', 0))
-                csv_files_generated = int(summary_data.get('csv_files_generated', processed_files))
+                # Extraer valores consolidados (acumulados)
+                processed_files = int(consolidated_summary.get('processed_files', 0))
+                total_files = int(consolidated_summary.get('total_files', processed_files))
+                warnings = int(consolidated_summary.get('warnings', 0))
+                errors = int(consolidated_summary.get('errors', 0))
+                csv_files_generated = int(consolidated_summary.get('csv_files_generated', processed_files))
                 
-                # Formatear tiempo de ejecución
-                execution_time_raw = summary_data.get('execution_time', '0:00')
+                # Formatear tiempo de ejecución consolidado
+                execution_time_raw = consolidated_summary.get('execution_time', '0:00')
                 execution_time = self.format_execution_time(execution_time_raw)
                 
                 metrics_values = [
-                    f"{processed_files} / {total_files}",  # Archivos Procesados
-                    str(warnings),                         # Advertencias
-                    str(errors),                          # Errores
-                    str(csv_files_generated),             # CSVs Generados
-                    execution_time,                       # Tiempo Extracción
+                    f"{processed_files} / {total_files}",  # Archivos Procesados (CONSOLIDADO)
+                    str(warnings),                         # Advertencias (CONSOLIDADO)
+                    str(errors),                          # Errores (CONSOLIDADO)
+                    str(csv_files_generated),             # CSVs Generados (CONSOLIDADO)
+                    execution_time,                       # Tiempo Extracción (CONSOLIDADO)
                 ]
                 
                 # Actualizar cada card de forma segura
@@ -252,13 +271,13 @@ class CsvTab(QWidget):
                     if i < len(self.csv_cards) and hasattr(self.csv_cards[i], 'update_value'):
                         self.csv_cards[i].update_value(str(value))
                         
-                print(f"✅ CSV Cards actualizadas: {metrics_values}")
+                print(f"✅ CSV Cards actualizadas con datos consolidados: {metrics_values}")
                 self._update_reprocess_button_visibility(errors > 0)
                             
             except Exception as e:
-                print(f"Error actualizando métricas CSV: {e}")
+                print(f"Error actualizando métricas CSV consolidadas: {e}")
         
-        # CORRECCIÓN: Mejor manejo de archivos con múltiples fuentes
+        # Actualizar tabla con datos del procesamiento más reciente para mantener contexto
         try:
             files_data = []
             
@@ -269,21 +288,73 @@ class CsvTab(QWidget):
             elif 'files' in summary_data:
                 files_data = summary_data['files']
             
-            # Validar que sea una lista
+            # Si hay archivos del procesamiento reciente, añadirlos a la vista
             if isinstance(files_data, list) and files_data:
-                self.populate_files_table(self.csv_files_table, files_data)
-                print(f"✅ Tabla CSV actualizada con {len(files_data)} archivos")
+                # Combinar con archivos consolidados para mostrar vista completa
+                consolidated_files = self.csv_data.get('files_processed', [])
+                self.populate_files_table(self.csv_files_table, consolidated_files)
+                print(f"✅ Tabla CSV actualizada con {len(consolidated_files)} archivos consolidados")
             else:
-                print("ℹ️ No hay datos de archivos para mostrar en CSV tab")
-                # Limpiar tabla si no hay datos
-                if hasattr(self, 'csv_files_table'):
-                    self.csv_files_table.setRowCount(0)
+                # Solo mostrar datos consolidados si no hay archivos recientes
+                consolidated_files = self.csv_data.get('files_processed', [])
+                self.populate_files_table(self.csv_files_table, consolidated_files)
+                print(f"ℹ️ Tabla CSV actualizada solo con datos consolidados: {len(consolidated_files)} archivos")
                 
         except Exception as e:
             print(f"Error actualizando tabla de archivos CSV: {e}")
             # Limpiar tabla en caso de error
             if hasattr(self, 'csv_files_table'):
                 self.csv_files_table.setRowCount(0)
+
+    def update_after_directory_processing(self):
+        """Método específico para actualizar después del procesamiento de un directorio"""
+        try:
+            print("🔄 Actualizando pestaña CSV con datos consolidados...")
+            
+            # Recargar datos JSON consolidados
+            self.csv_data = self.load_csv_summary()
+            
+            # Obtener datos consolidados
+            summary = self.csv_data.get('csv_summary', {})
+            
+            # Actualizar métricas con datos consolidados
+            if hasattr(self, 'csv_cards') and len(self.csv_cards) >= 5:
+                execution_time_raw = summary.get('execution_time', '0:00')
+                execution_time_formatted = self.format_execution_time(execution_time_raw)
+                
+                metrics_values = [
+                    f"{summary.get('processed_files', 0)} / {summary.get('total_files', 0)}",
+                    str(summary.get('warnings', 0)),
+                    str(summary.get('errors', 0)),
+                    str(summary.get('csv_files_generated', 0)),
+                    execution_time_formatted
+                ]
+                
+                # Actualizar cards
+                for i, value in enumerate(metrics_values):
+                    if i < len(self.csv_cards):
+                        self.csv_cards[i].update_value(value)
+                
+                print(f"✅ Cards CSV actualizadas con valores consolidados: {metrics_values}")
+            
+            # Actualizar botón de reprocesamiento
+            current_errors = summary.get('errors', 0)
+            self._update_reprocess_button_visibility(current_errors > 0)
+            
+            # Actualizar tabla con archivos consolidados
+            files_data = self.csv_data.get('files_processed', [])
+            self.populate_files_table(self.csv_files_table, files_data)
+            
+            # Log consolidation info si está disponible
+            consolidation_info = self.csv_data.get('metadata', {}).get('consolidation_info', {})
+            if consolidation_info:
+                total_dirs = consolidation_info.get('total_directories_processed', 0)
+                current_dir = consolidation_info.get('current_directory', '')
+                print(f"📊 CSV Tab actualizado con datos de {total_dirs} directorios procesados")
+                print(f"📁 Último directorio procesado: {current_dir}")
+            
+        except Exception as e:
+            print(f"Error en update_after_directory_processing: {e}")
 
     def on_reprocess_errors_clicked(self):
         """Acción al hacer clic en el botón de reprocesar archivos con error"""
@@ -298,10 +369,11 @@ class CsvTab(QWidget):
                 raise ValueError(f"El controlador devolvió un tipo inválido: {type(extraction_summary)}")
 
             extracted_files = extraction_summary.get('procesados_exitosos', 0)
+            total_errors = extraction_summary.get('procesados_fallidos', 0)
 
-            if success:
+            if success and extracted_files > 0:
                 csv_results = {
-                    'status': 'success' if extracted_files > 0 else 'completed',
+                    'status': 'success',
                     'total_files': extraction_summary.get('total_files', 0),
                     'processed_files': extraction_summary.get('procesados_exitosos', 0),
                     'errors': extraction_summary.get('procesados_fallidos', 0),
@@ -309,24 +381,46 @@ class CsvTab(QWidget):
                     'csv_files_generated': extraction_summary.get('csvs_verificados', 0),
                     'total_records': extraction_summary.get('csvs_verificados', 0) * 3278,
                     'execution_time': extraction_summary.get('execution_time', '0:00'),
-                    'avg_speed': '6.7 archivos/min' if extracted_files > 0 else '0 archivos/min',
+                    'avg_speed': '6.7 archivos/min',
                     'files': extraction_summary.get('files_detail', [])
                 }
 
                 UIHelpers.show_success_message(
                     self,
                     "Reprocesamiento Completado",
-                    "Los archivos con error han sido reprocesados exitosamente.",
-                    "Los CSV generados están listos para ser cargados."
+                    f"Se reprocesaron exitosamente {extracted_files} archivos con errores.",
+                    f"Los CSV generados están listos para ser cargados."
+                )
+
+            elif success and extracted_files == 0:
+                # No había archivos con errores para reprocesar
+                csv_results = {
+                    'status': 'completed',
+                    'total_files': 0,
+                    'processed_files': 0,
+                    'errors': 0,
+                    'warnings': 0,
+                    'csv_files_generated': 0,
+                    'total_records': 0,
+                    'execution_time': '0:00',
+                    'avg_speed': '0 archivos/min',
+                    'files': []
+                }
+
+                UIHelpers.show_info_message(
+                    self,
+                    "Sin Archivos para Reprocesar",
+                    "No se encontraron archivos con errores que requieran reprocesamiento.",
+                    "Todos los archivos han sido procesados correctamente."
                 )
 
             else:
-                error_message = extraction_summary.get('mensaje_error', 'Error desconocido')
+                error_message = extraction_summary.get('mensaje_error', 'Error en reprocesamiento')
                 csv_results = {
                     'status': 'error',
                     'total_files': extraction_summary.get('total_files', 0),
                     'processed_files': 0,
-                    'errors': extraction_summary.get('procesados_fallidos', 1),
+                    'errors': total_errors,
                     'warnings': 0,
                     'csv_files_generated': 0,
                     'total_records': 0,
@@ -338,14 +432,24 @@ class CsvTab(QWidget):
                 UIHelpers.show_error_message(
                     self,
                     "Error en el Reprocesamiento",
-                    "No se pudo completar la recuperación de archivos con coordenadas.",
+                    "No se pudo completar el reprocesamiento de archivos con errores.",
                     f"Motivo: {error_message}\n\nRevisa los archivos y vuelve a intentar."
                 )
+
+            # Actualizar la interfaz con los nuevos datos
+            self.refresh_data()
 
         except Exception as e:
             print(f"Error en on_reprocess_errors_clicked: {e}")
             traceback.print_exc()
 
+            UIHelpers.show_error_message(
+                self,
+                "Error Crítico",
+                "Se produjo un error inesperado durante el reprocesamiento.",
+                f"Error técnico: {str(e)}\n\nContacta al administrador del sistema."
+            )
+    
     def confirm_reprocess_errors(self):
         """Solicita confirmación antes de reprocesar archivos con error."""
         ok = UIHelpers.show_confirmation_dialog(

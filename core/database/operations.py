@@ -282,6 +282,8 @@ class DataHandler:
                     params=(
                         codigo_id,
                         row.get('tiempo_utc'),
+                        row.get('date_field'),     
+                        row.get('time_utc5'),
                         row.get('u_l1_avg_10min'),
                         row.get('u_l2_avg_10min'),
                         row.get('u_l3_avg_10min'),
@@ -322,3 +324,76 @@ class DataHandler:
         
         logger.info(f"Datos cargados exitosamente en la BD: {successful_rows}/{len(data)} filas")
         return successful_rows > 0
+    
+    def export_all_mediciones_planas(self):
+        """
+        Exportar todos los registros de la tabla mediciones_planas
+        
+        Returns:
+            list: Lista de tuplas con todos los registros o None si hay error
+        """
+        try:
+            query = """
+                SELECT 
+                    mp.id,
+                    c.codigo,
+                    mp.fecha,
+                    mp.date_field,
+                    mp.time_utc5,
+                    mp.u_l1_avg,
+                    mp.u_l2_avg,
+                    mp.u_l3_avg,
+                    mp.u_l12_avg,
+                    mp.i_l1_avg,
+                    mp.i_l2_avg,
+                    mp.p_l1_avg,
+                    mp.p_l2_avg,
+                    mp.p_l3_avg,
+                    mp.p_e_avg,
+                    mp.q1_l1_avg,
+                    mp.q1_l2_avg,
+                    mp.q1_e_avg,
+                    mp.sn_l1_avg,
+                    mp.sn_l2_avg,
+                    mp.sn_e_avg,
+                    mp.s_l1_avg,
+                    mp.s_l2_avg,
+                    mp.s_e_avg,
+                    mp.fecha_subida
+                FROM mediciones_planas mp
+                LEFT JOIN codigo c ON mp.codigo_id = c.id
+                ORDER BY mp.fecha DESC;
+            """
+            
+            cursor = self.db_connection.execute_query(query, commit=False)
+            
+            if cursor:
+                rows = cursor.fetchall()
+                cursor.close()
+                logger.info(f"Exportados {len(rows)} registros de mediciones_planas")
+                return rows
+            else:
+                logger.error("Error al ejecutar consulta de exportación")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error al exportar mediciones_planas: {e}")
+            return None
+    
+    def get_mediciones_planas_headers(self):
+        """
+        Obtener los encabezados de la tabla mediciones_planas para exportación
+        
+        Returns:
+            list: Lista de nombres de columnas
+        """
+        return [
+            'ID', 'Código_Cliente', 'Fecha_Hora', 'Fecha', 'Hora_UTC5',
+            'U_L1_Avg', 'U_L2_Avg', 'U_L3_Avg', 'U_L12_Avg',
+            'I_L1_Avg', 'I_L2_Avg',
+            'P_L1_Avg', 'P_L2_Avg', 'P_L3_Avg', 'P_E_Avg',
+            'Q1_L1_Avg', 'Q1_L2_Avg', 'Q1_E_Avg',
+            'SN_L1_Avg', 'SN_L2_Avg', 'SN_E_Avg',
+            'S_L1_Avg', 'S_L2_Avg', 'S_E_Avg',
+            'Fecha_Subida'
+        ]

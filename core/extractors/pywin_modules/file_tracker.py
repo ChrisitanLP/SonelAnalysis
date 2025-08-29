@@ -11,7 +11,7 @@ class FileTracker:
         self.logger = logger
         export_dir = self.PATHS.get('export_dir', self.PATHS.get('export_dir'))
         if not export_dir:
-            export_dir = os.path.join(os.path.dirname(self.PATHS['process_file_dir']), 'export')
+            export_dir = self.PATHS.get('reprocess_dir', self.PATHS.get('reprocess_dir'))
         
         os.makedirs(export_dir, exist_ok=True)  
         self.processed_files_json = os.path.join(export_dir, 'procesados_global.json')

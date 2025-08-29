@@ -1,9 +1,13 @@
 import os
+import csv
 import json
 from PyQt5.QtCore import Qt
+from datetime import datetime
+from gui.utils.ui_helper import UIHelpers
 from gui.components.cards.modern_card import ModernCard
 from gui.components.cards.status_card import StatusCard
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView
+from core.controller.sonel_controller import SonelController
+from PyQt5.QtWidgets import QWidget, QApplication, QLabel, QPushButton, QVBoxLayout, QGridLayout, QTableWidget, QTableWidgetItem, QHeaderView, QHBoxLayout, QMessageBox, QFileDialog
 
 class DbTab(QWidget):
     def __init__(self, parent=None):
@@ -11,6 +15,13 @@ class DbTab(QWidget):
         self.parent_app = parent
         self.setObjectName("DbTab")
         self.json_file_path = ".\\exports\\resumen_etl.json"
+        
+        try:
+            self.controller = SonelController()
+        except Exception as e:
+            print(f"⚠️ Error inicializando controlador: {e}")
+            self.controller = None
+
         self.init_ui()
         
     def init_ui(self):
@@ -38,6 +49,22 @@ class DbTab(QWidget):
             db_metrics_layout.addWidget(status_card, row, col)
         
         layout.addWidget(db_metrics_widget)
+
+        export_section = QWidget()
+        export_layout = QHBoxLayout(export_section)
+        export_layout.setSpacing(12)
+        export_layout.setContentsMargins(0, 8, 0, 8)
+        
+        # Botón de exportación con estilo consistente
+        self.export_csv_button = QPushButton("📊 Exportar Reporte EEASA a CSV")
+        self.export_csv_button.setObjectName("ActionButton_secondary")
+        self.export_csv_button.clicked.connect(self.confirm_export_table_to_csv)
+        self.export_csv_button.setToolTip("Exportar todos los registros de mediciones_planas a archivo CSV")
+        
+        export_layout.addWidget(self.export_csv_button)
+        export_layout.addStretch()
+        
+        layout.addWidget(export_section)
         
         # === TABLA DE ARCHIVOS SUBIDOS ===
         uploads_card = ModernCard("Detalle de Operaciones de Subida")
@@ -94,6 +121,9 @@ class DbTab(QWidget):
         
     def populate_db_table(self, table, files_data):
         """Poblar tabla de subidas a BD"""
+        # Ordenar los archivos alfabéticamente por el campo 'filename'
+        files_data = sorted(files_data, key=lambda f: f.get('filename', '').lower())
+
         table.setRowCount(len(files_data))
         for row, file_data in enumerate(files_data):
             table.setItem(row, 0, QTableWidgetItem(str(row + 1))) 
@@ -305,3 +335,73 @@ class DbTab(QWidget):
         except (ValueError, TypeError) as e:
             print(f"Error formateando tiempo '{time_str}': {e}")
             return str(time_str)
+        
+    def export_table_to_csv(self):
+        """Exportar todos los registros de mediciones_planas a CSV usando el controlador"""
+        try:
+            # Abrir diálogo para seleccionar ubicación de archivo
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"mediciones_EEASA_{timestamp}.csv"
+            
+            # Configurar opciones del diálogo para evitar bloqueos
+            options = QFileDialog.Options()
+            options |= QFileDialog.DontUseNativeDialog
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Guardar Reporte EEASA en CSV",
+                default_filename,
+                "Archivos CSV (*.csv);;Todos los archivos (*)",
+                options=options  # Agregar las opciones
+            )
+            
+            if not file_path:
+                return  # Usuario canceló
+            
+            # Asegurar extensión .csv si no la tiene
+            if not file_path.lower().endswith('.csv'):
+                file_path += '.csv'
+            
+            # Mostrar mensaje de progreso
+            self.export_csv_button.setText("⏳ Generando reporte EEASA...")
+            self.export_csv_button.setEnabled(False)
+
+            QApplication.processEvents()
+            
+            # Llamar al controlador para realizar la exportación
+            success, message = self.controller.export_mediciones_to_csv(file_path)
+            
+            if success:
+                QMessageBox.information(
+                    self, 
+                    "Exportación EEASA Exitosa", 
+                    f"El reporte empresarial ha sido generado correctamente:\n{file_path}\n\n{message}"
+                )
+            else:
+                QMessageBox.critical(
+                    self, 
+                    "Error de Exportación EEASA", 
+                    f"No se pudo generar el reporte empresarial:\n{message}"
+                )
+                
+        except Exception as e:
+            QMessageBox.critical(
+                self, 
+                "Error Inesperado", 
+                f"Error durante la exportación: {str(e)}"
+            )
+        finally:
+            # Restaurar botón
+            self.export_csv_button.setText("📊 Exportar Reporte EEASA a CSV")
+            self.export_csv_button.setEnabled(True)
+
+    def confirm_export_table_to_csv(self):
+        """Solicita confirmación antes de exportar la información en CSV."""
+        ok = UIHelpers.show_confirmation_dialog(
+            self,
+            title="Confirmar exportación",
+            message="¿Deseas exportar la información en un archivo CSV?",
+            details="El archivo se generará con el formato empresarial de EEASA y contendrá toda la información visible en la tabla actual."
+        )
+        if ok:
+            self.export_table_to_csv()

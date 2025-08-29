@@ -4,8 +4,10 @@ import json
 import datetime
 import traceback
 from PyQt5.QtCore import QTimer
+from config.settings import load_config
 from gui.utils.ui_helper import UIHelpers
 from gui.styles.themes import ThemeManager
+from core.database.connection import DatabaseConnection
 from gui.components.panels.status_panel import StatusPanel
 from gui.components.panels.footer_panel import FooterPanel
 from gui.components.panels.header_panel import HeaderPanel
@@ -21,6 +23,11 @@ class SonelDataExtractorGUI(QMainWindow):
         self.selected_folder = ""
         self.is_dark_mode = False
         self.theme_manager = ThemeManager()
+
+        config_file='config.ini'
+        self.config = load_config(config_file)
+        db_connection = DatabaseConnection(self.config)
+        self.db_connection = db_connection.get_connection()
 
         try:
             self.controller = SonelController()
@@ -336,17 +343,18 @@ class SonelDataExtractorGUI(QMainWindow):
                     # Obtener referencia al tab general
                     execution_panel = self.status_panel.execution_summary_panel
                     
-                    # Verificar si tiene tab_widget y encontrar el tab general
+                    # Verificar si tiene tab_widget y encontrar los tabs
                     if hasattr(execution_panel, 'tab_widget'):
                         for i in range(execution_panel.tab_widget.count()):
                             tab_widget = execution_panel.tab_widget.widget(i)
                             tab_text = execution_panel.tab_widget.tabText(i)
 
-                            if "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                                tab_widget.refresh_data()  # Esto actualizará el botón dinámicamente
+                            # NUEVO: Actualizar CSV Tab con datos consolidados
+                            if "CSV" in tab_text and hasattr(tab_widget, 'update_after_directory_processing'):
+                                tab_widget.update_after_directory_processing()
                                 self.status_panel.add_log_entry(
                                     f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
-                                    f"🔄 Tab CSV actualizado - Botón reprocesamiento verificado"
+                                    f"🔄 CSV Tab actualizado con datos consolidados"
                                 )
                             
                             # Si es el tab general, actualizarlo
@@ -379,9 +387,9 @@ class SonelDataExtractorGUI(QMainWindow):
                 # Error no crítico - solo log
                 self.status_panel.add_log_entry(
                     f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
-                    f"⚠️ Error actualizando tab general: {str(update_error)}"
+                    f"⚠️ Error actualizando tabs: {str(update_error)}"
                 )
-                print(f"Error actualizando tab general después de CSV: {update_error}")
+                print(f"Error actualizando tabs después de CSV: {update_error}")
             
         except Exception as e:
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ❌ Error: {str(e)}")
@@ -390,25 +398,6 @@ class SonelDataExtractorGUI(QMainWindow):
             print(f"Error en generate_csv: {e}")
             traceback.print_exc()
         
-    def _generate_file_details(self, extracted_files):
-        """Genera detalles simulados de archivos para compatibilidad con la GUI"""
-        files_details = []
-        
-        # Si no hay archivos extraídos, generar datos de ejemplo
-        if extracted_files <= 0:
-            return files_details
-        
-        for i in range(extracted_files):
-            files_details.append({
-                "filename": f"archivo_{i+1:03d}.pqm702",
-                "status": "✅ Exitoso",
-                "records": f"{3278 + (i * 50)}",  # Registros variables
-                "size": f"{2.1 + (i * 0.1):.1f} MB",
-                "message": "Procesado correctamente"
-            })
-        
-        return files_details
-
     # 2. Modificar el método upload_to_db():
     def upload_to_db(self):
         """Subir archivos a base de datos usando el controlador"""
@@ -723,41 +712,63 @@ class SonelDataExtractorGUI(QMainWindow):
             traceback.print_exc()
 
     def _refresh_all_tabs_after_complete(self):
-        """Refrescar todos los tabs después del proceso completo"""
+        """
+        MODIFICACIÓN: Refrescar todos los tabs después del proceso completo
+        Asegurar compatibilidad con sistema consolidado
+        """
         try:
-            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔄 Actualizando información de tabs...")
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] 🔄 Actualizando información consolidada...")
             
-            # Refrescar CSV Tab CON BOTÓN DE REPROCESAMIENTO
+            # Refrescar CSV Tab CON DATOS CONSOLIDADOS
             if hasattr(self.status_panel, 'execution_summary_panel') and hasattr(self.status_panel.execution_summary_panel, 'tab_widget'):
                 execution_panel = self.status_panel.execution_summary_panel
                 for i in range(execution_panel.tab_widget.count()):
                     tab_widget = execution_panel.tab_widget.widget(i)
                     tab_text = execution_panel.tab_widget.tabText(i)
                     
-                    if "CSV" in tab_text and hasattr(tab_widget, 'refresh_data'):
-                        tab_widget.refresh_data()  # Actualiza métricas Y botón de reprocesamiento
-                        print("CSV Tab actualizado con botón de reprocesamiento")
+                    if "CSV" in tab_text:
+                        # NUEVA LÓGICA: Usar método específico para datos consolidados
+                        if hasattr(tab_widget, 'update_after_directory_processing'):
+                            tab_widget.update_after_directory_processing()
+                            
+                            # Verificar si hay información de consolidación
+                            if hasattr(tab_widget, 'csv_data') and tab_widget.csv_data:
+                                consolidation_info = tab_widget.csv_data.get('metadata', {}).get('consolidation_info', {})
+                                if consolidation_info:
+                                    total_dirs = consolidation_info.get('total_directories_processed', 0)
+                                    current_dir = consolidation_info.get('current_directory', '')
+                                    self.status_panel.add_log_entry(
+                                        f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                                        f"📊 CSV Tab consolidado - {total_dirs} directorios procesados, último: {current_dir}"
+                                    )
+                            else:
+                                self.status_panel.add_log_entry(
+                                    f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
+                                    f"📊 CSV Tab actualizado con datos consolidados"
+                                )
+                        elif hasattr(tab_widget, 'refresh_data'):
+                            # Fallback si no tiene el método específico
+                            tab_widget.refresh_data()
+                            
                     elif hasattr(tab_widget, 'refresh_data'):
                         tab_widget.refresh_data()
-                        print(f"{tab_text} Tab actualizado")
             
-            # Refrescar General Tab con método específico para proceso completo
+            # Refrescar General Tab
             if hasattr(self.status_panel, 'execution_summary_panel'):
                 if hasattr(self.status_panel.execution_summary_panel, 'refresh_data_after_complete_process'):
                     self.status_panel.execution_summary_panel.refresh_data_after_complete_process()
                 elif hasattr(self.status_panel.execution_summary_panel, 'refresh_data'):
                     self.status_panel.execution_summary_panel.refresh_all_tabs()
-                print("General Tab actualizado")
             
-            # Actualizar datos estáticos generales también  
+            # Actualizar datos estáticos generales
             self.update_static_data()
             
-            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Información de tabs actualizada")
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Sistema consolidado actualizado")
             
         except Exception as refresh_error:
             print(f"Error refrescando tabs después del proceso completo: {refresh_error}")
-            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Error actualizando información de tabs")
-            
+            self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ⚠️ Error actualizando sistema consolidado")
+                
     def update_general_summary(self):
         """Actualizar resumen general con datos reales desde JSON"""
         

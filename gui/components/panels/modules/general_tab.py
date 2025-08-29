@@ -29,11 +29,13 @@ class GeneralTab(QWidget):
         csv_summary = self.csv_data.get('csv_summary', {})
         etl_summary = self.etl_data.get('overall_summary', {})
         db_summary = self.etl_data.get('database_summary', {})
+
+        processed_files, total_files = self.get_accumulated_processed_files()
         
         # Crear tarjetas de métricas principales con datos reales
         self.general_cards = []
         metrics_data = [
-            ("📁", "Archivos Procesados", f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}", "#4CAF50"),
+            ("📁", "Archivos Procesados", f"{processed_files} / {total_files}", "#4CAF50"),
             ("⚠️", "Advertencias", str(csv_summary.get('warnings', 0)), "#FF9800"),
             ("❌", "Errores", str(csv_summary.get('errors', 0)), "#F44336"),
             ("🗄️", "Archivos Subidos", f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}", "#3F51B5"),
@@ -73,6 +75,17 @@ class GeneralTab(QWidget):
         # Generar contenido del resumen ejecutivo con datos reales
         self.update_summary_content()
         
+    def get_accumulated_processed_files(self):
+        """Obtener el número acumulado de archivos procesados (misma lógica que el Resumen Ejecutivo)"""
+        csv_summary = self.csv_data.get('csv_summary', {})
+        etl_summary = self.etl_data.get('overall_summary', {})
+        
+        # Usar la misma lógica que update_summary_content() para consistencia
+        processed_files = csv_summary.get('processed_files', 0)
+        total_files = csv_summary.get('total_files', 0)
+        
+        return processed_files, total_files
+
     def load_csv_data(self):
         """Cargar datos del resumen CSV desde el archivo JSON"""
         json_path = "exports/resumen_csv.json"
@@ -242,9 +255,11 @@ class GeneralTab(QWidget):
         csv_summary = self.csv_data.get('csv_summary', {})
         etl_summary = self.etl_data.get('overall_summary', {})
         db_summary = self.etl_data.get('database_summary', {})
+
+        processed_files, total_files = self.get_accumulated_processed_files()
         
         metrics_values = [
-            f"{csv_summary.get('processed_files', 0)} / {csv_summary.get('total_files', 0)}",
+            f"{processed_files} / {total_files}",
             str(csv_summary.get('warnings', 0)),
             str(etl_summary.get('total_errors', 0)),
             f"{etl_summary.get('db_uploaded', 0)} / {etl_summary.get('total_files', 0)}",
@@ -369,16 +384,20 @@ class GeneralTab(QWidget):
             if not csv_data:
                 return
             
-            # Actualizar cards con datos del procesamiento CSV
-            processed_files = csv_data.get('processed_files', 0)
-            total_files = csv_data.get('total_files', 0)
+            # Recargar datos JSON para obtener valores más actuales
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
+            # CORREGIDO: Obtener valores acumulados para consistencia
+            processed_files, total_files = self.get_accumulated_processed_files()
+            
+            # Usar datos del CSV recién procesado o de los JSON si son más actuales
             errors = csv_data.get('errors', 0)
             warnings = csv_data.get('warnings', 0)
-            extracted_files = csv_data.get('extracted_files', 0)
             
-            # Actualizar los primeros 3 cards (Archivos Procesados, Advertencias, Errores)
+            # Actualizar los primeros 3 cards con datos consistentes
             if len(self.general_cards) >= 3:
-                # Card 0: Archivos Procesados
+                # Card 0: Archivos Procesados - CORREGIDO: Usar valores acumulados
                 self.general_cards[0].update_value(f"{processed_files} / {total_files}")
                 
                 # Card 1: Advertencias  
@@ -391,7 +410,7 @@ class GeneralTab(QWidget):
             self._update_executive_summary_after_csv(csv_data)
             
             # Log interno
-            print(f"Tab General actualizado: {processed_files}/{total_files} archivos, "
+            print(f"Tab General actualizado: {processed_files}/{total_files} archivos (acumulados), "
                 f"{errors} errores, {warnings} advertencias")
                 
         except Exception as e:
@@ -483,6 +502,10 @@ class GeneralTab(QWidget):
             if not db_data:
                 return
             
+            # Recargar datos JSON para obtener valores más actuales
+            self.csv_data = self.load_csv_data()
+            self.etl_data = self.load_etl_data()
+            
             # Actualizar cards con datos del procesamiento DB
             uploaded_files = db_data.get('uploaded_files', 0)
             total_files = db_data.get('total_files', uploaded_files)  # Usar uploaded como fallback
@@ -490,8 +513,14 @@ class GeneralTab(QWidget):
             failed_uploads = db_data.get('failed_uploads', 0)
             data_size = db_data.get('data_size', '0 MB')
             
-            # Actualizar cards específicas de BD (cards 3, 4 y 5)
+            # CORREGIDO: Obtener valores acumulados para el primer card
+            processed_files, total_csv_files = self.get_accumulated_processed_files()
+            
+            # Actualizar cards con datos consistentes
             if len(self.general_cards) >= 6:
+                # Card 0: Archivos Procesados - CORREGIDO: Mantener valores acumulados
+                self.general_cards[0].update_value(f"{processed_files} / {total_csv_files}")
+                
                 # Card 3: Archivos Subidos (🗄️)
                 self.general_cards[3].update_value(f"{uploaded_files} / {max(total_files, uploaded_files)}")
                 
@@ -505,8 +534,8 @@ class GeneralTab(QWidget):
             self._update_executive_summary_after_db(db_data)
             
             # Log interno
-            print(f"Tab General actualizado después de DB: {uploaded_files} archivos subidos, "
-                f"{inserted_records:,} registros, {data_size}")
+            print(f"Tab General actualizado después de DB: {processed_files}/{total_csv_files} archivos acumulados, "
+                f"{uploaded_files} archivos subidos, {inserted_records:,} registros, {data_size}")
                 
         except Exception as e:
             print(f"Error en update_after_db_processing: {e}")

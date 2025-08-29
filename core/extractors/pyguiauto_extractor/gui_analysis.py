@@ -64,7 +64,7 @@ class GuiAnalisisInicial:
             self.logger.info("✅ Aplicación iniciada correctamente")
             
             # Esperar a que la interfaz esté completamente cargada
-            time.sleep(3)
+            time.sleep(5)
             
             return True
             
@@ -96,7 +96,7 @@ class GuiAnalisisInicial:
             
             # Hacer clic en el elemento de configuración
             pyautogui.click(x, y)
-            time.sleep(2)
+            time.sleep(5)
             
             # Verificar si hay botón de análisis de datos para confirmar navegación
             analysis_button_key = "Button_analysis_data"
@@ -138,7 +138,7 @@ class GuiAnalisisInicial:
             
             # Esperar a que se procese el análisis
             self.logger.info("⏳ Esperando procesamiento del análisis...")
-            time.sleep(8)  # Tiempo para que se procese el análisis
+            time.sleep(12)  # Tiempo para que se procese el análisis
             
             # Verificar que estamos en la ventana correcta buscando elementos esperados
             # Como checkboxes de mediciones
@@ -168,7 +168,7 @@ class GuiAnalisisInicial:
         try:
             if self.app_process and self.app_process.poll() is None:
                 self.app_process.terminate()
-                time.sleep(2)
+                time.sleep(5)
                 
                 # Si no se cerró, forzar cierre
                 if self.app_process.poll() is None:

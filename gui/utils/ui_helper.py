@@ -76,6 +76,25 @@ class UIHelpers:
         return msg.exec_() == QMessageBox.Yes
     
     @staticmethod
+    def show_info_message(parent, title, message, details=None):
+        """
+        Muestra un diálogo de información con estilo empresarial.
+        """
+        msg = QMessageBox(parent)
+        msg.setIcon(QMessageBox.Information)
+        msg.setWindowTitle(title)
+        msg.setText(message)
+        if details:
+            msg.setInformativeText(details)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.setDefaultButton(QMessageBox.Ok)
+
+        # Aplicar estilo corporativo/empresarial
+        UIHelpers._apply_message_box_theme(msg, parent)
+
+        msg.exec_()
+    
+    @staticmethod
     def _apply_message_box_theme(msg, parent):
         """
         Aplica el tema (claro/oscuro) al QMessageBox según el tema actual del parent.

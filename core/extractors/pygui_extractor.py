@@ -34,8 +34,9 @@ class SonelGuiExtractorCompleto:
         self.PATHS = {
             'input_dir': input_dir or config['PATHS']['input_dir'],
             'output_dir': output_dir or config['PATHS']['output_dir'],
-            'export_dir': output_dir or config['PATHS']['export_dir'],
+            'export_dir': config['PATHS']['export_dir'],
             'sonel_exe_path': ruta_exe or config['PATHS']['sonel_exe_path'],
+            'reprocess_dir': config['PATHS']['export_dir'],
             'process_file_dir': Path(input_dir or config['PATHS']['input_dir']).resolve(),
             'coordinates_file': coordinates_file or os.path.join(config['PATHS']['output_dir'], 'component_positions.json')
         }
@@ -50,6 +51,7 @@ class SonelGuiExtractorCompleto:
         # Crear directorios usando función centralizada
         create_directories()
         os.makedirs(self.PATHS['output_dir'], exist_ok=True)
+        os.makedirs(self.PATHS['export_dir'], exist_ok=True)
         os.makedirs(self.PATHS['process_file_dir'], exist_ok=True)
     
         # Logger específico para GUI extractor
@@ -128,34 +130,72 @@ class SonelGuiExtractorCompleto:
 
     def get_archivos_con_errores(self):
         """
-        Obtiene lista de archivos que han sido procesados con errores o advertencias
+        Obtiene lista de archivos que han sido procesados con errores o advertencias.
+        Maneja archivos desde múltiples directorios usando las rutas exactas del registro.
         
         Returns:
-            list: Lista de rutas de archivos con errores
+            list: Lista de rutas completas de archivos con errores
         """
         try:
-            archivos_pqm = self.get_pqm_files()
             processed_data = self.file_tracker._load_processed_files_data()
             archivos_con_errores = []
             
-            for archivo_pqm in archivos_pqm:
-                file_path_normalized = os.path.abspath(archivo_pqm)
-                
-                if file_path_normalized in processed_data:
-                    processed_info = processed_data[file_path_normalized]
-                    status = processed_info.get('status', '')
-                    csv_output = processed_info.get('csv_output', {})
-                    csv_verified = csv_output.get('verified', False)
-                    
-                    # Archivo tiene error si:
-                    # 1. Status no es exitoso
-                    # 2. Status es exitoso pero CSV no verificado
-                    if status != "exitoso" or (status == "exitoso" and not csv_verified):
-                        archivos_con_errores.append(archivo_pqm)
+            if not processed_data:
+                self.gui_logger.info("📋 No hay archivos procesados registrados")
+                return []
             
-            self.gui_logger.info(f"📋 Archivos con errores encontrados: {len(archivos_con_errores)}")
-            for archivo in archivos_con_errores:
-                self.gui_logger.info(f"   ⚠️ {os.path.basename(archivo)}")
+            for file_key, file_info in processed_data.items():
+                filename = file_info.get('filename', '')
+                status = file_info.get('status', '')
+                csv_output = file_info.get('csv_output', {})
+                csv_verified = csv_output.get('verified', False)
+                source_paths = file_info.get('source_paths', [])
+                current_source_path = file_info.get('current_source_path', '')
+                
+                # MODIFICACIÓN: Solo considerar archivos con errores reales
+                # No incluir archivos exitosos con CSV verificado
+                has_errors = (status != "exitoso") or (status == "exitoso" and not csv_verified)
+                
+                if has_errors:
+                    # Intentar encontrar el archivo usando las rutas registradas
+                    archivo_encontrado = None
+                    
+                    # Prioridad 1: current_source_path (última ruta conocida)
+                    if current_source_path and os.path.exists(current_source_path):
+                        archivo_encontrado = current_source_path
+                        self.gui_logger.debug(f"📍 Archivo encontrado en ruta actual: {current_source_path}")
+                    
+                    # Prioridad 2: buscar en todas las source_paths
+                    if not archivo_encontrado:
+                        for path in source_paths:
+                            if os.path.exists(path):
+                                archivo_encontrado = path
+                                self.gui_logger.debug(f"📍 Archivo encontrado en ruta alternativa: {path}")
+                                break
+                    
+                    # Prioridad 3: buscar en directorio de entrada por defecto
+                    if not archivo_encontrado:
+                        default_path = os.path.join(self.PATHS['input_dir'], filename)
+                        if os.path.exists(default_path):
+                            archivo_encontrado = default_path
+                            self.gui_logger.debug(f"📍 Archivo encontrado en directorio por defecto: {default_path}")
+                    
+                    # Si se encontró el archivo, agregarlo a la lista
+                    if archivo_encontrado:
+                        archivos_con_errores.append(archivo_encontrado)
+                        self.gui_logger.info(f"   ⚠️ {filename} -> {archivo_encontrado}")
+                    else:
+                        self.gui_logger.warning(f"   🔍 Archivo no encontrado: {filename}")
+                        self.gui_logger.warning(f"       Rutas buscadas: {source_paths}")
+            
+            # Log mejorado para mostrar diferencia entre archivos con errores vs exitosos
+            total_procesados = len(processed_data)
+            exitosos_verificados = sum(1 for f in processed_data.values() 
+                                    if f.get('status') == 'exitoso' and f.get('csv_output', {}).get('verified', False))
+            
+            self.gui_logger.info(f"📋 Total archivos procesados: {total_procesados}")
+            self.gui_logger.info(f"✅ Archivos exitosos verificados: {exitosos_verificados}")
+            self.gui_logger.info(f"⚠️ Archivos con errores encontrados: {len(archivos_con_errores)}")
             
             return archivos_con_errores
             
@@ -568,8 +608,9 @@ class SonelGuiExtractorCompleto:
         return self._generate_extraction_summary(resultados_actuales, archivos_pqm)
 
     def _generate_extraction_summary(self, resultados_globales, archivos_pqm):
-        """Genera el resumen estructurado para la GUI (reutilizando lógica del pywin_extractor)"""
-        
+        """
+        MODIFICACIÓN: Genera el resumen estructurado para la GUI incluyendo directorio origen
+        """
         # Calcular totales
         total_files = len(archivos_pqm)
         processed_files = resultados_globales.get('procesados_exitosos', 0)
@@ -591,8 +632,8 @@ class SonelGuiExtractorCompleto:
         from core.utils.csv_summary import CSVSummaryUtils
         total_size = CSVSummaryUtils._format_file_size(self.total_size_bytes)
         
-        # Generar detalles por archivo
-        files_detail = self._generate_files_detail(archivos_pqm, resultados_globales)
+        # **NUEVA LÓGICA: Generar detalles con directorio origen**
+        files_detail = self._generate_files_detail_with_directory(archivos_pqm, resultados_globales)
         
         summary = {
             "processed_files": processed_files,
@@ -606,6 +647,89 @@ class SonelGuiExtractorCompleto:
         }
         
         return summary
+    
+    def _generate_files_detail_with_directory(self, archivos_pqm, resultados_globales):
+        """
+        NUEVO: Genera detalles por archivo incluyendo directorio origen para reprocesamiento
+        """
+        files_detail = []
+        processed_data = self.file_tracker._load_processed_files_data()
+        
+        from core.utils.csv_summary import CSVSummaryUtils
+        
+        for index, archivo_pqm in enumerate(archivos_pqm, 1):
+            file_name = os.path.basename(archivo_pqm)
+            file_stem = Path(archivo_pqm).stem
+            
+            # Obtener directorio origen del archivo actual
+            source_directory = os.path.basename(os.path.dirname(archivo_pqm))
+            
+            # Obtener tamaño del archivo
+            try:
+                file_size_bytes = os.path.getsize(archivo_pqm) if os.path.exists(archivo_pqm) else 0
+                file_size_str = CSVSummaryUtils._format_file_size(file_size_bytes)
+            except:
+                file_size_str = "0 MB"
+            
+            # Normalizar ruta para búsqueda
+            file_path_normalized = os.path.abspath(archivo_pqm)
+            
+            # Obtener información del procesamiento
+            processed_info = processed_data.get(file_path_normalized, {})
+            
+            if file_path_normalized in processed_data:
+                status = processed_info.get('status', '')
+                csv_output = processed_info.get('csv_output', {})
+                csv_verified = csv_output.get('verified', False)
+                processing_time = processed_info.get('processing_time_seconds', 0)
+                
+                # Determinar estado y mensaje
+                if status == "exitoso" and csv_verified:
+                    status_display = "✅ Procesado"
+                    csv_output_name = csv_output.get('filename', f"{file_stem}.csv")
+                    message = f"Procesado correctamente (Dir: {source_directory})"
+                elif status == "exitoso" and not csv_verified:
+                    status_display = "⚠️ Advertencia"
+                    csv_output_name = "CSV no verificado"
+                    message = f"Procesado pero CSV no verificado (Dir: {source_directory})"
+                else:
+                    status_display = "❌ Error"
+                    csv_output_name = "No generado"
+                    error_msg = processed_info.get('error_message', 'Error desconocido')
+                    message = f"Error: {error_msg} (Dir: {source_directory})"
+                
+                # Formatear tiempo de procesamiento
+                if processing_time > 0:
+                    if processing_time < 60:
+                        duration_str = f"0:{int(processing_time):02d}"
+                    else:
+                        minutes = int(processing_time // 60)
+                        seconds = int(processing_time % 60)
+                        duration_str = f"{minutes}:{seconds:02d}"
+                else:
+                    duration_str = "0:00"
+            else:
+                # Archivo no procesado
+                status_display = "⏳ Pendiente"
+                csv_output_name = f"{file_stem}.csv"
+                message = f"Archivo pendiente de procesamiento (Dir: {source_directory})"
+                duration_str = "0:00"
+            
+            files_detail.append({
+                "index": index,
+                "filename": file_name,  # Usar filename para compatibilidad
+                "status": status_display,
+                "records": duration_str,  # Usar records para compatibilidad con tabla GUI
+                "size": file_size_str,
+                "filename_csv": csv_output_name,  # Usar filename_csv para compatibilidad
+                "message": message,
+                "source_directory": source_directory,  # NUEVO: Campo para consolidación
+                "processed": file_path_normalized in processed_data,
+                "size_bytes": file_size_bytes if 'file_size_bytes' in locals() else 0,
+                "execution_time_seconds": processing_time if 'processing_time' in locals() else 0
+            })
+        
+        return files_detail
 
     def _format_execution_time_gui(self, start_time, end_time=None):
         """Formatea el tiempo de ejecución (reutilizando lógica del pywin_extractor)"""
@@ -775,32 +899,41 @@ class SonelGuiExtractorCompleto:
             return CSVSummaryUtils._get_empty_csv_summary()
 
     def _process_file_for_summary(self, archivo_pqm, processed_data):
-        """Procesa un archivo individual para el resumen con la nueva estructura (reutilizando lógica del pywin_extractor)"""
+        """
+        Procesa un archivo individual para el resumen.
+        Corrige la identificación de archivos procesados usando solo file_stem.
+        """
         file_name = os.path.basename(archivo_pqm)
         file_stem = Path(archivo_pqm).stem
-        
+
         # Verificar si existe físicamente
         file_exists = os.path.exists(archivo_pqm)
         file_size_bytes = os.path.getsize(archivo_pqm) if file_exists else 0
-        
-        # Normalizar ruta para búsqueda
-        file_path_normalized = os.path.abspath(archivo_pqm)
-        
-        # Obtener información del procesamiento usando la nueva estructura
-        processed_info = processed_data.get(file_path_normalized, {})
-        
-        # Determinar estado y mensaje
-        if file_path_normalized in processed_data:
+
+        # Buscar info de procesamiento por file_stem
+        processed_info = None
+        for key, data in processed_data.items():
+            if data.get("file_stem") == file_stem:
+                processed_info = data
+                break
+
+        if processed_info:
             processed = True
             status = processed_info.get('status', '')
             csv_output = processed_info.get('csv_output', {})
             csv_verified = csv_output.get('verified', False)
-            
-            # Determinar estado visual y tipo según la nueva estructura
+
             if status == "exitoso" and csv_verified:
                 status_display = "✅ Exitoso"
                 status_type = "success"
                 message = "Procesado correctamente"
+                
+                # Confirmar existencia real del CSV
+                csv_path = csv_output.get('path', '')
+                if not csv_path or not os.path.exists(csv_path):
+                    status_display = "⚠️ Advertencia"
+                    status_type = "warning"
+                    message = "Procesado pero CSV no encontrado en disco"
             elif status == "exitoso" and not csv_verified:
                 status_display = "⚠️ Advertencia"
                 status_type = "warning"
@@ -811,29 +944,29 @@ class SonelGuiExtractorCompleto:
                 error_msg = processed_info.get('error_message', 'Error desconocido')
                 message = f"Error en procesamiento: {error_msg}"
         else:
+            # Solo archivos realmente no procesados
             processed = False
             status_display = "⏳ Pendiente"
             status_type = "pending"
             message = "Archivo pendiente de procesamiento"
-        
-        # Generar nombre del CSV esperado
-        csv_output_info = processed_info.get('csv_output', {})
-        csv_filename = csv_output_info.get('filename', f"{file_stem}.csv")
-        
-        # Obtener tiempo de ejecución real o estimado
-        execution_time_seconds = processed_info.get('processing_time_seconds', 0)
+
+        # Nombre del CSV esperado
+        csv_filename = csv_output.get('filename', f"{file_stem}.csv") if processed_info else f"{file_stem}.csv"
+
+        # Tiempo de ejecución
+        execution_time_seconds = processed_info.get('processing_time_seconds', 0) if processed_info else 0
         if execution_time_seconds <= 0:
             from core.utils.csv_summary import CSVSummaryUtils
             execution_time_seconds = CSVSummaryUtils._estimate_execution_time(file_size_bytes)
-        
+
         from core.utils.csv_summary import CSVSummaryUtils
         execution_time_str = CSVSummaryUtils._format_execution_time(execution_time_seconds)
-        
+
         return {
             "filename": file_name,
             "status": status_display,
             "status_type": status_type,
-            "records": execution_time_str,  # La GUI espera esto en la columna "Tiempo"
+            "records": execution_time_str,
             "size": CSVSummaryUtils._format_file_size(file_size_bytes),
             "filename_csv": csv_filename,
             "message": message,
@@ -844,89 +977,130 @@ class SonelGuiExtractorCompleto:
 
     def save_csv_summary_to_file(self, output_file=None, include_files_detail=True):
         """
-        Guarda un resumen del procesamiento CSV en un archivo JSON (reutilizando lógica del pywin_extractor).
-        MODIFICACIÓN: Para GUI extractor, actualiza información acumulativa en lugar de sobrescribir.
+        MODIFICACIÓN: Usar el mismo sistema consolidado que SonelExtractorCompleto
+        pero preservar información específica de reprocesamiento GUI
         """
         try:
-            # Definir archivo de salida por defecto
+            # Definir archivo de salida usando export_dir correctamente
             if output_file is None:
-                data_dir = self.config['PATHS']['data_dir']
-                output_file = os.path.join(data_dir, "resumen_csv.json")
+                export_dir = self.PATHS.get('export_dir')
+                if not export_dir:
+                    export_dir = self.PATHS.get('export_dir', os.path.join(os.getcwd(), 'export'))
+                
+                os.makedirs(export_dir, exist_ok=True)
+                output_file = os.path.join(export_dir, "resumen_csv.json")
 
-            # Obtener resumen de CSV actual
-            csv_summary = self.get_csv_summary_for_gui()
+            # Asegurar que el directorio existe
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
+            
+            # Obtener resumen actual
+            csv_summary_actual = self.get_csv_summary_for_gui()
+            
+            if not csv_summary_actual:
+                self.gui_logger.warning("⚠️ No se pudo generar el resumen CSV")
+                return None
 
-            # MODIFICACIÓN: Para GUI extractor, cargar datos existentes y actualizar de forma acumulativa
-            existing_summary_data = None
+            # **CARGAR DATOS EXISTENTES PARA CONSOLIDACIÓN**
+            existing_data = {}
             if os.path.exists(output_file):
                 try:
                     with open(output_file, 'r', encoding='utf-8') as f:
-                        existing_summary_data = json.load(f)
-                    self.gui_logger.info("📄 Cargando resumen existente para actualización acumulativa")
+                        existing_data = json.load(f)
+                    self.gui_logger.info(f"📊 Cargando datos existentes desde: {output_file}")
                 except Exception as e:
-                    self.gui_logger.warning(f"⚠️ Error cargando resumen existente: {e}")
-                    existing_summary_data = None
+                    self.gui_logger.warning(f"⚠️ Error cargando datos existentes: {e}. Creando archivo nuevo.")
+                    existing_data = {}
 
-            # Construir estructura de salida
+            # **CONSOLIDAR ARCHIVOS POR DIRECTORIO (igual que SonelExtractorCompleto)**
+            consolidated_files = {}
+            
+            # 1. Cargar archivos existentes si los hay
+            existing_files = existing_data.get("files_processed", [])
+            for file_data in existing_files:
+                if isinstance(file_data, dict) and 'filename' in file_data:
+                    filename = file_data['filename']
+                    source_dir = file_data.get('source_directory', 'directorio_desconocido')
+                    file_key = f"{filename}#{source_dir}"
+                    consolidated_files[file_key] = file_data
+
+            # 2. Agregar/actualizar archivos del procesamiento actual
+            current_input_dir = os.path.basename(self.PATHS.get('input_dir', 'directorio_actual'))
+            current_files = csv_summary_actual.get("files", [])
+            
+            for file_data in current_files:
+                if isinstance(file_data, dict) and 'filename' in file_data:
+                    filename = file_data['filename']
+                    # **PRESERVAR source_directory SI EXISTE, O USAR current_input_dir**
+                    source_dir = file_data.get('source_directory', current_input_dir)
+                    file_data['source_directory'] = source_dir
+                    file_data['processing_date'] = datetime.now().isoformat()
+                    
+                    file_key = f"{filename}#{source_dir}"
+                    consolidated_files[file_key] = file_data
+
+            # **CALCULAR MÉTRICAS CONSOLIDADAS**
+            total_files = len(consolidated_files)
+            processed_files = sum(1 for f in consolidated_files.values() if f.get('processed', False))
+            errors = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'error')
+            warnings = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'warning')
+            csv_files_generated = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'success')
+            
+            # Calcular tiempo total y tamaño total
+            total_execution_time = sum(f.get('execution_time_seconds', 0) for f in consolidated_files.values())
+            total_size_bytes = sum(f.get('size_bytes', 0) for f in consolidated_files.values())
+            
+            # Formatear métricas
+            from core.utils.csv_summary import CSVSummaryUtils
+            execution_time_str = CSVSummaryUtils._format_execution_time(total_execution_time)
+            total_size_str = CSVSummaryUtils._format_file_size(total_size_bytes)
+            success_rate = (csv_files_generated / total_files * 100) if total_files > 0 else 0
+            avg_speed = CSVSummaryUtils._calculate_average_speed(csv_files_generated, total_execution_time)
+            total_records = csv_files_generated * 3278
+
+            # **ESTRUCTURA CONSOLIDADA CON INFORMACIÓN DE REPROCESAMIENTO**
             summary_data = {
                 "metadata": {
-                    "generated_at": datetime.now().isoformat() + 'Z',
-                    "etl_version": "1.0",
+                    "generated_at": datetime.now().isoformat(),
+                    "etl_version": "1.2",
                     "config_file": getattr(self, 'config_file', 'config.ini'),
-                    "extractor_type": "pygui_extractor"  # Identificar que fue actualizado por GUI
+                    "registry_file": self.file_tracker.processed_files_json,
+                    "extractor_type": "pygui_extractor",
+                    "operation_mode": "error_recovery_consolidation",  # NUEVO: Modo específico
+                    "consolidation_info": {
+                        "total_directories_processed": len(set(f.get('source_directory', '') for f in consolidated_files.values())),
+                        "current_directory": current_input_dir,
+                        "last_consolidation": datetime.now().isoformat(),
+                        "reprocessed_files": len(current_files)  # NUEVO: Archivos reprocesados en esta sesión
+                    }
                 },
                 "csv_summary": {
-                    "processed_files": csv_summary.get("processed_files"),
-                    "total_files": csv_summary.get("total_files"),
-                    "errors": csv_summary.get("errors"),
-                    "warnings": csv_summary.get("warnings"),
-                    "csv_files_generated": csv_summary.get("csv_files_generated"),
-                    "execution_time": csv_summary.get("execution_time"),
-                    "avg_speed": csv_summary.get("avg_speed"),
-                    "total_size": csv_summary.get("total_size"),
-                    "success_rate": csv_summary.get("success_rate"),
-                    "total_records": csv_summary.get("total_records")
+                    "processed_files": processed_files,
+                    "total_files": total_files,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "csv_files_generated": csv_files_generated,
+                    "execution_time": execution_time_str,
+                    "avg_speed": avg_speed,
+                    "total_size": total_size_str,
+                    "success_rate": success_rate,
+                    "total_records": total_records
                 },
-                "files_processed": []
+                "files_processed": list(consolidated_files.values()) if include_files_detail else []
             }
 
-            # MODIFICACIÓN: Si existe un resumen anterior y es del pywin_extractor, preservar metadatos
-            if existing_summary_data and existing_summary_data.get("metadata", {}).get("extractor_type") != "pygui_extractor":
-                summary_data["metadata"]["original_extractor"] = "pywin_extractor"
-                summary_data["metadata"]["updated_by"] = "pygui_extractor"
-                
-                # Log de la actualización acumulativa
-                old_csv_summary = existing_summary_data.get("csv_summary", {})
-                old_processed = old_csv_summary.get("processed_files", 0)
-                old_csv_generated = old_csv_summary.get("csv_files_generated", 0)
-                old_errors = old_csv_summary.get("errors", 0)
-                
-                new_processed = csv_summary.get("processed_files", 0)
-                new_csv_generated = csv_summary.get("csv_files_generated", 0)
-                new_errors = csv_summary.get("errors", 0)
-                
-                self.gui_logger.info("🔄 ACTUALIZACIÓN ACUMULATIVA DETECTADA:")
-                self.gui_logger.info(f"   📊 Procesados: {old_processed} → {new_processed} (Δ{new_processed - old_processed})")
-                self.gui_logger.info(f"   📄 CSVs generados: {old_csv_generated} → {new_csv_generated} (Δ{new_csv_generated - old_csv_generated})")
-                self.gui_logger.info(f"   ❌ Errores: {old_errors} → {new_errors} (Δ{new_errors - old_errors})")
-
-            # Incluir detalle de archivos si se solicita
-            if include_files_detail:
-                summary_data["files_processed"] = csv_summary.get("files", [])
-
-            # Crear directorio si no existe
-            os.makedirs(os.path.dirname(output_file), exist_ok=True)
-
-            # Guardar archivo JSON
+            # Guardar archivo JSON consolidado
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(summary_data, f, indent=2, ensure_ascii=False)
 
-            self.gui_logger.info(f"Resumen CSV actualizado y guardado en: {output_file}")
-            self.gui_logger.info(f"Tamaño del archivo: {os.path.getsize(output_file)} bytes")
-
+            # Log mejorado
+            self.gui_logger.info(f"✅ Resumen CSV consolidado guardado en: {output_file}")
+            self.gui_logger.info(f"📊 Archivos consolidados: {total_files} de {len(set(f.get('source_directory', '') for f in consolidated_files.values()))} directorios")
+            self.gui_logger.info(f"🔄 Archivos reprocesados en esta sesión: {len(current_files)}")
+            
             return output_file
 
         except Exception as e:
-            self.gui_logger.error(f"Error guardando resumen CSV: {e}")
+            self.gui_logger.error(f"❌ Error crítico guardando resumen CSV consolidado: {e}")
+            import traceback
             self.gui_logger.error(traceback.format_exc())
             return None

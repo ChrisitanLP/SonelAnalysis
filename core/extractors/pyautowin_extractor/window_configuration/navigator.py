@@ -30,6 +30,62 @@ class SonelNavigator:
             "CheckBox": ["MIN", "MAX", "INSTANT"]
         }
 
+    def _identificar_checkbox_por_config(self, texto_checkbox):
+        """
+        Identifica el tipo de checkbox basándose en CHECKBOXES_CONFIG y su texto.
+        
+        Args:
+            texto_checkbox (str): Texto del checkbox a identificar
+        
+        Returns:
+            tuple: (checkbox_id, debe_estar_activo) o (None, None) si no se identifica
+        """
+        texto_normalizado = texto_checkbox.strip()
+        
+        # Buscar coincidencia exacta en CHECKBOXES_CONFIG
+        for config_text, estado_deseado in CHECKBOXES_CONFIG.items():
+            if config_text == texto_normalizado or config_text.lower() == texto_normalizado.lower():
+                # Mapear a nuestros IDs estándar basándose en las palabras clave
+                checkbox_id = self._mapear_texto_a_id(config_text)
+                if checkbox_id:
+                    return checkbox_id, estado_deseado
+        
+        # Si no hay coincidencia exacta, buscar contenido parcial
+        for config_text, estado_deseado in CHECKBOXES_CONFIG.items():
+            if (config_text.lower() in texto_normalizado.lower() or 
+                TextUtils.normalizar_texto(config_text) in TextUtils.normalizar_texto(texto_normalizado)):
+                checkbox_id = self._mapear_texto_a_id(config_text)
+                if checkbox_id:
+                    return checkbox_id, estado_deseado
+        
+        return None, None
+    
+    def _mapear_texto_a_id(self, config_text):
+        """
+        Mapea el texto de configuración a un ID estándar.
+        
+        Args:
+            config_text (str): Texto de configuración
+        
+        Returns:
+            str: ID del checkbox o None si no se puede mapear
+        """
+        config_lower = config_text.lower()
+        
+        # Mapeo para Average/Promedio
+        if any(term in config_lower for term in ["min", "mín", "minimum", "mínimo"]):
+            return "MIN"
+        
+        # Mapeo para Maximum/Máximo
+        elif any(term in config_lower for term in ["max", "máx", "maximum", "máximo"]):
+            return "MAX"
+        
+        # Mapeo para Instant/Instantáneo
+        elif any(term in config_lower for term in ["instant", "instantaneous", "instantáneo"]):
+            return "INSTANT"
+        
+        return None
+
     def extraer_navegacion_lateral(self):
         """Extrae y activa elementos de navegación lateral (Mediciones)"""
         try:
@@ -123,12 +179,17 @@ class SonelNavigator:
         try:
             self.logger.info("🔘 Configurando radiobutton 'Usuario'...")
 
-            # Intentar usar coordenadas guardadas
+            # Verificar si hay cambio de idioma antes de usar coordenadas
+            if self.save_file.detectar_cambio_idioma(self.ventana_configuracion, self.componentes_requeridos):
+                self.logger.info("🌐 Cambio de idioma detectado, limpiando coordenadas de RadioButton")
+                self.save_file.limpiar_coordenadas_componentes({"RadioButton": self.componentes_requeridos["RadioButton"]})
+
+            # Intentar usar coordenadas guardadas (solo si no hay cambio de idioma)
             if self.seleccionar_radiobutton_usuario_por_coordenadas():
                 self.logger.info("✅ Selección del radiobutton 'Usuario' realizada por coordenadas.")
                 return [], {}
 
-            # Si no existen coordenadas guardadas, hacer el proceso completo
+            # Si no existen coordenadas guardadas o hay cambio de idioma, hacer el proceso completo
             user_translations = get_all_possible_translations('ui_controls', 'user')
             self.logger.info(f"🌐 Buscando 'Usuario' en: {user_translations}")
 
@@ -163,26 +224,29 @@ class SonelNavigator:
             return [], {}
 
     def configurar_checkboxes_filtros(self):
-        """Activa o desactiva checkboxes según configuración"""
+        """Activa o desactiva checkboxes según configuración usando CHECKBOXES_CONFIG"""
         try:
             self.logger.info("☑️ Configurando checkboxes de filtros...")
 
-            # Verificar si ya existe el archivo de configuración
-            if os.path.exists("componentes_configuracion.json"):
-                self.logger.info("📁 Información de componentes ya existe en 'componentes_configuracion.json'")
-                
-                # Verificar si tenemos coordenadas para los checkboxes necesarios
-                checkboxes_pendientes = []
+            # Verificar si hay cambio de idioma antes de usar coordenadas
+            if self.save_file.detectar_cambio_idioma(self.ventana_configuracion, self.componentes_requeridos):
+                self.logger.info("🌐 Cambio de idioma detectado, limpiando coordenadas de CheckBox")
+                self.save_file.limpiar_coordenadas_componentes({"CheckBox": self.componentes_requeridos["CheckBox"]})
+
+            # Verificar si tenemos todas las coordenadas necesarias
+            checkboxes_pendientes = []
+            for checkbox_id in self.componentes_requeridos["CheckBox"]:
+                if not self.save_file.obtener_coordenada_componente("CheckBox", checkbox_id):
+                    checkboxes_pendientes.append(checkbox_id)
+            
+            # Si tenemos todas las coordenadas, usar coordenadas
+            if not checkboxes_pendientes:
+                self.logger.info("📍 Usando coordenadas guardadas para todos los checkboxes")
                 for checkbox_id in self.componentes_requeridos["CheckBox"]:
-                    if not self.save_file.obtener_coordenada_componente("CheckBox", checkbox_id):
-                        checkboxes_pendientes.append(checkbox_id)
-                
-                # Si tenemos todas las coordenadas, usar coordenadas
-                if not checkboxes_pendientes:
-                    self.logger.info("📍 Usando coordenadas guardadas para checkboxes")
-                    for checkbox_id in self.componentes_requeridos["CheckBox"]:
-                        self.seleccionar_checkbox_por_coordenadas(checkbox_id)
-                    return [], {}
+                    self.seleccionar_checkbox_por_coordenadas(checkbox_id)
+                return [], {}
+
+            self.logger.info(f"🔍 Faltan coordenadas para: {checkboxes_pendientes}, procediendo con búsqueda manual")
 
             checkboxes = self.ventana_configuracion.descendants(control_type="CheckBox")
             elementos_configurados = {}
@@ -190,41 +254,42 @@ class SonelNavigator:
 
             for checkbox in checkboxes:
                 texto = checkbox.window_text().strip()
-                debe_estar_activo = None
-                checkbox_id = None
-
-                # Identificar el checkbox y determinar si debe estar activo
-                for config_text, estado_deseado in CHECKBOXES_CONFIG.items():
-                    if (config_text.lower() in texto.lower() or
-                            TextUtils.normalizar_texto(config_text) == TextUtils.normalizar_texto(texto)):
-                        debe_estar_activo = estado_deseado
-                        # Mapear a nuestros IDs estándar
-                        if "min" in config_text.lower():
-                            checkbox_id = "MIN"
-                        elif "max" in config_text.lower():
-                            checkbox_id = "MAX"
-                        elif "instant" in config_text.lower():
-                            checkbox_id = "INSTANT"
-                        break
-
-                if debe_estar_activo is not None and checkbox_id:
+                
+                # Usar el nuevo método de identificación
+                checkbox_id, debe_estar_activo = self._identificar_checkbox_por_config(texto)
+                
+                if checkbox_id and debe_estar_activo is not None:
                     try:
                         estado_actual = checkbox.get_toggle_state()
 
                         if debe_estar_activo and estado_actual != 1:
                             checkbox.toggle()
-                            self.logger.info(f"✅ Activando '{texto}'")
+                            self.logger.info(f"✅ Activando '{texto}' (ID: {checkbox_id})")
                         elif not debe_estar_activo and estado_actual == 1:
                             checkbox.toggle()
-                            self.logger.info(f"🚫 Desactivando '{texto}'")
+                            self.logger.info(f"🚫 Desactivando '{texto}' (ID: {checkbox_id})")
+                        else:
+                            self.logger.info(f"ℹ️ CheckBox '{texto}' (ID: {checkbox_id}) ya tiene el estado correcto")
 
                         # Guardar coordenada del checkbox encontrado
                         self.save_file.guardar_coordenada_componente(checkbox, "CheckBox", checkbox_id)
                         checkboxes_encontrados[checkbox_id] = checkbox
-                        elementos_configurados[f"CheckBox_{texto}"] = "Configurado"
+                        elementos_configurados[f"CheckBox_{texto}"] = f"Configurado (ID: {checkbox_id})"
                         
                     except Exception as e:
                         self.logger.error(f"❌ Error configurando '{texto}': {e}")
+                else:
+                    # Log de checkboxes no identificados para debugging
+                    self.logger.debug(f"🔍 CheckBox no identificado: '{texto}'")
+
+            # Verificar que se encontraron todos los checkboxes requeridos
+            checkboxes_no_encontrados = [cb_id for cb_id in self.componentes_requeridos["CheckBox"] 
+                                    if cb_id not in checkboxes_encontrados]
+            
+            if checkboxes_no_encontrados:
+                self.logger.warning(f"⚠️ No se encontraron estos checkboxes: {checkboxes_no_encontrados}")
+            else:
+                self.logger.info("✅ Todos los checkboxes requeridos fueron encontrados y configurados")
 
             return checkboxes, elementos_configurados
 
@@ -271,37 +336,6 @@ class SonelNavigator:
         except Exception as e:
             self.logger.error(f"❌ Error al guardar componentes: {e}")
 
-    def configurar_filtros_datos(self):
-        """Ejecuta configuración completa de filtros: radio y checkboxes"""
-        try:
-            self.logger.info("⚙️ Configurando filtros de datos...")
-
-            #if not self.wait_handler.esperar_controles_disponibles(
-            #        self.ventana_configuracion, ["RadioButton", "CheckBox"], timeout=15):
-            #    self.logger.error("❌ Timeout: Controles de filtros no disponibles")
-            #    return False
-
-            radios_resultado = self.configurar_radiobutton_usuario()
-            radios = radios_resultado[0] if isinstance(radios_resultado, tuple) else []
-
-            # Paso 2: Checkboxes
-            checks, elementos_check = self.configurar_checkboxes_filtros()
-
-            # Paso 3: Guardar información (solo si no existía)
-            self.guardar_info_componentes(radios, checks)
-
-            # Paso 4: Log final
-            total_config = elementos_check.copy()
-            if isinstance(radios_resultado, tuple):
-                total_config.update(radios_resultado[1])
-            self.logger.info(f"📊 Filtros: {len(total_config)} elementos configurados")
-
-            return True
-        
-        except Exception as e:
-            self.logger.error(f"❌ Error configurando filtros: {e}")
-            return False
-        
     def configurar_radiobutton(self):
         """Ejecuta configuración completa de radiobutton Usuario"""
         try:
@@ -394,11 +428,19 @@ class SonelNavigator:
                 self.logger.info(f"📍 No hay coordenadas guardadas para CheckBox {identificador}")
                 return False
             
-            # Usar las coordenadas para hacer clic
+            # Obtener estado deseado desde CHECKBOXES_CONFIG
+            texto_guardado = coordenada.get("texto", "")
+            _, debe_estar_activo = self._identificar_checkbox_por_config(texto_guardado)
+            
+            if debe_estar_activo is None:
+                self.logger.warning(f"⚠️ No se pudo determinar estado deseado para {identificador}")
+                return False
+            
             pyautogui.click(coordenada["x"], coordenada["y"])
             time.sleep(0.5)
             
-            self.logger.info(f"✅ CheckBox '{identificador}' procesado por coordenadas ({coordenada['x']}, {coordenada['y']})")
+            accion = "activado" if debe_estar_activo else "desactivado"
+            self.logger.info(f"✅ CheckBox '{identificador}' {accion} por coordenadas ({coordenada['x']}, {coordenada['y']})")
             return True
             
         except Exception as e:

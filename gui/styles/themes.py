@@ -457,6 +457,25 @@ class ThemeManager:
                 QTableWidget#FilesTable QHeaderView::section:horizontal {
                     border-bottom: 2px solid #1976D2;
                 }
+
+                QPushButton#ActionButton_danger {
+                    background-color: #e53935;  /* rojo más suave y orgánico */
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    padding: 10px 20px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    transition: background-color 0.3s ease;
+                }
+
+                QPushButton#ActionButton_danger:hover {
+                    background-color: #c62828;  /* tono más oscuro al hover */
+                }
+
+                QPushButton#ActionButton_danger:pressed {
+                    background-color: #b71c1c;  /* aún más oscuro al presionar */
+                }
             """
 
     def _get_light_theme(self):
@@ -854,5 +873,24 @@ class ThemeManager:
 
                 QTableWidget#FilesTable QHeaderView::section:horizontal {
                     border-bottom: 2px solid #1976D2;
+                }
+
+                QPushButton#ActionButton_danger {
+                    background-color: #e53935;  /* rojo más suave y orgánico */
+                    color: white;
+                    border: 2px solid #e1e5e9;
+                    border-radius: 8px;
+                    padding: 12px 24px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    transition: background-color 0.3s ease;
+                }
+
+                QPushButton#ActionButton_danger:hover {
+                    background-color: #c62828;  /* tono más oscuro al hover */
+                }
+
+                QPushButton#ActionButton_danger:pressed {
+                    background-color: #b71c1c;  /* aún más oscuro al presionar */
                 }
             """
