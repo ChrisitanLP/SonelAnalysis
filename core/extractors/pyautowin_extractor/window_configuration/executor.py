@@ -12,7 +12,7 @@ from config.logger import get_logger
 from core.utils.text_normalize import TextUtils
 from core.utils.file_save import ComponentesGuardado
 from pywinauto.controls.uia_controls import EditWrapper, ButtonWrapper
-from config.settings import get_full_config, get_all_possible_translations
+from config.settings import get_full_config, get_all_possible_translations, get_all_excluded_terms
 
 class SonelExecutor:
     """Ejecuta acciones principales de extracción y configuración"""
@@ -142,8 +142,11 @@ class SonelExecutor:
 
             # Obtener palabras clave en todos los idiomas soportados
             palabras_clave = get_all_possible_translations('measurement_keywords')
+            terminos_excluidos = get_all_excluded_terms()
+
             self.logger.info(f"🌐 Palabras clave multiidioma cargadas: {len(palabras_clave)} términos")
             self.logger.debug(f"📝 Términos: {palabras_clave}")
+            self.logger.debug(f"❌ Términos excluidos: {terminos_excluidos}")
 
             def normalizar_texto(texto):
                 """Quita etiquetas HTML y símbolos para comparación multiidioma"""
@@ -163,12 +166,25 @@ class SonelExecutor:
                 return texto.lower().strip()
 
             def contiene_termino(texto):
-                """Verifica si el texto contiene alguna palabra clave multiidioma"""
-                texto_normalizado = normalizar_texto(texto)
+                """
+                Verifica si el texto contiene alguna palabra clave multiidioma
+                y NO contiene términos excluidos
+                """
+                from core.utils.text_normalize import TextUtils  # Importar aquí para evitar dependencias circulares
+                
+                # PRIMERA VERIFICACIÓN: Comprobar si contiene términos excluidos
+                if TextUtils.contiene_termino_excluido(texto, terminos_excluidos):
+                    self.logger.info(f"🚫 Texto '{texto}' contiene término excluido - RECHAZADO")
+                    return False
+                
+                # SEGUNDA VERIFICACIÓN: Comprobar si contiene palabras clave válidas
+                texto_normalizado = TextUtils.normalizar_texto(texto)
                 for clave in palabras_clave:
-                    clave_normalizada = normalizar_texto(clave)
+                    clave_normalizada = TextUtils.normalizar_texto(clave)
                     if clave_normalizada in texto_normalizado:
+                        self.logger.info(f"✅ Texto '{texto}' contiene palabra clave válida: '{clave}'")
                         return True
+                
                 return False
 
             def verificar_y_seleccionar_elemento(item, texto):
