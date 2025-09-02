@@ -117,7 +117,18 @@ class SonelExtractorCompleto:
         MAX_FALLOS = 2
         
         try:
-            self.pywinauto_logger.info(f"\n🎯 Procesando: {nombre_archivo}")
+            # Verificar que el archivo es compatible
+            if not self.file_manager.is_supported_pqm_file(archivo_pqm):
+                extension = self.file_manager._get_file_extension(nombre_archivo)
+                error_message = f"Extensión no soportada: {extension}"
+                self.pywinauto_logger.error(f"❌ {error_message}")
+                return False
+            
+            # Obtener información del archivo para logging
+            file_info = self.file_manager.get_file_info(archivo_pqm)
+            pqm_type = file_info.get('pqm_extension', 'unknown')
+            
+            self.pywinauto_logger.info(f"\n🎯 Procesando: {nombre_archivo} (Tipo: {pqm_type})")
             
             try:
                 # FASE 1: Vista inicial
@@ -196,11 +207,11 @@ class SonelExtractorCompleto:
                 self.pywinauto_logger.error(f"❌ Error crítico en fase de guardado: {e}")
                 proceso_exitoso = False
 
-            # Log del resultado final
+            # Log del resultado final con tipo de archivo
             if proceso_exitoso:
-                self.pywinauto_logger.info(f"✅ Procesamiento exitoso: {nombre_archivo}")
+                self.pywinauto_logger.info(f"✅ Procesamiento exitoso: {nombre_archivo} ({pqm_type})")
             else:
-                self.pywinauto_logger.error(f"❌ Procesamiento falló: {nombre_archivo} - No se generó CSV válido")
+                self.pywinauto_logger.error(f"❌ Procesamiento falló: {nombre_archivo} ({pqm_type}) - No se generó CSV válido")
             
             return proceso_exitoso
         
@@ -214,10 +225,14 @@ class SonelExtractorCompleto:
             end_time = datetime.now()
             processing_time = (end_time - start_time).total_seconds()
 
+            # Incluir información del tipo de archivo en additional_info
+            file_info = self.file_manager.get_file_info(archivo_pqm)
             additional_info = {
                 "extraccion": "completa",
                 "herramienta": "pywinauto",
-                "tipo_archivo": "sonel_pqm"
+                "tipo_archivo": "sonel_pqm",
+                "pqm_extension": file_info.get('pqm_extension', 'unknown'),
+                "file_type": file_info.get('file_type', 'UNKNOWN')
             }
 
             # Siempre registrar el resultado, incluyendo información del CSV si se generó
@@ -240,7 +255,8 @@ class SonelExtractorCompleto:
             "procesados_fallidos": 0,
             "saltados": 0,
             "csvs_verificados": 0,
-            "detalles": []
+            "detalles": [],
+            "tipos_archivo": {}  # Nuevo: contador por tipo de extensión
         }
         
         try:
@@ -253,7 +269,7 @@ class SonelExtractorCompleto:
             # Obtener lista de archivos
             archivos_pqm = self.get_pqm_files()
             if not archivos_pqm:
-                self.pywinauto_logger.warning("⚠️ No se encontraron archivos .pqm702 para procesar")
+                self.pywinauto_logger.warning("⚠️ No se encontraron archivos PQM para procesar")
                 # ✅ ASEGURAR: Generar resumen incluso sin archivos
                 summary = self._generate_extraction_summary(resultados_globales, archivos_pqm)
                 self._log_extraction_summary(summary)
@@ -270,6 +286,20 @@ class SonelExtractorCompleto:
             
             self.total_files_attempted = len(archivos_pqm)
             self.total_size_bytes = self._calculate_total_size(archivos_pqm)
+            
+            # Analizar tipos de archivos encontrados
+            tipos_encontrados = {}
+            for archivo in archivos_pqm:
+                file_info = self.file_manager.get_file_info(archivo)
+                pqm_ext = file_info.get('pqm_extension', 'unknown')
+                tipos_encontrados[pqm_ext] = tipos_encontrados.get(pqm_ext, 0) + 1
+            
+            resultados_globales["tipos_archivo"] = tipos_encontrados
+            
+            # Log de tipos encontrados
+            self.pywinauto_logger.info("📋 Tipos de archivo PQM encontrados:")
+            for tipo, cantidad in tipos_encontrados.items():
+                self.pywinauto_logger.info(f"   - {tipo}: {cantidad} archivo(s)")
             
             # Filtrar archivos ya procesados
             archivos_pendientes = [
@@ -298,8 +328,11 @@ class SonelExtractorCompleto:
             # Procesar cada archivo
             for i, archivo in enumerate(archivos_pendientes, 1):
                 nombre_archivo = os.path.basename(archivo)
+                file_info = self.file_manager.get_file_info(archivo)
+                pqm_type = file_info.get('pqm_extension', 'unknown')
+                
                 self.pywinauto_logger.info(f"\n{'='*60}")
-                self.pywinauto_logger.info(f"📁 Procesando archivo {i}/{len(archivos_pendientes)}: {nombre_archivo}")
+                self.pywinauto_logger.info(f"📁 Procesando archivo {i}/{len(archivos_pendientes)}: {nombre_archivo} ({pqm_type})")
                 self.pywinauto_logger.info(f"{'='*60}")
                 
                 # EJECUTAR PROCESAMIENTO
@@ -314,9 +347,10 @@ class SonelExtractorCompleto:
                         resultados_globales["detalles"].append({
                             "archivo": nombre_archivo,
                             "estado": "exitoso",
-                            "csv_verificado": True
+                            "csv_verificado": True,
+                            "tipo_pqm": pqm_type
                         })
-                        self.pywinauto_logger.info(f"✅ Archivo procesado exitosamente: {nombre_archivo}")
+                        self.pywinauto_logger.info(f"✅ Archivo procesado exitosamente: {nombre_archivo} ({pqm_type})")
                         
                         # CIERRE SUAVE - Solo cerrar procesos, no forzar
                         try:
@@ -331,9 +365,10 @@ class SonelExtractorCompleto:
                         resultados_globales["detalles"].append({
                             "archivo": nombre_archivo,
                             "estado": "fallido",
-                            "csv_verificado": False
+                            "csv_verificado": False,
+                            "tipo_pqm": pqm_type
                         })
-                        self.pywinauto_logger.error(f"❌ Archivo procesado con error: {nombre_archivo}")
+                        self.pywinauto_logger.error(f"❌ Archivo procesado con error: {nombre_archivo} ({pqm_type})")
                         
                         # CIERRE FORZOSO por error
                         try:
@@ -343,13 +378,14 @@ class SonelExtractorCompleto:
                             
                 except Exception as e:
                     # Error en procesamiento individual
-                    self.pywinauto_logger.error(f"❌ Error procesando archivo {nombre_archivo}: {e}")
+                    self.pywinauto_logger.error(f"❌ Error procesando archivo {nombre_archivo} ({pqm_type}): {e}")
                     resultados_globales["procesados_fallidos"] += 1
                     resultados_globales["detalles"].append({
                         "archivo": nombre_archivo,
                         "estado": "error_excepcion",
                         "csv_verificado": False,
-                        "error": str(e)
+                        "error": str(e),
+                        "tipo_pqm": pqm_type
                     })
                     
                     # Limpieza tras error
@@ -363,6 +399,7 @@ class SonelExtractorCompleto:
                     self.pywinauto_logger.info("⏳ Pausa entre archivos")
                     time.sleep(4)
             
+            # [RESTO DEL CÓDIGO PERMANECE IGUAL...]
             # Resumen final mejorado con más detalles
             self._log_final_summary(resultados_globales, archivos_pqm)
 
@@ -500,13 +537,17 @@ class SonelExtractorCompleto:
             return f"{minutes}:{seconds:02d}"
 
     def _generate_files_detail(self, archivos_pqm, resultados_globales):
-        """Genera detalles por archivo para la tabla de la GUI"""
+        """Genera detalles por archivo para la tabla de la GUI incluyendo tipo PQM"""
         files_detail = []
         processed_data = self.file_tracker._load_processed_files_data()
         
         for index, archivo_pqm in enumerate(archivos_pqm, 1):
             file_name = os.path.basename(archivo_pqm)
             file_stem = Path(archivo_pqm).stem
+            
+            # Obtener información del archivo incluyendo tipo PQM
+            file_info = self.file_manager.get_file_info(archivo_pqm)
+            pqm_type = file_info.get('pqm_extension', 'unknown')
             
             # Obtener tamaño del archivo
             try:
@@ -529,9 +570,9 @@ class SonelExtractorCompleto:
                 
                 # Determinar estado y mensaje
                 if status == "exitoso" and csv_verified:
-                    status_display = "✅ Procesado"
+                    status_display = f"✅ Procesado ({pqm_type})"
                     csv_output_name = csv_output.get('filename', f"{file_stem}.csv")
-                    message = "Procesado correctamente"
+                    message = f"Procesado correctamente - Tipo: {pqm_type}"
                     
                     # Mostrar información adicional de ubicaciones múltiples
                     source_paths = processed_info.get('source_paths', [])
@@ -539,14 +580,14 @@ class SonelExtractorCompleto:
                         message += f" (Visto en {len(source_paths)} ubicaciones)"
                         
                 elif status == "exitoso" and not csv_verified:
-                    status_display = "⚠️ Advertencia"
+                    status_display = f"⚠️ Advertencia ({pqm_type})"
                     csv_output_name = "CSV no verificado"
-                    message = "Procesado pero CSV no verificado"
+                    message = f"Procesado pero CSV no verificado - Tipo: {pqm_type}"
                 else:
-                    status_display = "❌ Error"
+                    status_display = f"❌ Error ({pqm_type})"
                     csv_output_name = "No generado"
                     error_msg = processed_info.get('error_message', 'Error desconocido')
-                    message = f"Error: {error_msg}"
+                    message = f"Error: {error_msg} - Tipo: {pqm_type}"
                 
                 # Formatear tiempo de procesamiento
                 if processing_time > 0:
@@ -560,9 +601,9 @@ class SonelExtractorCompleto:
                     duration_str = "0:00"
             else:
                 # Archivo no procesado
-                status_display = "⏳ Pendiente"
+                status_display = f"⏳ Pendiente ({pqm_type})"
                 csv_output_name = f"{file_stem}.csv"
-                message = "Archivo pendiente de procesamiento"
+                message = f"Archivo pendiente de procesamiento - Tipo: {pqm_type}"
                 duration_str = "0:00"
             
             files_detail.append({
@@ -572,7 +613,8 @@ class SonelExtractorCompleto:
                 "duration": duration_str,
                 "size": file_size_str,
                 "csv_output": csv_output_name,
-                "message": message
+                "message": message,
+                "pqm_type": pqm_type  # Nuevo campo para tipo PQM
             })
         
         return files_detail
@@ -752,9 +794,13 @@ class SonelExtractorCompleto:
         return self._generate_extraction_summary(resultados_actuales, archivos_pqm)
 
     def _process_file_for_summary(self, archivo_pqm, processed_data):
-        """Procesa un archivo individual para el resumen con la nueva estructura"""
+        """Procesa un archivo individual para el resumen con información de tipo PQM"""
         file_name = os.path.basename(archivo_pqm)
         file_stem = Path(archivo_pqm).stem
+        
+        # Obtener información del archivo incluyendo tipo PQM
+        file_info = self.file_manager.get_file_info(archivo_pqm)
+        pqm_type = file_info.get('pqm_extension', 'unknown')
         
         # Verificar si existe físicamente
         file_exists = os.path.exists(archivo_pqm)
@@ -775,18 +821,18 @@ class SonelExtractorCompleto:
             
             # Determinar estado visual y tipo según la nueva estructura
             if status == "exitoso" and csv_verified:
-                status_display = "✅ Exitoso"
+                status_display = f"✅ Exitoso ({pqm_type})"
                 status_type = "success"
-                message = "Procesado correctamente"
+                message = f"Procesado correctamente - Tipo: {pqm_type}"
             elif status == "exitoso" and not csv_verified:
-                status_display = "⚠️ Advertencia"
+                status_display = f"⚠️ Advertencia ({pqm_type})"
                 status_type = "warning"
-                message = "Procesado pero CSV no verificado"
+                message = f"Procesado pero CSV no verificado - Tipo: {pqm_type}"
             else:
-                status_display = "❌ Error"
+                status_display = f"❌ Error ({pqm_type})"
                 status_type = "error"
                 error_msg = processed_info.get('error_message', 'Error desconocido')
-                message = f"Error en procesamiento: {error_msg}"
+                message = f"Error en procesamiento: {error_msg} - Tipo: {pqm_type}"
                 
             # Mostrar información de rutas fuente si está disponible
             source_paths = processed_info.get('source_paths', [])
@@ -794,9 +840,9 @@ class SonelExtractorCompleto:
                 message += f" (Encontrado en {len(source_paths)} ubicaciones)"
         else:
             processed = False
-            status_display = "⏳ Pendiente"
+            status_display = f"⏳ Pendiente ({pqm_type})"
             status_type = "pending"
-            message = "Archivo pendiente de procesamiento"
+            message = f"Archivo pendiente de procesamiento - Tipo: {pqm_type}"
         
         # Generar nombre del CSV esperado
         csv_output_info = processed_info.get('csv_output', {})
@@ -819,7 +865,8 @@ class SonelExtractorCompleto:
             "message": message,
             "processed": processed,
             "size_bytes": file_size_bytes,
-            "execution_time_seconds": execution_time_seconds
+            "execution_time_seconds": execution_time_seconds,
+            "pqm_type": pqm_type  # Nuevo campo para tipo PQM
         }
     
     def save_csv_summary_to_file(self, output_file=None, include_files_detail=True):
