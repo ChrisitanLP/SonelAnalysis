@@ -23,7 +23,7 @@ def validate_voltage_columns(df):
 
     # Procesar patrones en orden específico para evitar conflictos
     ordered_patterns = [
-        'time', 'date', 'time_utc5',  # NUEVOS CAMPOS AGREGADOS
+        'time', 'time_utc', 'utc_zone',  # Campos de tiempo modificados
         'u_l1', 'u_l2', 'u_l3', 'u_l12',
         'i_l1', 'i_l2', 
         'p_l1', 'p_l2', 'p_l3', 'p_e',
@@ -60,6 +60,15 @@ def validate_voltage_columns(df):
                     logger.debug(f"Columna {std_name} mapeada a: {matched[0]}")
             else:
                 logger.debug(f"No se encontró columna que coincida con patrón {std_name}: {pattern}")
+    
+    # Manejar compatibilidad con time_utc5 (mapear a time_utc si existe)
+    if 'time_utc5' not in column_mapping and 'time_utc' not in column_mapping:
+        # Buscar usando el patrón anterior para compatibilidad
+        time_utc5_pattern = r'(?i)time\s*\(utc-5\)|tiempo\s*\(utc-5\)|time.*utc.*5'
+        matched = [col for col in df.columns if re.search(time_utc5_pattern, col)]
+        if matched:
+            column_mapping['time_utc'] = matched[0]
+            logger.debug(f"Columna time_utc mapeada desde patrón UTC-5: {matched[0]}")
 
     # Log del mapeo final para debug
     logger.info("Mapeo final de columnas:")

@@ -776,14 +776,14 @@ class SonelController:
             tuple: (success: bool, message: str)
         """
         try:
-            # Query para extraer todos los datos con información del código
+            # Query corregida para extraer datos ordenados por ID
             query = """
                 SELECT 
                     mp.id,
                     c.codigo,
                     mp.fecha,
-                    mp.date_field,
-                    mp.time_utc5,
+                    mp.time,
+                    mp.utc_zone,
                     mp.u_l1_avg,
                     mp.u_l2_avg,
                     mp.u_l3_avg,
@@ -806,7 +806,7 @@ class SonelController:
                     mp.fecha_subida
                 FROM mediciones_planas mp
                 LEFT JOIN codigo c ON mp.codigo_id = c.id
-                ORDER BY mp.fecha DESC;
+                ORDER BY mp.id ASC;
             """
             
             cursor = db_connection.execute_query(query, commit=False)
@@ -841,7 +841,8 @@ class SonelController:
         import csv
         from datetime import datetime
         
-        with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
+        # CORRECCIÓN: Usar UTF-8 con BOM para compatibilidad completa
+        with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
             writer = csv.writer(csvfile, delimiter=';')
             
             # ENCABEZADO CORPORATIVO EEASA
@@ -856,13 +857,13 @@ class SonelController:
             writer.writerow([f'Sistema: SONEL Extractor v2.0'])
             writer.writerow([])  # Línea en blanco
             
-            # ENCABEZADOS DE DATOS
+            # ENCABEZADOS CORREGIDOS
             headers = [
                 'ID Registro',
                 'Código Cliente', 
                 'Fecha y Hora Completa',
-                'Fecha',
-                'Hora UTC-5',
+                'Hora Local',
+                'Zona UTC',
                 'Voltaje L1 Promedio (V)',
                 'Voltaje L2 Promedio (V)',
                 'Voltaje L3 Promedio (V)',
@@ -886,17 +887,35 @@ class SonelController:
             ]
             writer.writerow(headers)
             
-            # DATOS
+            # DATOS CON MAPEO CORREGIDO
             for row in rows:
-                # Formatear valores None como cadena vacía y aplicar formato numérico
+                # Mapeo correcto de las columnas:
+                # row[0] = id, row[1] = codigo, row[2] = fecha (timestamp completo)
+                # row[3] = time (hora local), row[4] = utc_zone
                 formatted_row = []
+                
                 for i, value in enumerate(row):
                     if value is None:
                         formatted_row.append('')
+                    elif i == 2:  # Columna 'fecha' - timestamp completo
+                        # Mantener el timestamp completo como está
+                        formatted_row.append(str(value))
+                    elif i == 3:  # Columna 'time' - hora local
+                        # Mantener la hora local como está
+                        formatted_row.append(str(value))
+                    elif i == 4:  # Columna 'utc_zone'
+                        # Formatear zona UTC de manera más clara
+                        if value:
+                            formatted_row.append(f"UTC{value}")
+                        else:
+                            formatted_row.append('')
                     elif i in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]:  # Columnas numéricas
-                        # Formatear números con 2 decimales
+                        # Formatear números con 3 decimales para mayor precisión
                         try:
-                            formatted_row.append(f"{float(value):.2f}" if value != '' else '')
+                            if value is not None and value != '':
+                                formatted_row.append(f"{float(value):.3f}")
+                            else:
+                                formatted_row.append('')
                         except (ValueError, TypeError):
                             formatted_row.append(str(value))
                     else:
@@ -908,63 +927,3 @@ class SonelController:
             writer.writerow([])
             writer.writerow([f'Fin del reporte - EEASA {datetime.now().year}'])
             writer.writerow(['Generado automáticamente por Sistema SONEL'])
-
-    def get_mediciones_export_info(self) -> Dict[str, Any]:
-        """
-        Obtiene información sobre los datos disponibles para exportación
-        
-        Returns:
-            dict: Información de los datos disponibles
-        """
-        self.logger.info("Obteniendo información de datos disponibles para exportación")
-        
-        db_connection = None
-        
-        try:
-            # Inicializar conexión
-            from config.settings import load_config
-            etl_config = load_config(self.config_file)
-            
-            db_connection = DatabaseConnection(etl_config)
-            if not db_connection.connect():
-                return {"error": "No se pudo conectar a la base de datos", "count": 0}
-            
-            # Consulta para obtener estadísticas
-            query = """
-                SELECT 
-                    COUNT(*) as total_registros,
-                    COUNT(DISTINCT c.codigo) as clientes_unicos,
-                    MIN(mp.fecha) as fecha_mas_antigua,
-                    MAX(mp.fecha) as fecha_mas_reciente,
-                    MIN(mp.fecha_subida) as primera_carga,
-                    MAX(mp.fecha_subida) as ultima_carga
-                FROM mediciones_planas mp
-                LEFT JOIN codigo c ON mp.codigo_id = c.id;
-            """
-            
-            cursor = db_connection.execute_query(query, commit=False)
-            
-            if cursor:
-                row = cursor.fetchone()
-                cursor.close()
-                
-                if row:
-                    return {
-                        "total_registros": row[0] or 0,
-                        "clientes_unicos": row[1] or 0,
-                        "fecha_mas_antigua": str(row[2]) if row[2] else "N/A",
-                        "fecha_mas_reciente": str(row[3]) if row[3] else "N/A",
-                        "primera_carga": str(row[4]) if row[4] else "N/A",
-                        "ultima_carga": str(row[5]) if row[5] else "N/A",
-                        "conexion_status": "Activa"
-                    }
-            
-            return {"error": "No se pudieron obtener estadísticas", "count": 0}
-            
-        except Exception as e:
-            self.logger.error(f"Error obteniendo información de exportación: {e}")
-            return {"error": f"Error: {str(e)}", "count": 0}
-            
-        finally:
-            if db_connection:
-                db_connection.close()

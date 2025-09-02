@@ -90,11 +90,21 @@ class VoltageTransformer:
                 logger.info("No se encontró columna Date separada")
                 transformed_df['date_field'] = None
             
-            time_utc5_col = column_map.get('time_utc5')
-            if time_utc5_col:
+            time_utc_col = column_map.get('time_utc') or column_map.get('time_utc5')
+            utc_zone = None
+
+            if time_utc_col:
                 try:
-                    # Procesar tiempo UTC-5, puede venir como string con formato HH:MM:SS.mmm
-                    time_series = df[time_utc5_col].astype(str)
+                    # Extraer la zona UTC del nombre de la columna
+                    utc_zone_match = re.search(r'utc([+-]\d+)', time_utc_col.lower())
+                    if utc_zone_match:
+                        utc_zone = f"UTC{utc_zone_match.group(1)}"
+                    else:
+                        # Valor por defecto si no se puede extraer
+                        utc_zone = "UTC-5"
+                    
+                    # Procesar tiempo UTC, puede venir como string con formato HH:MM:SS.mmm
+                    time_series = df[time_utc_col].astype(str)
                     
                     # Intentar convertir a tiempo
                     def parse_time(time_str):
@@ -117,14 +127,17 @@ class VoltageTransformer:
                         except:
                             return None
                     
-                    transformed_df['time_utc5'] = time_series.apply(parse_time)
-                    logger.info(f"Campo Time (UTC-5) procesado correctamente desde columna: {time_utc5_col}")
+                    transformed_df['time'] = time_series.apply(parse_time)
+                    transformed_df['utc_zone'] = utc_zone
+                    logger.info(f"Campo Time procesado correctamente desde columna: {time_utc_col} con zona {utc_zone}")
                 except Exception as e:
-                    logger.warning(f"Error al procesar campo Time (UTC-5): {e}")
-                    transformed_df['time_utc5'] = None
+                    logger.warning(f"Error al procesar campo Time UTC: {e}")
+                    transformed_df['time'] = None
+                    transformed_df['utc_zone'] = None
             else:
-                logger.info("No se encontró columna Time (UTC-5) separada")
-                transformed_df['time_utc5'] = None
+                logger.info("No se encontró columna Time UTC separada")
+                transformed_df['time'] = None
+                transformed_df['utc_zone'] = None
             
             # Función auxiliar para convertir valores a numéricos
             def convert_to_numeric(df, source_col):
@@ -152,10 +165,10 @@ class VoltageTransformer:
 
             # Convertir columnas de voltaje
             voltage_columns = {
-                'u_l1_avg_10min': column_map.get('u_l1'),
-                'u_l2_avg_10min': column_map.get('u_l2'),
-                'u_l3_avg_10min': column_map.get('u_l3'),
-                'u_l12_avg_10min': column_map.get('u_l12')
+                'u_l1_avg': column_map.get('u_l1'),
+                'u_l2_avg': column_map.get('u_l2'),
+                'u_l3_avg': column_map.get('u_l3'),
+                'u_l12_avg': column_map.get('u_l12')
             }
             
             for target_col, source_col in voltage_columns.items():

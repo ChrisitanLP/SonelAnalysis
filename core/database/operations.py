@@ -1,6 +1,7 @@
 #sonel_extractor/database/operations.py
 
 import re
+import pandas as pd
 from config.logger import logger
 from core.utils.validators import extract_client_code
 from config.settings import (
@@ -192,6 +193,17 @@ class DataHandler:
                   
         # Contador de filas procesadas exitosamente
         successful_rows = 0
+
+        # Función auxiliar para manejar valores nulos/NaN
+        def clean_value(value):
+            """Convierte NaN, None y valores inválidos a None (NULL en DB)"""
+            if value is None:
+                return None
+            if isinstance(value, (int, float)) and (pd.isna(value) or str(value).lower() == 'nan'):
+                return None
+            if isinstance(value, str) and (value.strip() == '' or value.lower() == 'nan'):
+                return None
+            return value
         
         # Procesar cada fila e insertarla en las tablas correspondientes
         for index, row in data.iterrows():
@@ -199,8 +211,8 @@ class DataHandler:
                 # 1. Insertar en tabla mediciones y obtener ID
                 medicion_cursor = self.db_connection.execute_query(
                     INSERT_MEDICION_QUERY,
-                    params=(codigo_id, row.get('tiempo_utc'), ),
-                    commit=False  # No hacemos commit aún
+                    params=(codigo_id, clean_value(row.get('tiempo_utc'))),
+                    commit=False
                 )
                 
                 if not medicion_cursor:
@@ -214,10 +226,10 @@ class DataHandler:
                 voltaje_cursor = self.db_connection.execute_query(
                     INSERT_VOLTAJE_QUERY,
                     params=(
-                        row.get('u_l1_avg_10min'),
-                        row.get('u_l2_avg_10min'),
-                        row.get('u_l3_avg_10min'),
-                        row.get('u_l12_avg_10min'),
+                        clean_value(row.get('u_l1_avg')),
+                        clean_value(row.get('u_l2_avg')),
+                        clean_value(row.get('u_l3_avg')),
+                        clean_value(row.get('u_l12_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -230,12 +242,12 @@ class DataHandler:
                 
                 voltaje_cursor.close()
                 
-                # 3. Insertar en tabla corriente_mediciones con valores predeterminados o nulos
+                # 3. Insertar en tabla corriente_mediciones
                 corriente_cursor = self.db_connection.execute_query(
                     INSERT_CORRIENTE_QUERY,
                     params=(
-                        row.get('i_l1_avg', None),
-                        row.get('i_l2_avg', None),
+                        clean_value(row.get('i_l1_avg')),
+                        clean_value(row.get('i_l2_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -248,23 +260,23 @@ class DataHandler:
                 
                 corriente_cursor.close()
                 
-                # 4. Insertar en tabla potencia_mediciones con valores predeterminados o nulos
+                # 4. Insertar en tabla potencia_mediciones
                 potencia_cursor = self.db_connection.execute_query(
                     INSERT_POTENCIA_QUERY,
-                    params= (
-                        row.get('p_l1_avg', None),
-                        row.get('p_l2_avg', None),
-                        row.get('p_l3_avg', None),
-                        row.get('p_e_avg', None),
-                        row.get('q1_l1_avg', None),
-                        row.get('q1_l2_avg', None),
-                        row.get('q1_e_avg', None),
-                        row.get('sn_l1_avg', None),
-                        row.get('sn_l2_avg', None),
-                        row.get('sn_e_avg', None),
-                        row.get('s_l1_avg', None),
-                        row.get('s_l2_avg', None),
-                        row.get('s_e_avg', None),
+                    params=(
+                        clean_value(row.get('p_l1_avg')),
+                        clean_value(row.get('p_l2_avg')),
+                        clean_value(row.get('p_l3_avg')),
+                        clean_value(row.get('p_e_avg')),
+                        clean_value(row.get('q1_l1_avg')),
+                        clean_value(row.get('q1_l2_avg')),
+                        clean_value(row.get('q1_e_avg')),
+                        clean_value(row.get('sn_l1_avg')),
+                        clean_value(row.get('sn_l2_avg')),
+                        clean_value(row.get('sn_e_avg')),
+                        clean_value(row.get('s_l1_avg')),
+                        clean_value(row.get('s_l2_avg')),
+                        clean_value(row.get('s_e_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -277,32 +289,33 @@ class DataHandler:
                 
                 potencia_cursor.close()
 
+                # 5. Insertar en tabla única (mediciones_planas) con campos modificados
                 cursor = self.db_connection.execute_query(
                     INSERT_TABLA_UNICA_QUERY,
                     params=(
                         codigo_id,
-                        row.get('tiempo_utc'),
-                        row.get('date_field'),     
-                        row.get('time_utc5'),
-                        row.get('u_l1_avg_10min'),
-                        row.get('u_l2_avg_10min'),
-                        row.get('u_l3_avg_10min'),
-                        row.get('u_l12_avg_10min'),
-                        row.get('i_l1_avg'),
-                        row.get('i_l2_avg'),
-                        row.get('p_l1_avg'),
-                        row.get('p_l2_avg'),
-                        row.get('p_l3_avg'),
-                        row.get('p_e_avg'),
-                        row.get('q1_l1_avg'),
-                        row.get('q1_l2_avg'),
-                        row.get('q1_e_avg'),
-                        row.get('sn_l1_avg'),
-                        row.get('sn_l2_avg'),
-                        row.get('sn_e_avg'),
-                        row.get('s_l1_avg'),
-                        row.get('s_l2_avg'),
-                        row.get('s_e_avg')
+                        clean_value(row.get('tiempo_utc')),
+                        clean_value(row.get('time')),
+                        clean_value(row.get('utc_zone')),
+                        clean_value(row.get('u_l1_avg')),
+                        clean_value(row.get('u_l2_avg')),
+                        clean_value(row.get('u_l3_avg')),
+                        clean_value(row.get('u_l12_avg')),
+                        clean_value(row.get('i_l1_avg')),
+                        clean_value(row.get('i_l2_avg')),
+                        clean_value(row.get('p_l1_avg')),
+                        clean_value(row.get('p_l2_avg')),
+                        clean_value(row.get('p_l3_avg')),
+                        clean_value(row.get('p_e_avg')),
+                        clean_value(row.get('q1_l1_avg')),
+                        clean_value(row.get('q1_l2_avg')),
+                        clean_value(row.get('q1_e_avg')),
+                        clean_value(row.get('sn_l1_avg')),
+                        clean_value(row.get('sn_l2_avg')),
+                        clean_value(row.get('sn_e_avg')),
+                        clean_value(row.get('s_l1_avg')),
+                        clean_value(row.get('s_l2_avg')),
+                        clean_value(row.get('s_e_avg'))
                     ),
                     commit=True
                 )
@@ -324,76 +337,3 @@ class DataHandler:
         
         logger.info(f"Datos cargados exitosamente en la BD: {successful_rows}/{len(data)} filas")
         return successful_rows > 0
-    
-    def export_all_mediciones_planas(self):
-        """
-        Exportar todos los registros de la tabla mediciones_planas
-        
-        Returns:
-            list: Lista de tuplas con todos los registros o None si hay error
-        """
-        try:
-            query = """
-                SELECT 
-                    mp.id,
-                    c.codigo,
-                    mp.fecha,
-                    mp.date_field,
-                    mp.time_utc5,
-                    mp.u_l1_avg,
-                    mp.u_l2_avg,
-                    mp.u_l3_avg,
-                    mp.u_l12_avg,
-                    mp.i_l1_avg,
-                    mp.i_l2_avg,
-                    mp.p_l1_avg,
-                    mp.p_l2_avg,
-                    mp.p_l3_avg,
-                    mp.p_e_avg,
-                    mp.q1_l1_avg,
-                    mp.q1_l2_avg,
-                    mp.q1_e_avg,
-                    mp.sn_l1_avg,
-                    mp.sn_l2_avg,
-                    mp.sn_e_avg,
-                    mp.s_l1_avg,
-                    mp.s_l2_avg,
-                    mp.s_e_avg,
-                    mp.fecha_subida
-                FROM mediciones_planas mp
-                LEFT JOIN codigo c ON mp.codigo_id = c.id
-                ORDER BY mp.fecha DESC;
-            """
-            
-            cursor = self.db_connection.execute_query(query, commit=False)
-            
-            if cursor:
-                rows = cursor.fetchall()
-                cursor.close()
-                logger.info(f"Exportados {len(rows)} registros de mediciones_planas")
-                return rows
-            else:
-                logger.error("Error al ejecutar consulta de exportación")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error al exportar mediciones_planas: {e}")
-            return None
-    
-    def get_mediciones_planas_headers(self):
-        """
-        Obtener los encabezados de la tabla mediciones_planas para exportación
-        
-        Returns:
-            list: Lista de nombres de columnas
-        """
-        return [
-            'ID', 'Código_Cliente', 'Fecha_Hora', 'Fecha', 'Hora_UTC5',
-            'U_L1_Avg', 'U_L2_Avg', 'U_L3_Avg', 'U_L12_Avg',
-            'I_L1_Avg', 'I_L2_Avg',
-            'P_L1_Avg', 'P_L2_Avg', 'P_L3_Avg', 'P_E_Avg',
-            'Q1_L1_Avg', 'Q1_L2_Avg', 'Q1_E_Avg',
-            'SN_L1_Avg', 'SN_L2_Avg', 'SN_E_Avg',
-            'S_L1_Avg', 'S_L2_Avg', 'S_E_Avg',
-            'Fecha_Subida'
-        ]
