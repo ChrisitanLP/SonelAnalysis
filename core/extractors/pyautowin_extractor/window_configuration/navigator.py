@@ -72,7 +72,7 @@ class SonelNavigator:
         """
         config_lower = config_text.lower()
         
-        # Mapeo para Average/Promedio
+        # Mapeo para Minimum/Mínimo
         if any(term in config_lower for term in ["min", "mín", "minimum", "mínimo"]):
             return "MIN"
         
@@ -80,8 +80,8 @@ class SonelNavigator:
         elif any(term in config_lower for term in ["max", "máx", "maximum", "máximo"]):
             return "MAX"
         
-        # Mapeo para Instant/Instantáneo
-        elif any(term in config_lower for term in ["instant", "instantaneous", "instantáneo"]):
+        # Mapeo para Instant/Instantáneo - CORREGIDO
+        elif any(term in config_lower for term in ["instant", "instantaneous", "instantáneo", "inst"]):
             return "INSTANT"
         
         return None
@@ -242,9 +242,12 @@ class SonelNavigator:
             # Si tenemos todas las coordenadas, usar coordenadas
             if not checkboxes_pendientes:
                 self.logger.info("📍 Usando coordenadas guardadas para todos los checkboxes")
+                elementos_configurados = {}
                 for checkbox_id in self.componentes_requeridos["CheckBox"]:
-                    self.seleccionar_checkbox_por_coordenadas(checkbox_id)
-                return [], {}
+                    if self.seleccionar_checkbox_por_coordenadas(checkbox_id):
+                        coordenada = self.save_file.obtener_coordenada_componente("CheckBox", checkbox_id)
+                        elementos_configurados[f"CheckBox_{coordenada.get('texto', checkbox_id)}"] = f"Configurado por coordenadas (ID: {checkbox_id})"
+                return [], elementos_configurados
 
             self.logger.info(f"🔍 Faltan coordenadas para: {checkboxes_pendientes}, procediendo con búsqueda manual")
 
@@ -414,6 +417,8 @@ class SonelNavigator:
             time.sleep(0.5)
             
             self.logger.info(f"✅ RadioButton 'User' seleccionado por coordenadas ({coordenada['x']}, {coordenada['y']})")
+            self._actualizar_coordenada_usada("RadioButton", "User", coordenada.get("texto", ""))
+        
             return True
             
         except Exception as e:
@@ -441,8 +446,27 @@ class SonelNavigator:
             
             accion = "activado" if debe_estar_activo else "desactivado"
             self.logger.info(f"✅ CheckBox '{identificador}' {accion} por coordenadas ({coordenada['x']}, {coordenada['y']})")
+            self._actualizar_coordenada_usada("CheckBox", identificador, texto_guardado)
             return True
             
         except Exception as e:
             self.logger.error(f"❌ Error procesando CheckBox {identificador} por coordenadas: {e}")
             return False
+        
+    def _actualizar_coordenada_usada(self, tipo_componente, identificador, texto):
+        """Actualiza el timestamp de una coordenada que fue utilizada exitosamente"""
+        try:
+            # Crear nueva entrada con timestamp actualizado para mantener la coordenada fresca
+            nueva_coordenada = {
+                "x": self.save_file.obtener_coordenada_componente(tipo_componente, identificador)["x"],
+                "y": self.save_file.obtener_coordenada_componente(tipo_componente, identificador)["y"],
+                "rect": self.save_file.obtener_coordenada_componente(tipo_componente, identificador)["rect"],
+                "texto": texto,
+                "timestamp": str(datetime.now())
+            }
+            
+            clave = f"{tipo_componente}_{identificador}"
+            self.save_file.guardar_coordenadas({clave: nueva_coordenada})
+            
+        except Exception as e:
+            self.logger.debug(f"⚠️ Error actualizando coordenada {tipo_componente}_{identificador}: {e}")

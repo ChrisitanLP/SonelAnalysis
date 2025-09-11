@@ -1,10 +1,12 @@
 import re
+import os
 import time
 import logging
 import pyperclip
 import pyautogui
 from time import sleep
 from pywinauto import mouse
+from datetime import datetime
 from pywinauto.mouse import move
 from pyautogui import moveTo, click
 from pywinauto.keyboard import send_keys
@@ -380,7 +382,7 @@ class SonelExecutor:
                     self.logger.warning(f"⚠️ Error calculando área de scroll: {e}. Usando valores por defecto.")
                     return 250, 560
 
-            def realizar_scroll_inteligente(x_scroll, y_scroll, direccion=-3):
+            def realizar_scroll_inteligente(x_scroll, y_scroll, direccion=-4):
                 """Realiza scroll en el área específica del TreeView"""
                 try:
                     # Mover cursor al área de scroll
@@ -389,7 +391,7 @@ class SonelExecutor:
                     
                     # Realizar scroll
                     mouse.scroll(coords=(x_scroll, y_scroll), wheel_dist=direccion)
-                    sleep(0.5)  # Pausa para que la interfaz se actualice
+                    sleep(0.8)  # Pausa para que la interfaz se actualice
                     
                     self.logger.info(f"🔄 Scroll realizado en ({x_scroll}, {y_scroll}) con distancia {direccion}")
                     return True
@@ -729,11 +731,19 @@ class SonelExecutor:
 
     def guardar_archivo_csv(self, nombre_archivo: str):
         """
-        Guarda el archivo CSV usando únicamente métodos de pywinauto sin coordenadas ni pyautogui.
+        Guarda el archivo CSV usando múltiples estrategias de búsqueda para mayor robustez.
         """
         try:
-            self.logger.info(f"💾 Guardando archivo CSV: {nombre_archivo}")
+            if os.path.sep in nombre_archivo or '/' in nombre_archivo:
+                csv_filename_only = os.path.basename(nombre_archivo)
+                self.logger.info(f"💾 Guardando archivo CSV: {csv_filename_only}")
+                self.logger.info(f"   📁 Ruta completa: {nombre_archivo}")
+            else:
+                csv_filename_only = nombre_archivo
+                self.logger.info(f"💾 Guardando archivo CSV: {csv_filename_only}")
+            
             time.sleep(2)
+            self.logger.info(f"💾 Guardando archivo CSV: {nombre_archivo}")
 
             # Obtener todas las traducciones posibles para 'save'
             save_terms = get_all_possible_translations('ui_controls', 'save')
@@ -785,52 +795,42 @@ class SonelExecutor:
             except Exception as e:
                 self.logger.warning(f"⚠️ No se pudo enfocar la ventana: {e}")
 
-            image_terms = get_all_possible_translations('ui_controls', 'image')
-            self.logger.info(f"🌐 Buscando campo relacionado con 'Imágenes' en términos: {image_terms}")
-        
-            # Función para verificar coincidencia con 'Imágenes'
-            def es_campo_imagenes(texto_control, lista_traducciones):
-                """Verifica si el texto corresponde a 'Imágenes' en cualquier idioma"""
-                texto_normalizado = TextUtils.normalizar_texto(texto_control)
-                for traduccion in lista_traducciones:
-                    if TextUtils.normalizar_texto(traduccion) in texto_normalizado:
-                        return True
-                return False
-
-            # Localizar el campo de texto "Nombre"
-            campo_control = None
-
-            for idx, ctrl in enumerate(guardar_ventana.descendants()):
-                if isinstance(ctrl, EditWrapper):
-                    try:
-                        padre = ctrl.parent()
-                        if padre and es_campo_imagenes(padre.window_text(), image_terms):
-                            campo_control = ctrl
-                            self._log_control_details(ctrl, index=idx, tipo_esperado="Campo Nombre (EditWrapper)")
-                            
-                            self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
-                            break
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ No se pudo evaluar padre de componente Edit #{idx}: {e}")
-
+            # NUEVA ESTRATEGIA: Múltiples métodos para encontrar el campo de nombre
+            campo_control = self._buscar_campo_nombre_multiples_estrategias(guardar_ventana)
+            
             if not campo_control:
-                self.logger.error("❌ No se encontró el campo de nombre para guardar el archivo.")
+                self.logger.error("❌ No se encontró el campo de nombre para guardar el archivo con ninguna estrategia.")
                 return False
 
             # Estrategia: Método estándar con verificaciones adicionales
             try:
                 self.logger.info("🔄 Estableciendo nombre del archivo...")
                 # ✅ Normalizar nombre del archivo
-                nombre_archivo = nombre_archivo.strip()
-                if "." in nombre_archivo:
-                    partes = nombre_archivo.split(".")
-                    nombre_sin_puntos = "".join(partes[:-1])  # quitar puntos del nombre
+                archivo_a_guardar = nombre_archivo.strip()
+
+                # Extraer carpeta y nombre
+                carpeta = os.path.dirname(archivo_a_guardar)
+                nombre = os.path.basename(archivo_a_guardar)
+
+                if "." in nombre:
+                    partes = nombre.split(".")
+                    nombre_sin_puntos = "".join(partes[:-1])  # quitar puntos intermedios
                     extension = partes[-1]
-                    nombre_archivo = f"{nombre_sin_puntos}.{extension}"
+                    nombre = f"{nombre_sin_puntos}.{extension}"
                 else:
                     self.logger.warning("⚠️ El nombre del archivo no contenía una extensión explícita.")
 
-                pyperclip.copy(nombre_archivo)
+                # Reconstruir ruta completa con nombre sanitizado
+                nombre_final = self._aplicar_numeracion_incremental_csv(carpeta, nombre)
+                archivo_a_guardar = os.path.join(carpeta, nombre_final)
+
+                # Logs para debugging
+                self.logger.info(f"   📁 Ruta base: {carpeta}")
+                self.logger.info(f"   📄 Nombre sanitizado: {nombre}")
+                self.logger.info(f"   📄 Nombre final (con numeración si aplica): {nombre_final}")
+                self.logger.info(f"   💾 Guardando como: {archivo_a_guardar}")
+
+                pyperclip.copy(archivo_a_guardar)
 
                 # Verificar visibilidad antes de proceder
                 if not campo_control.is_visible():
@@ -911,6 +911,180 @@ class SonelExecutor:
         except Exception as e:
             self.logger.error(f"❌ Error general en guardar_archivo_csv: {e}")
             return False
+        
+    def _aplicar_numeracion_incremental_csv(self, carpeta, nombre_archivo):
+        """
+        Aplica numeración incremental al nombre del archivo CSV si ya existe.
+        
+        Args:
+            carpeta (str): Directorio donde se guardará el archivo
+            nombre_archivo (str): Nombre del archivo original con extensión
+            
+        Returns:
+            str: Nombre del archivo con numeración incremental si es necesario
+        """
+        import os
+        
+        # Ruta completa del archivo original
+        ruta_completa = os.path.join(carpeta, nombre_archivo)
+        
+        # Si no existe, usar el nombre original
+        if not os.path.exists(ruta_completa):
+            self.logger.info(f"   ✅ Nombre disponible: {nombre_archivo}")
+            return nombre_archivo
+        
+        # Extraer nombre base y extensión
+        nombre_base, extension = os.path.splitext(nombre_archivo)
+        
+        # Buscar el siguiente número disponible
+        contador = 1
+        max_intentos = 500
+        
+        while contador <= max_intentos:
+            nombre_numerado = f"{contador}_{nombre_base}{extension}"
+            ruta_numerada = os.path.join(carpeta, nombre_numerado)
+            
+            if not os.path.exists(ruta_numerada):
+                self.logger.info(f"   🔄 Archivo ya existe, aplicando numeración: {nombre_numerado}")
+                self.logger.info(f"   📝 Número asignado: {contador}")
+                return nombre_numerado
+            
+            contador += 1
+        
+        # Si se agotaron los intentos, usar timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_timestamp = f"{timestamp}_{nombre_base}{extension}"
+        
+        self.logger.warning(f"⚠️ Se agotaron {max_intentos} intentos de numeración")
+        self.logger.info(f"   🕐 Usando timestamp: {nombre_timestamp}")
+        
+        return nombre_timestamp
+
+    def _buscar_campo_nombre_multiples_estrategias(self, guardar_ventana):
+        """
+        Busca el campo de nombre del archivo usando múltiples estrategias.
+        Retorna el primer campo EditWrapper encontrado o None.
+        """
+        campo_control = None
+        
+        # ESTRATEGIA 1: Búsqueda por padre con término "Imágenes" (método original)
+        self.logger.info("🔍 Estrategia 1: Buscando por padre con término 'Imágenes'")
+        try:
+            image_terms = get_all_possible_translations('ui_controls', 'image')
+            self.logger.info(f"🌐 Términos de imagen: {image_terms}")
+            
+            def es_campo_imagenes(texto_control, lista_traducciones):
+                """Verifica si el texto corresponde a 'Imágenes' en cualquier idioma"""
+                if not texto_control:
+                    return False
+                texto_normalizado = TextUtils.normalizar_texto(texto_control)
+                for traduccion in lista_traducciones:
+                    if TextUtils.normalizar_texto(traduccion) in texto_normalizado:
+                        return True
+                return False
+
+            for idx, ctrl in enumerate(guardar_ventana.descendants()):
+                if isinstance(ctrl, EditWrapper):
+                    try:
+                        padre = ctrl.parent()
+                        if padre and es_campo_imagenes(padre.window_text(), image_terms):
+                            campo_control = ctrl
+                            self._log_control_details(ctrl, index=idx, tipo_esperado="Campo Nombre (Estrategia 1 - EditWrapper por padre)")
+                            self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
+                            self.logger.info("✅ Campo encontrado con Estrategia 1")
+                            return campo_control
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ No se pudo evaluar padre de componente Edit #{idx}: {e}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error en Estrategia 1: {e}")
+        
+        # ESTRATEGIA 2: Buscar todos los EditWrapper y tomar el más probable (por posición o características)
+        self.logger.info("🔍 Estrategia 2: Buscando todos los EditWrapper disponibles")
+        try:
+            edit_controls = []
+            for idx, ctrl in enumerate(guardar_ventana.descendants()):
+                if isinstance(ctrl, EditWrapper):
+                    try:
+                        details = self._log_control_details(ctrl, index=idx, tipo_esperado="EditWrapper encontrado (Estrategia 2)")
+                        if details:
+                            edit_controls.append((ctrl, details, idx))
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Error procesando EditWrapper #{idx}: {e}")
+            
+            if edit_controls:
+                # Priorizar el último EditWrapper encontrado (suele ser el campo de nombre)
+                campo_control = edit_controls[-1][0]
+                self.logger.info(f"✅ Campo seleccionado con Estrategia 2: EditWrapper índice {edit_controls[-1][2]}")
+                self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
+                return campo_control
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error en Estrategia 2: {e}")
+        
+        # ESTRATEGIA 3: Buscar por automation_id o class_name conocidos
+        self.logger.info("🔍 Estrategia 3: Buscando por automation_id conocidos")
+        try:
+            automation_ids_conocidos = ["fileNameTextBox", "txtFileName", "edtNombre", "1001", "FileNameEdit"]
+            
+            for automation_id in automation_ids_conocidos:
+                try:
+                    ctrl = guardar_ventana.child_window(auto_id=automation_id, control_type="Edit")
+                    if ctrl.exists():
+                        campo_control = ctrl
+                        self.logger.info(f"✅ Campo encontrado con Estrategia 3: automation_id='{automation_id}'")
+                        self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
+                        return campo_control
+                except Exception as e:
+                    self.logger.debug(f"automation_id '{automation_id}' no encontrado: {e}")
+                    
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error en Estrategia 3: {e}")
+        
+        # ESTRATEGIA 4: Buscar por posición (EditWrapper en la parte inferior del diálogo)
+        self.logger.info("🔍 Estrategia 4: Buscando por posición (EditWrapper más abajo)")
+        try:
+            edit_controls_con_posicion = []
+            for idx, ctrl in enumerate(guardar_ventana.descendants()):
+                if isinstance(ctrl, EditWrapper):
+                    try:
+                        rect = ctrl.rectangle()
+                        edit_controls_con_posicion.append((ctrl, rect.top, idx))
+                    except Exception as e:
+                        self.logger.debug(f"Error obteniendo posición de EditWrapper #{idx}: {e}")
+            
+            if edit_controls_con_posicion:
+                # Ordenar por posición Y (de arriba a abajo) y tomar el último
+                edit_controls_con_posicion.sort(key=lambda x: x[1])  # Ordenar por top
+                campo_control = edit_controls_con_posicion[-1][0]  # El más abajo
+                idx_seleccionado = edit_controls_con_posicion[-1][2]
+                
+                self.logger.info(f"✅ Campo seleccionado con Estrategia 4: EditWrapper más abajo (índice {idx_seleccionado})")
+                self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
+                return campo_control
+                
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error en Estrategia 4: {e}")
+        
+        # ESTRATEGIA 5: Último recurso - primer EditWrapper encontrado
+        self.logger.info("🔍 Estrategia 5: Último recurso - primer EditWrapper")
+        try:
+            for idx, ctrl in enumerate(guardar_ventana.descendants()):
+                if isinstance(ctrl, EditWrapper):
+                    try:
+                        campo_control = ctrl
+                        self._log_control_details(ctrl, index=idx, tipo_esperado="EditWrapper (Último recurso - Estrategia 5)")
+                        self.logger.info(f"⚠️ Campo seleccionado con Estrategia 5 (último recurso): índice {idx}")
+                        self.save_file.guardar_coordenada_componente(campo_control, "EditWrapper", "nombre_archivo")
+                        return campo_control
+                    except Exception as e:
+                        self.logger.debug(f"Error en último recurso con EditWrapper #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            self.logger.warning(f"⚠️ Error en Estrategia 5: {e}")
+        
+        self.logger.error("❌ Ninguna estrategia pudo encontrar un campo de nombre válido")
+        return None
 
     def _log_control_details(self, control, index, tipo_esperado=""):
         """Registra detalles del control"""

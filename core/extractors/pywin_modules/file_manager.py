@@ -135,3 +135,79 @@ class FileManager:
         except (OSError, IOError) as e:
             self.logger.error(f"❌ Error al obtener información de {file_path}: {e}")
             return {}
+        
+    def get_file_directory_info(self, file_path):
+        """
+        Obtiene información del directorio de un archivo para logging y tracking
+        
+        Args:
+            file_path (str): Ruta al archivo
+            
+        Returns:
+            dict: Información del directorio y ubicación
+        """
+        try:
+            if not file_path or not os.path.exists(file_path):
+                return {}
+            
+            directory_path = os.path.dirname(file_path)
+            directory_name = os.path.basename(directory_path)
+            parent_directory = os.path.basename(os.path.dirname(directory_path))
+            
+            return {
+                "directory_path": directory_path,
+                "directory_name": directory_name,
+                "parent_directory": parent_directory,
+                "relative_path": os.path.relpath(file_path, self.PATHS['input_dir'])
+            }
+        except Exception as e:
+            self.logger.warning(f"Error obteniendo información de directorio para {file_path}: {e}")
+            return {}
+    
+    def check_duplicate_filenames_across_directories(self, pqm_files):
+        """
+        Analiza la lista de archivos PQM para identificar nombres duplicados en diferentes directorios
+        
+        Args:
+            pqm_files (list): Lista de rutas de archivos PQM
+            
+        Returns:
+            dict: Diccionario con información de duplicados
+        """
+        filename_directory_map = {}
+        
+        for file_path in pqm_files:
+            filename = os.path.basename(file_path)
+            directory = os.path.basename(os.path.dirname(file_path))
+            
+            if filename not in filename_directory_map:
+                filename_directory_map[filename] = []
+            
+            filename_directory_map[filename].append({
+                "directory": directory,
+                "full_path": file_path
+            })
+        
+        # Filtrar solo los que tienen duplicados
+        duplicates = {
+            filename: locations 
+            for filename, locations in filename_directory_map.items() 
+            if len(locations) > 1
+        }
+        
+        # Log de información de duplicados
+        if duplicates:
+            self.logger.info(f"🔄 Detectados {len(duplicates)} nombres de archivo con múltiples ubicaciones:")
+            for filename, locations in list(duplicates.items())[:5]:  # Mostrar solo los primeros 5
+                dirs = [loc["directory"] for loc in locations]
+                self.logger.info(f"   📂 '{filename}' en directorios: {', '.join(dirs)}")
+            
+            if len(duplicates) > 5:
+                self.logger.info(f"   ... y {len(duplicates) - 5} más")
+        
+        return {
+            "total_files": len(pqm_files),
+            "unique_filenames": len(filename_directory_map),
+            "duplicate_filenames": len(duplicates),
+            "duplicates_detail": duplicates
+        }

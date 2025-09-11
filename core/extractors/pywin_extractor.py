@@ -83,8 +83,26 @@ class SonelExtractorCompleto:
         self.csv_generator = CSVGenerator(self.PATHS, self.delays, self.pywinauto_logger)
 
     def get_pqm_files(self):
-        """Obtiene lista de archivos .pqm702 en el directorio de entrada"""
-        return self.file_manager.get_pqm_files()
+        """
+        Obtiene lista de archivos .pqm702 en el directorio de entrada
+        MODIFICADO: Incluye análisis de duplicados por directorio
+        """
+        pqm_files = self.file_manager.get_pqm_files()
+        
+        if pqm_files:
+            # NUEVO: Analizar duplicados por directorio
+            duplicate_analysis = self.file_manager.check_duplicate_filenames_across_directories(pqm_files)
+            
+            self.pywinauto_logger.info("📊 Análisis de duplicados por directorio:")
+            self.pywinauto_logger.info(f"   📁 Total de archivos: {duplicate_analysis['total_files']}")
+            self.pywinauto_logger.info(f"   📋 Nombres únicos: {duplicate_analysis['unique_filenames']}")
+            self.pywinauto_logger.info(f"   🔄 Nombres duplicados: {duplicate_analysis['duplicate_filenames']}")
+            
+            if duplicate_analysis['duplicate_filenames'] > 0:
+                self.pywinauto_logger.info("   ✅ Cada archivo será procesado independientemente por directorio")
+                self.pywinauto_logger.info("   📝 Los CSVs tendrán numeración incremental para evitar conflictos")
+        
+        return pqm_files
 
     def obtener_estadisticas_procesados(self):
         """Obtiene estadísticas de archivos procesados con la nueva estructura"""
@@ -324,7 +342,6 @@ class SonelExtractorCompleto:
             
             self.pywinauto_logger.info(f"🔄 Archivos pendientes de procesar: {len(archivos_pendientes)}")
             
-            # [RESTO DEL CÓDIGO DE PROCESAMIENTO PERMANECE IGUAL...]
             # Procesar cada archivo
             for i, archivo in enumerate(archivos_pendientes, 1):
                 nombre_archivo = os.path.basename(archivo)
@@ -659,7 +676,10 @@ class SonelExtractorCompleto:
         self.pywinauto_logger.info("="*80)
         
     def get_csv_summary_for_gui(self):
-        """Genera un resumen completo para la GUI de CSV basado en archivos procesados"""
+        """
+        Genera un resumen completo para la GUI de CSV basado en archivos procesados
+        MODIFICADO: Solo incluye archivos que fueron realmente procesados en la ejecución actual
+        """
         try:
             # Obtener lista de archivos .pqm702 disponibles
             archivos_pqm = self.get_pqm_files()
@@ -685,8 +705,40 @@ class SonelExtractorCompleto:
             execution_times = []
             files_details = []
             
-            # ✅ CORREGIDO: Procesar cada archivo con el nuevo sistema de claves
+            # NUEVA LÓGICA: Solo procesar archivos que NO fueron saltados
+            archivos_realmente_procesados = []
             for archivo_pqm in archivos_pqm:
+                file_key = self.file_tracker._generate_file_key(archivo_pqm)
+                
+                # Verificar si el archivo existe en el registro Y fue procesado recientemente
+                if file_key in processed_data:
+                    entry = processed_data[file_key]
+                    processing_date = entry.get("processing_completed", "")
+                    
+                    # Solo incluir archivos procesados en la sesión actual (últimas 24 horas como margen)
+                    if processing_date:
+                        try:
+                            processing_datetime = datetime.fromisoformat(processing_date.replace('Z', '+00:00'))
+                            current_session_start = self.process_start_time or (datetime.now() - timedelta(days=45))
+                            
+                            if processing_datetime >= current_session_start:
+                                archivos_realmente_procesados.append(archivo_pqm)
+                                self.pywinauto_logger.debug(f"📊 Incluido en resumen: {os.path.basename(archivo_pqm)} (procesado: {processing_date})")
+                            else:
+                                self.pywinauto_logger.debug(f"⏭️ Excluido del resumen: {os.path.basename(archivo_pqm)} (procesado previamente: {processing_date})")
+                        except ValueError:
+                            # Si hay error parseando la fecha, incluir por seguridad
+                            archivos_realmente_procesados.append(archivo_pqm)
+                            self.pywinauto_logger.warning(f"⚠️ Error parseando fecha para {os.path.basename(archivo_pqm)}, incluido por seguridad")
+                else:
+                    # Si no está en el registro, significa que es nuevo y debe ser incluido
+                    archivos_realmente_procesados.append(archivo_pqm)
+                    self.pywinauto_logger.debug(f"📋 Archivo nuevo incluido: {os.path.basename(archivo_pqm)}")
+            
+            self.pywinauto_logger.info(f"📊 Archivos para resumen CSV: {len(archivos_realmente_procesados)}/{len(archivos_pqm)} (excluidos {len(archivos_pqm) - len(archivos_realmente_procesados)} ya procesados)")
+            
+            # ✅ CORREGIDO: Procesar solo archivos que fueron realmente procesados
+            for archivo_pqm in archivos_realmente_procesados:
                 file_detail = self._process_file_for_summary(archivo_pqm, processed_data)
                 
                 # Actualizar contadores según el estado
@@ -706,9 +758,12 @@ class SonelExtractorCompleto:
                 
                 files_details.append(file_detail)
             
+            # Usar el total de archivos realmente procesados para las métricas
+            total_files_for_metrics = len(archivos_realmente_procesados)
+            
             # Calcular métricas derivadas
             total_execution_time = sum(execution_times) if execution_times else 0
-            success_rate = (csv_files_generated / total_files * 100) if total_files > 0 else 0
+            success_rate = (csv_files_generated / total_files_for_metrics * 100) if total_files_for_metrics > 0 else 0
             avg_speed = CSVSummaryUtils._calculate_average_speed(csv_files_generated, total_execution_time)
             
             # Formatear tiempo total
@@ -721,11 +776,11 @@ class SonelExtractorCompleto:
             total_records = csv_files_generated * 3278  # Estimación promedio por archivo
             
             # ✅ NUEVO: Log de resumen generado para debugging
-            self.pywinauto_logger.info(f"📊 Resumen CSV generado - Procesados: {processed_files}/{total_files}, CSVs: {csv_files_generated}, Errores: {errors}, Advertencias: {warnings}")
+            self.pywinauto_logger.info(f"📊 Resumen CSV generado - Procesados: {processed_files}/{total_files_for_metrics}, CSVs: {csv_files_generated}, Errores: {errors}, Advertencias: {warnings}")
             
             return {
                 "processed_files": processed_files,
-                "total_files": total_files,
+                "total_files": total_files_for_metrics,
                 "errors": errors,
                 "warnings": warnings,
                 "csv_files_generated": csv_files_generated,
@@ -794,9 +849,13 @@ class SonelExtractorCompleto:
         return self._generate_extraction_summary(resultados_actuales, archivos_pqm)
 
     def _process_file_for_summary(self, archivo_pqm, processed_data):
-        """Procesa un archivo individual para el resumen con información de tipo PQM"""
+        """
+        Procesa un archivo individual para el resumen con información de tipo PQM
+        CORREGIDO: Mejorado para detectar correctamente archivos procesados con numeración incremental
+        """
         file_name = os.path.basename(archivo_pqm)
         file_stem = Path(archivo_pqm).stem
+        source_directory = os.path.basename(os.path.dirname(archivo_pqm))
         
         # Obtener información del archivo incluyendo tipo PQM
         file_info = self.file_manager.get_file_info(archivo_pqm)
@@ -806,52 +865,144 @@ class SonelExtractorCompleto:
         file_exists = os.path.exists(archivo_pqm)
         file_size_bytes = os.path.getsize(archivo_pqm) if file_exists else 0
         
-        # ✅ USAR: la nueva función de generación de claves globales
+        # Usar la nueva función de generación de claves globales que incluye directorio
         file_key = self.file_tracker._generate_file_key(archivo_pqm)
         
-        # Obtener información del procesamiento usando la nueva clave
-        processed_info = processed_data.get(file_key, {})
+        # NUEVA LÓGICA: Buscar información de otros archivos con el mismo nombre en diferentes directorios
+        same_name_different_dirs = []
+        matching_entries = []  # NUEVO: Para archivos que corresponden al mismo archivo
+        
+        for key, info in processed_data.items():
+            if info.get('filename') == file_name:
+                if key != file_key:
+                    other_dir = "desconocido"
+                    if info.get('source_paths'):
+                        other_dir = os.path.basename(os.path.dirname(info['source_paths'][0]))
+                    if other_dir != source_directory:
+                        same_name_different_dirs.append((key, info, other_dir))
+                    else:
+                        # CRÍTICO: Archivo con mismo nombre y directorio (posible match exacto)
+                        matching_entries.append((key, info))
+        
+        # CORRECCIÓN PRINCIPAL: Verificar si existe un registro que corresponda a este archivo
+        processed_info = None
+        actual_key = file_key
+        
+        # 1. Buscar por clave exacta
+        if file_key in processed_data:
+            processed_info = processed_data[file_key]
+            actual_key = file_key
+        
+        # 2. NUEVO: Buscar por archivos que puedan corresponder al mismo archivo físico
+        elif matching_entries:
+            # Verificar si algún archivo de matching_entries corresponde al mismo archivo físico
+            for match_key, match_info in matching_entries:
+                source_paths = match_info.get('source_paths', [])
+                current_path = os.path.abspath(archivo_pqm)
+                
+                # Verificar si la ruta actual está en las rutas conocidas
+                for known_path in source_paths:
+                    if os.path.abspath(known_path) == current_path:
+                        processed_info = match_info
+                        actual_key = match_key
+                        self.pywinauto_logger.debug(f"🎯 Archivo encontrado por ruta física: {file_name}")
+                        break
+                
+                if processed_info:
+                    break
+        
+        # 3. NUEVO: Buscar archivos procesados exitosamente del mismo nombre en otros directorios
+        #    y verificar si generaron un CSV que coincida con este archivo
+        elif same_name_different_dirs:
+            for other_key, other_info, other_dir in same_name_different_dirs:
+                if (other_info.get('status') == 'exitoso' and 
+                    other_info.get('csv_output', {}).get('verified', False)):
+                    
+                    # Verificar si el CSV generado corresponde a este archivo
+                    csv_filename = other_info.get('csv_output', {}).get('filename', '')
+                    if csv_filename and self._csv_corresponds_to_file(csv_filename, file_stem):
+                        processed_info = other_info.copy()  # Copiar la información
+                        actual_key = other_key
+                        
+                        # MODIFICAR: Actualizar información específica para este directorio
+                        processed_info['message_modifier'] = f"procesado_desde_otro_directorio:{other_dir}"
+                        
+                        self.pywinauto_logger.info(f"📂 Archivo {file_name} en '{source_directory}' corresponde a procesamiento exitoso en '{other_dir}'")
+                        break
         
         # Determinar estado y mensaje
-        if file_key in processed_data:
+        if processed_info:
             processed = True
             status = processed_info.get('status', '')
             csv_output = processed_info.get('csv_output', {})
             csv_verified = csv_output.get('verified', False)
             
-            # Determinar estado visual y tipo según la nueva estructura
-            if status == "exitoso" and csv_verified:
+            # CORRECCIÓN CRÍTICA: Usar tiempo real del procesamiento
+            execution_time_seconds = processed_info.get('processing_time_seconds', 0)
+            
+            # NUEVA LÓGICA: Verificar físicamente el CSV numerado si es necesario
+            csv_filename = csv_output.get('filename', f"{file_stem}.csv")
+            
+            # Verificar físicamente si existe el CSV (incluyendo versiones numeradas)
+            csv_exists_physically = self._verify_csv_exists_physically(file_stem, csv_filename)
+            
+            # CORRECCIÓN: Determinar estado correcto
+            is_from_other_directory = 'message_modifier' in processed_info
+            
+            if status == "exitoso" and (csv_verified or csv_exists_physically):
                 status_display = f"✅ Exitoso ({pqm_type})"
                 status_type = "success"
-                message = f"Procesado correctamente - Tipo: {pqm_type}"
-            elif status == "exitoso" and not csv_verified:
+                
+                if is_from_other_directory:
+                    other_dir = processed_info['message_modifier'].split(':')[1]
+                    message = f"Procesado correctamente - Directorio actual: {source_directory}, Procesado desde: {other_dir}, Tipo: {pqm_type}"
+                else:
+                    message = f"Procesado correctamente - Directorio: {source_directory}, Tipo: {pqm_type}"
+                
+                # Si el CSV fue verificado físicamente pero no marcado como verified, actualizar
+                if not csv_verified and csv_exists_physically:
+                    message += " (CSV verificado físicamente)"
+                    self.pywinauto_logger.info(f"🔧 CSV verificado físicamente para {file_name}: {csv_filename}")
+                    
+            elif status == "exitoso" and not csv_verified and not csv_exists_physically:
                 status_display = f"⚠️ Advertencia ({pqm_type})"
                 status_type = "warning"
-                message = f"Procesado pero CSV no verificado - Tipo: {pqm_type}"
+                message = f"Procesado pero CSV no verificado - Directorio: {source_directory}, Tipo: {pqm_type}"
             else:
                 status_display = f"❌ Error ({pqm_type})"
                 status_type = "error"
                 error_msg = processed_info.get('error_message', 'Error desconocido')
-                message = f"Error en procesamiento: {error_msg} - Tipo: {pqm_type}"
+                message = f"Error: {error_msg} - Directorio: {source_directory}, Tipo: {pqm_type}"
+            
+            # NUEVA INFORMACIÓN: Mostrar información sobre archivos con mismo nombre en otros directorios
+            if same_name_different_dirs and not is_from_other_directory:
+                other_dirs = [other_dir for _, _, other_dir in same_name_different_dirs]
+                message += f" (También procesado en: {', '.join(other_dirs)})"
                 
-            # Mostrar información de rutas fuente si está disponible
-            source_paths = processed_info.get('source_paths', [])
-            if len(source_paths) > 1:
-                message += f" (Encontrado en {len(source_paths)} ubicaciones)"
         else:
+            # Archivo no procesado
             processed = False
             status_display = f"⏳ Pendiente ({pqm_type})"
             status_type = "pending"
-            message = f"Archivo pendiente de procesamiento - Tipo: {pqm_type}"
-        
-        # Generar nombre del CSV esperado
-        csv_output_info = processed_info.get('csv_output', {})
-        csv_filename = csv_output_info.get('filename', f"{file_stem}.csv")
-        
-        # Obtener tiempo de ejecución real o estimado
-        execution_time_seconds = processed_info.get('processing_time_seconds', 0)
-        if execution_time_seconds <= 0:
+            message = f"Archivo pendiente - Directorio: {source_directory}, Tipo: {pqm_type}"
+            
+            # CORRECCIÓN: Usar estimación basada en tamaño para archivos pendientes
             execution_time_seconds = CSVSummaryUtils._estimate_execution_time(file_size_bytes)
+            
+            # Mostrar si existe en otros directorios
+            if same_name_different_dirs:
+                processed_dirs = []
+                for _, info, other_dir in same_name_different_dirs:
+                    if info.get('status') == 'exitoso':
+                        processed_dirs.append(other_dir)
+                if processed_dirs:
+                    message += f" (Ya procesado en: {', '.join(processed_dirs)})"
+        
+        # CORRECCIÓN: Mejorar detección del nombre CSV esperado con numeración
+        if processed_info:
+            csv_filename = self._get_actual_csv_filename(file_stem, processed_info)
+        else:
+            csv_filename = f"{file_stem}.csv"
         
         execution_time_str = CSVSummaryUtils._format_execution_time(execution_time_seconds)
         
@@ -859,20 +1010,202 @@ class SonelExtractorCompleto:
             "filename": file_name,
             "status": status_display,
             "status_type": status_type,
-            "records": execution_time_str,  # La GUI espera esto en la columna "Tiempo"
+            "records": execution_time_str,
             "size": CSVSummaryUtils._format_file_size(file_size_bytes),
             "filename_csv": csv_filename,
             "message": message,
             "processed": processed,
             "size_bytes": file_size_bytes,
             "execution_time_seconds": execution_time_seconds,
-            "pqm_type": pqm_type  # Nuevo campo para tipo PQM
+            "pqm_type": pqm_type,
+            "source_directory": source_directory,
+            "same_name_other_dirs": len(same_name_different_dirs)
         }
     
+    def _verify_csv_exists_physically(self, file_stem, reported_csv_filename):
+        """
+        Verifica físicamente si existe un archivo CSV para el archivo dado, 
+        incluyendo versiones con numeración incremental.
+        
+        Args:
+            file_stem (str): Nombre base del archivo sin extensión
+            reported_csv_filename (str): Nombre del CSV reportado en el registro
+            
+        Returns:
+            bool: True si se encuentra físicamente el archivo CSV
+        """
+        try:
+            output_dir = self.PATHS['output_dir']
+            
+            # 1. Verificar el nombre reportado directamente
+            reported_path = os.path.join(output_dir, reported_csv_filename)
+            if os.path.exists(reported_path):
+                self.pywinauto_logger.debug(f"CSV encontrado con nombre reportado: {reported_csv_filename}")
+                return True
+            
+            # 2. Verificar nombre base sin numeración
+            base_csv_name = f"{file_stem}.csv"
+            base_path = os.path.join(output_dir, base_csv_name)
+            if os.path.exists(base_path):
+                self.pywinauto_logger.debug(f"CSV encontrado con nombre base: {base_csv_name}")
+                return True
+            
+            # 3. Buscar versiones con numeración incremental (formato usado por el sistema)
+            numbered_patterns = [
+                f"{file_stem}.csv",  # Original
+                f"*_{file_stem}.csv",  # Patrón numérico: 1_nombre.csv, 2_nombre.csv, etc.
+            ]
+            
+            import glob
+            for pattern in numbered_patterns:
+                pattern_path = os.path.join(output_dir, pattern)
+                matching_files = glob.glob(pattern_path)
+                if matching_files:
+                    found_file = os.path.basename(matching_files[0])
+                    self.pywinauto_logger.debug(f"CSV encontrado con patrón numerado: {found_file}")
+                    return True
+            
+            # 4. Búsqueda manual en el directorio por si los patrones fallan
+            try:
+                for filename in os.listdir(output_dir):
+                    if filename.endswith('.csv'):
+                        # Verificar si el nombre contiene el file_stem
+                        if file_stem in filename:
+                            # Verificar patrones específicos de numeración
+                            import re
+                            
+                            # Patrón: número_nombre.csv
+                            if re.match(rf'^\d+_{re.escape(file_stem)}\.csv$', filename):
+                                self.pywinauto_logger.debug(f"CSV encontrado con numeración manual: {filename}")
+                                return True
+                            
+                            # Patrón: nombre.csv (exacto)
+                            if filename == f"{file_stem}.csv":
+                                self.pywinauto_logger.debug(f"CSV encontrado exacto: {filename}")
+                                return True
+            
+            except OSError as e:
+                self.pywinauto_logger.warning(f"Error listando directorio {output_dir}: {e}")
+            
+            return False
+            
+        except Exception as e:
+            self.pywinauto_logger.warning(f"Error verificando existencia física de CSV para {file_stem}: {e}")
+            return False
+
+    def _get_actual_csv_filename(self, file_stem, processed_info):
+        """
+        Obtiene el nombre real del archivo CSV, priorizando el que existe físicamente.
+        
+        Args:
+            file_stem (str): Nombre base del archivo sin extensión
+            processed_info (dict): Información del procesamiento del archivo
+            
+        Returns:
+            str: Nombre real del archivo CSV
+        """
+        try:
+            # 1. Intentar usar el nombre registrado
+            csv_output = processed_info.get('csv_output', {})
+            registered_filename = csv_output.get('filename', f"{file_stem}.csv")
+            
+            # 2. Verificar si el nombre registrado existe físicamente
+            output_dir = self.PATHS['output_dir']
+            registered_path = os.path.join(output_dir, registered_filename)
+            
+            if os.path.exists(registered_path):
+                return registered_filename
+            
+            # 3. Buscar versiones numeradas existentes
+            import glob
+            import re
+            
+            # Patrón para archivos numerados
+            numbered_pattern = os.path.join(output_dir, f"*_{file_stem}.csv")
+            numbered_files = glob.glob(numbered_pattern)
+            
+            if numbered_files:
+                # Tomar el primer archivo encontrado y extraer solo el nombre
+                found_file = os.path.basename(numbered_files[0])
+                self.pywinauto_logger.debug(f"CSV numerado encontrado para {file_stem}: {found_file}")
+                return found_file
+            
+            # 4. Buscar archivo base
+            base_filename = f"{file_stem}.csv"
+            base_path = os.path.join(output_dir, base_filename)
+            
+            if os.path.exists(base_path):
+                return base_filename
+            
+            # 5. Búsqueda manual más exhaustiva
+            try:
+                for filename in os.listdir(output_dir):
+                    if filename.endswith('.csv') and file_stem in filename:
+                        # Verificar patrones comunes
+                        if re.match(rf'^\d+_{re.escape(file_stem)}\.csv$', filename):
+                            self.pywinauto_logger.debug(f"CSV encontrado manualmente: {filename}")
+                            return filename
+            except OSError:
+                pass
+            
+            # 6. Fallback: usar nombre registrado o base
+            return registered_filename if registered_filename != f"{file_stem}.csv" else f"{file_stem}.csv"
+            
+        except Exception as e:
+            self.pywinauto_logger.warning(f"Error obteniendo nombre real del CSV para {file_stem}: {e}")
+            return f"{file_stem}.csv"
+
+    def _csv_corresponds_to_file(self, csv_filename, file_stem):
+        """
+        Verifica si un archivo CSV corresponde a un archivo PQM dado, 
+        considerando numeración incremental.
+        
+        Args:
+            csv_filename (str): Nombre del archivo CSV
+            file_stem (str): Nombre base del archivo PQM sin extensión
+            
+        Returns:
+            bool: True si el CSV corresponde al archivo
+        """
+        import re
+        
+        # Remover extensión del CSV
+        csv_stem = csv_filename.replace('.csv', '')
+        
+        # 1. Verificación exacta (sin numeración)
+        if csv_stem == file_stem:
+            return True
+        
+        # 2. Verificar patrón de numeración: "número_nombre"
+        pattern_numbered = rf'^(\d+)_{re.escape(file_stem)}$'
+        if re.match(pattern_numbered, csv_stem):
+            return True
+        
+        # 3. Verificar patrón con espacios: "número. nombre"
+        pattern_spaced = rf'^(\d+)\.\s*{re.escape(file_stem)}$'
+        if re.match(pattern_spaced, csv_stem):
+            return True
+        
+        # 4. Verificar patrón con paréntesis: "(número) nombre"
+        pattern_parenthesis = rf'^\((\d+)\)\s*{re.escape(file_stem)}$'
+        if re.match(pattern_parenthesis, csv_stem):
+            return True
+        
+        # 5. Verificación por contenido de nombre (para casos especiales)
+        # Normalizar nombres removiendo caracteres especiales para comparación
+        csv_normalized = re.sub(r'[^\w\s]', '', csv_stem).lower()
+        file_normalized = re.sub(r'[^\w\s]', '', file_stem).lower()
+        
+        # Si el nombre normalizado del archivo está contenido en el CSV
+        if file_normalized in csv_normalized and len(file_normalized) > 5:
+            return True
+        
+        return False
+
     def save_csv_summary_to_file(self, output_file=None, include_files_detail=True):
         """
         Guarda un resumen del procesamiento CSV en un archivo JSON de forma consolidada.
-        Se apoya en get_csv_summary_for_gui para obtener los datos.
+        MODIFICADO: Solo incluye archivos procesados en la ejecución actual, no archivos saltados
         """
         try:
             # Definir archivo de salida usando export_dir correctamente
@@ -887,14 +1220,14 @@ class SonelExtractorCompleto:
             # Asegurar que el directorio existe
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
-            # Obtener resumen actual
+            # ✅ CAMBIO CRÍTICO: Usar el resumen filtrado que ya excluye archivos saltados
             csv_summary_actual = self.get_csv_summary_for_gui()
             
             if not csv_summary_actual:
                 self.pywinauto_logger.warning("⚠️ No se pudo generar el resumen CSV")
                 return None
 
-            # **NUEVA LÓGICA: Cargar datos existentes si el archivo ya existe**
+            # **NUEVA LÓGICA MEJORADA: Cargar datos existentes si el archivo ya existe**
             existing_data = {}
             if os.path.exists(output_file):
                 try:
@@ -905,34 +1238,60 @@ class SonelExtractorCompleto:
                     self.pywinauto_logger.warning(f"⚠️ Error cargando datos existentes: {e}. Creando archivo nuevo.")
                     existing_data = {}
 
-            # **NUEVA LÓGICA: Consolidar archivos por directorio**
+            # **NUEVA LÓGICA: Consolidar SOLO archivos procesados en la ejecución actual**
             consolidated_files = {}
             
-            # 1. Cargar archivos existentes si los hay
+            # 1. Cargar archivos existentes (de ejecuciones anteriores)
             existing_files = existing_data.get("files_processed", [])
             for file_data in existing_files:
                 if isinstance(file_data, dict) and 'filename' in file_data:
                     filename = file_data['filename']
                     source_dir = file_data.get('source_directory', 'directorio_desconocido')
-                    # Usar filename + directorio como clave única
-                    file_key = f"{filename}#{source_dir}"
-                    consolidated_files[file_key] = file_data
+                    processing_date = file_data.get('processing_date', '')
+                    
+                    # NUEVA CLAVE: filename + directorio + fecha para evitar duplicados reales
+                    file_key = f"{filename}#{source_dir}#{processing_date[:10] if processing_date else 'unknown'}"
+                    
+                    # Verificar si este archivo fue procesado en la sesión actual
+                    current_session_start = self.process_start_time or (datetime.now() - timedelta(hours=24))
+                    
+                    should_keep_existing = True
+                    if processing_date:
+                        try:
+                            processing_datetime = datetime.fromisoformat(processing_date.replace('Z', '+00:00'))
+                            # Si fue procesado en la sesión actual, será reemplazado por los datos nuevos
+                            if processing_datetime >= current_session_start:
+                                should_keep_existing = False
+                                self.pywinauto_logger.debug(f"🔄 Archivo será actualizado: {filename} (procesado en sesión actual)")
+                        except ValueError:
+                            pass  # Mantener archivo si hay error parseando fecha
+                    
+                    if should_keep_existing:
+                        consolidated_files[file_key] = file_data
+                        self.pywinauto_logger.debug(f"📋 Archivo mantenido de sesión anterior: {filename}")
 
-            # 2. Agregar/actualizar archivos del procesamiento actual
+            # 2. Agregar/actualizar SOLO archivos del procesamiento actual (excluye saltados)
             current_input_dir = os.path.basename(self.PATHS.get('input_dir', 'directorio_actual'))
-            current_files = csv_summary_actual.get("files", [])
+            current_files = csv_summary_actual.get("files", [])  # Ya filtrado por get_csv_summary_for_gui()
+            current_date = datetime.now().isoformat()
+            
+            self.pywinauto_logger.info(f"📊 Archivos de sesión actual para consolidar: {len(current_files)}")
             
             for file_data in current_files:
                 if isinstance(file_data, dict) and 'filename' in file_data:
                     filename = file_data['filename']
                     # Agregar información del directorio de origen
                     file_data['source_directory'] = current_input_dir
-                    file_data['processing_date'] = datetime.now().isoformat()
+                    file_data['processing_date'] = current_date
                     
-                    file_key = f"{filename}#{current_input_dir}"
+                    # NUEVA CLAVE con información más específica
+                    file_key = f"{filename}#{current_input_dir}#{current_date[:10]}"
+                    
+                    # Agregar archivo procesado en sesión actual
                     consolidated_files[file_key] = file_data
+                    self.pywinauto_logger.debug(f"📝 Archivo de sesión actual consolidado: {filename}")
 
-            # **NUEVA LÓGICA: Calcular métricas consolidadas**
+            # **NUEVA LÓGICA: Calcular métricas consolidadas correctamente**
             total_files = len(consolidated_files)
             processed_files = sum(1 for f in consolidated_files.values() if f.get('processed', False))
             errors = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'error')
@@ -953,17 +1312,39 @@ class SonelExtractorCompleto:
             avg_speed = CSVSummaryUtils._calculate_average_speed(csv_files_generated, total_execution_time)
             total_records = csv_files_generated * 3278  # Estimación promedio por archivo
 
-            # **NUEVA ESTRUCTURA: Mantener compatibilidad pero agregar información consolidada**
+            # NUEVA ESTRUCTURA: Información de consolidación mejorada
+            unique_directories = list(set(f.get('source_directory', '') for f in consolidated_files.values()))
+            unique_filenames = list(set(f.get('filename', '') for f in consolidated_files.values()))
+            
+            # Detectar archivos con el mismo nombre en diferentes directorios
+            filename_directory_map = {}
+            for file_data in consolidated_files.values():
+                filename = file_data.get('filename', '')
+                source_dir = file_data.get('source_directory', '')
+                if filename not in filename_directory_map:
+                    filename_directory_map[filename] = []
+                filename_directory_map[filename].append(source_dir)
+            
+            # Contar archivos duplicados (mismo nombre, diferentes directorios)
+            duplicate_files = {name: dirs for name, dirs in filename_directory_map.items() if len(dirs) > 1}
+
             summary_data = {
                 "metadata": {
                     "generated_at": datetime.now().isoformat(),
-                    "etl_version": "1.2",  # Actualizar versión por los cambios de consolidación
+                    "etl_version": "1.3",  # Actualizar versión por cambios de directorio
                     "config_file": getattr(self, 'config_file', 'config.ini'),
                     "registry_file": self.file_tracker.processed_files_json,
                     "consolidation_info": {
-                        "total_directories_processed": len(set(f.get('source_directory', '') for f in consolidated_files.values())),
+                        "total_directories_processed": len(unique_directories),
+                        "unique_filenames": len(unique_filenames),
+                        "total_file_directory_combinations": len(consolidated_files),
+                        "duplicate_files_across_directories": len(duplicate_files),
                         "current_directory": current_input_dir,
-                        "last_consolidation": datetime.now().isoformat()
+                        "last_consolidation": datetime.now().isoformat(),
+                        "directories_processed": unique_directories,
+                        "duplicate_files_detail": {
+                            name: dirs for name, dirs in list(duplicate_files.items())[:5]  # Primeros 5
+                        } if duplicate_files else {}
                     }
                 },
                 "csv_summary": {
@@ -978,12 +1359,8 @@ class SonelExtractorCompleto:
                     "success_rate": success_rate,
                     "total_records": total_records
                 },
-                "files_processed": list(consolidated_files.values())
+                "files_processed": list(consolidated_files.values()) if include_files_detail else []
             }
-
-            # Incluir detalle de archivos si se solicita
-            if not include_files_detail:
-                summary_data["files_processed"] = []
 
             # Guardar archivo JSON consolidado
             try:
@@ -998,7 +1375,20 @@ class SonelExtractorCompleto:
                 file_size = os.path.getsize(output_file)
                 self.pywinauto_logger.info(f"✅ Resumen CSV consolidado guardado en: {output_file}")
                 self.pywinauto_logger.info(f"📄 Tamaño del archivo: {file_size} bytes")
-                self.pywinauto_logger.info(f"📊 Archivos consolidados: {total_files} de {len(set(f.get('source_directory', '') for f in consolidated_files.values()))} directorios")
+                self.pywinauto_logger.info(f"📊 Archivos consolidados: {total_files} combinaciones archivo-directorio")
+                self.pywinauto_logger.info(f"📁 Directorios procesados: {len(unique_directories)}")
+                self.pywinauto_logger.info(f"📋 Nombres únicos: {len(unique_filenames)}")
+                
+                if duplicate_files:
+                    self.pywinauto_logger.info(f"🔄 Archivos duplicados en diferentes directorios: {len(duplicate_files)}")
+                    for filename, directories in list(duplicate_files.items())[:3]:  # Mostrar solo 3
+                        self.pywinauto_logger.info(f"   📂 '{filename}' en: {', '.join(directories)}")
+                
+                # Log específico sobre exclusiones
+                total_archivos_disponibles = len(self.get_pqm_files()) if hasattr(self, 'get_pqm_files') else 0
+                archivos_excluidos = total_archivos_disponibles - len(current_files)
+                if archivos_excluidos > 0:
+                    self.pywinauto_logger.info(f"⏭️ Archivos excluidos del resumen (ya procesados): {archivos_excluidos}")
                 
                 # Validar contenido del archivo
                 try:
