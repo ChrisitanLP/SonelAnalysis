@@ -52,36 +52,51 @@ class VoltageTransformer:
                                 break
                         
                         if date_col and re.search(r'(?i)hora|time', time_col):
-                            # Combinar fecha y hora si están separadas
+                            # Combinar fecha y hora si están separadas, pero extraer solo la fecha
                             date_time = df[date_col].astype(str) + ' ' + df[time_col].astype(str)
-                            transformed_df['tiempo_utc'] = pd.to_datetime(date_time, errors='coerce')
+                            full_datetime = pd.to_datetime(date_time, errors='coerce')
+                            # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                            transformed_df['tiempo_utc'] = full_datetime.dt.date
                         else:
                             # Intentar diferentes formatos de fecha/hora
-                            for date_format in ['%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%m/%d/%Y %H:%M:%S']:
+                            datetime_parsed = None
+                            for date_format in ['%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%m/%d/%Y %H:%M:%S', 
+                                            '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
                                 try:
-                                    transformed_df['tiempo_utc'] = pd.to_datetime(df[time_col], format=date_format)
+                                    datetime_parsed = pd.to_datetime(df[time_col], format=date_format)
                                     break
                                 except:
                                     continue
                             
                             # Si los formatos anteriores fallan, usar el parser automático
-                            if 'tiempo_utc' not in transformed_df.columns:
-                                transformed_df['tiempo_utc'] = pd.to_datetime(df[time_col], errors='coerce')
+                            if datetime_parsed is None:
+                                datetime_parsed = pd.to_datetime(df[time_col], errors='coerce')
+                            
+                            # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                            transformed_df['tiempo_utc'] = datetime_parsed.dt.date
                     else:
                         # Probablemente ya es datetime
-                        transformed_df['tiempo_utc'] = df[time_col]
+                        datetime_parsed = df[time_col]
+                        # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                        transformed_df['tiempo_utc'] = datetime_parsed.dt.date
                 except Exception as e:
                     logger.error(f"Error al convertir columna de tiempo: {e}")
-                    # Usar el valor original como fallback
-                    transformed_df['tiempo_utc'] = df[time_col]
+                    # Usar el valor original como fallback, pero intentar extraer solo fecha
+                    try:
+                        datetime_fallback = pd.to_datetime(df[time_col], errors='coerce')
+                        transformed_df['tiempo_utc'] = datetime_fallback.dt.date
+                    except:
+                        transformed_df['tiempo_utc'] = df[time_col]
             else:
                 logger.error("No se encontró columna de tiempo para la transformación")
                 return None
-        
+
             date_col = column_map.get('date')
             if date_col:
                 try:
-                    transformed_df['date_field'] = pd.to_datetime(df[date_col], errors='coerce').dt.date
+                    date_parsed = pd.to_datetime(df[date_col], errors='coerce')
+                    # MODIFICACIÓN: Usar solo la fecha sin componente horario
+                    transformed_df['date_field'] = date_parsed.dt.date
                     logger.info(f"Campo Date procesado correctamente desde columna: {date_col}")
                 except Exception as e:
                     logger.warning(f"Error al procesar campo Date: {e}")

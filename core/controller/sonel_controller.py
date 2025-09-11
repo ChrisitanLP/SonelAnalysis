@@ -767,6 +767,7 @@ class SonelController:
     def _extract_and_save_eeasa_csv(self, db_connection: DatabaseConnection, file_path: str) -> Tuple[bool, str]:
         """
         Extrae datos de mediciones_planas y los guarda en formato CSV empresarial EEASA
+        MODIFICADO: Incluye nombre_archivo sin extensión desde tabla codigo
         
         Args:
             db_connection: Conexión a la base de datos
@@ -776,11 +777,18 @@ class SonelController:
             tuple: (success: bool, message: str)
         """
         try:
-            # Query corregida para extraer datos ordenados por ID
+            # Query MODIFICADA para incluir nombre_archivo sin extensión
             query = """
                 SELECT 
                     mp.id,
                     c.codigo,
+                    -- NUEVO: Extraer nombre sin extensión .csv
+                    CASE 
+                        WHEN c.nombre_archivo ILIKE '%.csv' THEN 
+                            LEFT(c.nombre_archivo, LENGTH(c.nombre_archivo) - 4)
+                        ELSE 
+                            c.nombre_archivo
+                    END AS nombre_archivo_limpio,
                     mp.fecha,
                     mp.time,
                     mp.utc_zone,
@@ -821,7 +829,7 @@ class SonelController:
             if not rows:
                 return True, "Exportación completada - No hay registros para exportar"
             
-            # Escribir CSV con formato empresarial EEASA
+            # Escribir CSV con formato empresarial EEASA ACTUALIZADO
             self._write_eeasa_format_csv(file_path, rows)
             
             return True, f"Exportación exitosa: {len(rows)} registros exportados"
@@ -833,10 +841,11 @@ class SonelController:
     def _write_eeasa_format_csv(self, file_path: str, rows: list) -> None:
         """
         Escribe el archivo CSV siguiendo el formato empresarial de EEASA
+        MODIFICADO: Incluye columna de nombre de archivo sin extensión
         
         Args:
             file_path: Ruta del archivo CSV
-            rows: Datos a escribir
+            rows: Datos a escribir (ahora incluye nombre_archivo_limpio en posición 2)
         """
         import csv
         from datetime import datetime
@@ -857,11 +866,12 @@ class SonelController:
             writer.writerow([f'Sistema: SONEL Extractor v2.0'])
             writer.writerow([])  # Línea en blanco
             
-            # ENCABEZADOS CORREGIDOS
+            # ENCABEZADOS ACTUALIZADOS con nueva columna
             headers = [
                 'ID Registro',
-                'Código Cliente', 
-                'Fecha y Hora Completa',
+                'Código Cliente',
+                'Nombre Archivo Origen',  # NUEVA COLUMNA
+                'Fecha',
                 'Hora Local',
                 'Zona UTC',
                 'Voltaje L1 Promedio (V)',
@@ -887,29 +897,33 @@ class SonelController:
             ]
             writer.writerow(headers)
             
-            # DATOS CON MAPEO CORREGIDO
+            # DATOS CON MAPEO ACTUALIZADO
             for row in rows:
-                # Mapeo correcto de las columnas:
-                # row[0] = id, row[1] = codigo, row[2] = fecha (timestamp completo)
-                # row[3] = time (hora local), row[4] = utc_zone
+                # Nuevo mapeo considerando la columna adicional:
+                # row[0] = id, row[1] = codigo, row[2] = nombre_archivo_limpio
+                # row[3] = fecha, row[4] = time, row[5] = utc_zone, etc.
                 formatted_row = []
                 
                 for i, value in enumerate(row):
                     if value is None:
                         formatted_row.append('')
-                    elif i == 2:  # Columna 'fecha' - timestamp completo
-                        # Mantener el timestamp completo como está
+                    elif i == 2:  # NUEVA: Columna 'nombre_archivo_limpio'
+                        # Asegurar que el nombre esté limpio (sin extensión)
+                        if value and str(value).lower().endswith('.csv'):
+                            clean_name = str(value)[:-4]  # Remover últimos 4 caracteres (.csv)
+                            formatted_row.append(clean_name)
+                        else:
+                            formatted_row.append(str(value) if value else '')
+                    elif i == 3:  # Columna 'fecha' - timestamp completo (antes era 2)
                         formatted_row.append(str(value))
-                    elif i == 3:  # Columna 'time' - hora local
-                        # Mantener la hora local como está
+                    elif i == 4:  # Columna 'time' - hora local (antes era 3)
                         formatted_row.append(str(value))
-                    elif i == 4:  # Columna 'utc_zone'
-                        # Formatear zona UTC de manera más clara
+                    elif i == 5:  # Columna 'utc_zone' (antes era 4)
                         if value:
-                            formatted_row.append(f"UTC{value}")
+                            formatted_row.append(f"{value}")
                         else:
                             formatted_row.append('')
-                    elif i in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]:  # Columnas numéricas
+                    elif i in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]:  # Columnas numéricas (indices aumentados en 1)
                         # Formatear números con 3 decimales para mayor precisión
                         try:
                             if value is not None and value != '':
