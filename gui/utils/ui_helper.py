@@ -98,41 +98,19 @@ class UIHelpers:
     def _apply_message_box_theme(msg, parent):
         """
         Aplica el tema (claro/oscuro) al QMessageBox según el tema actual del parent.
+        MODIFICACIÓN: En modo oscuro, NO aplica estilos para mantener legibilidad.
         """
         try:
             # Obtener el estado del tema del parent
             is_dark_mode = getattr(parent, 'is_dark_mode', False)
             
             if is_dark_mode:
-                # Tema oscuro empresarial
-                msg.setStyleSheet("""
-                    QMessageBox {
-                        background-color: #1e1e1e;
-                        color: #ffffff;
-                        font-family: 'Segoe UI', Arial, sans-serif;
-                        font-size: 14px;
-                    }
-                    
-                    QMessageBox QLabel {
-                        color: #ffffff;
-                        font-size: 14px;
-                        padding: 10px;
-                    }
-                    
-                    QMessageBox QLabel#qt_msgbox_label {
-                        font-weight: 600;
-                        font-size: 15px;
-                        color: #ffffff;
-                    }
-                    
-                    QMessageBox QLabel#qt_msgbox_informativelabel {
-                        font-weight: 400;
-                        font-size: 13px;
-                        color: #b0b0b0;
-                    }
-                """)
+                # MODO OSCURO: NO aplicar estilos personalizados
+                # Los cuadros de diálogo mantendrán su apariencia nativa del sistema
+                # para garantizar la legibilidad
+                pass
             else:
-                # Tema claro empresarial
+                # MODO CLARO: Aplicar estilo empresarial personalizado
                 msg.setStyleSheet("""
                     QMessageBox {
                         background-color: #ffffff;
@@ -184,11 +162,12 @@ class UIHelpers:
                     }
                 """)
             
-            # Configurar fuente
-            font = QFont("Segoe UI", 10)
-            msg.setFont(font)
+            # Configurar fuente solo para modo claro
+            if not is_dark_mode:
+                font = QFont("Segoe UI", 10)
+                msg.setFont(font)
             
         except Exception as e:
-            # En caso de error, aplicar estilo básico
+            # En caso de error, no aplicar ningún estilo
             print(f"Error aplicando tema al MessageBox: {e}")
             pass

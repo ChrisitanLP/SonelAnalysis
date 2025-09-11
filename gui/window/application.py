@@ -649,10 +649,25 @@ class SonelDataExtractorGUI(QMainWindow):
                 
                 self.control_panel.update_progress_label("Proceso completo exitoso")
                 self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Proceso completo finalizado exitosamente")
+
+                UIHelpers.show_success_message(
+                    self,
+                    "Proceso Completado",
+                    "La extracción y carga de datos se realizó correctamente.",
+                    f"Archivos CSV procesados \nArchivos cargados en BD"
+                )
+
             else:
                 self.control_panel.update_progress_label("Proceso completado con advertencias")
                 self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Proceso completado con advertencias")
-                
+
+                UIHelpers.show_error_message(
+                    self,
+                    "Proceso Completado con Advertencias",
+                    "El proceso terminó, pero no todos los datos se procesaron correctamente.",
+                    "Revisa los logs para más detalles sobre los archivos con problemas."
+                )
+
             # Actualizar datos estáticos y resumen general
             self.update_static_data()
             
@@ -710,6 +725,13 @@ class SonelDataExtractorGUI(QMainWindow):
             
             print(f"Error en execute_all: {e}")
             traceback.print_exc()
+
+            UIHelpers.show_error_message(
+                self,
+                "Error Crítico en la Ejecución",
+                "Ocurrió un error durante la ejecución del proceso.",
+                f"Motivo: {error_msg}\n\nRevisa los archivos de entrada y vuelve a intentar."
+            )
 
     def _refresh_all_tabs_after_complete(self):
         """

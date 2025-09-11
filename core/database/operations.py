@@ -1,6 +1,7 @@
 #sonel_extractor/database/operations.py
 
 import re
+import os
 import pandas as pd
 from config.logger import logger
 from core.utils.validators import extract_client_code
@@ -96,26 +97,32 @@ class DataHandler:
                 logger.error("No se pudo obtener un código válido del archivo.")
                 return None
         
+        # Extraer nombre del archivo
+        nombre_archivo = None
+        if file_path:
+            nombre_archivo = os.path.basename(file_path)
+        
         # Para el caso del flujo estándar ETL (sin archivo)
         if codigo == "ETL_STANDARD" and not should_extract:
             logger.info(f"Utilizando código estándar ETL: {codigo}")
+            nombre_archivo = "ETL_STANDARD"
         else:
-            # Con la nueva implementación, el código siempre es numérico
-            # pero verificamos para asegurar que sea de 10 dígitos
-            if not re.match(r'^\d{10}$', codigo):
-                logger.warning(f"El código '{codigo}' no tiene el formato esperado de 10 dígitos.")
+            # Con la nueva implementación, el código puede tener entre 2 y 10 dígitos
+            # Verificamos que sea numérico y tenga la longitud correcta
+            if not re.match(r'^\d{2,10}$', codigo):
+                logger.warning(f"El código '{codigo}' no tiene el formato esperado de 2-10 dígitos.")
                 
                 if should_extract and file_path:
                     logger.info(f"Intentando extraer código nuevamente del archivo: {file_path}")
                     codigo = extract_client_code(file_path)
                     
-                    if not codigo or not re.match(r'^\d{10}$', codigo):
-                        logger.error(f"No se pudo obtener un código válido de 10 dígitos después de reintento.")
+                    if not codigo or not re.match(r'^\d{2,10}$', codigo):
+                        logger.error(f"No se pudo obtener un código válido de 2-10 dígitos después de reintento.")
                         return None
                 else:
                     return None
 
-        logger.info(f"Intentando obtener/crear código en BD: '{codigo}'")
+        logger.info(f"Intentando obtener/crear código en BD: '{codigo}' con archivo: '{nombre_archivo}'")
 
         # Primero verificar si ya existe
         cursor = self.db_connection.execute_query(
@@ -130,12 +137,17 @@ class DataHandler:
             if row:
                 codigo_id = row[0]
                 logger.info(f"Código existente encontrado con ID: {codigo_id}")
+                
+                # Si existe pero queremos actualizar el nombre de archivo, hacerlo
+                if nombre_archivo and should_extract:
+                    self._update_nombre_archivo(codigo_id, nombre_archivo)
+                
                 return codigo_id
 
         # Si no existe, intentar insertarlo
         cursor = self.db_connection.execute_query(
             INSERT_CODIGO_QUERY,
-            params=(codigo,),
+            params=(codigo, nombre_archivo),
             commit=True
         )
 
@@ -144,12 +156,35 @@ class DataHandler:
             cursor.close()
             if row:
                 codigo_id = row[0]
-                logger.info(f"Nuevo código creado con ID: {codigo_id}")
+                logger.info(f"Nuevo código creado con ID: {codigo_id} y archivo: {nombre_archivo}")
                 return codigo_id
 
         logger.error(f"No se pudo obtener o crear el código: {codigo}")
         return None
     
+    def _update_nombre_archivo(self, codigo_id, nombre_archivo):
+        """
+        Actualiza el nombre de archivo para un código existente
+        
+        Args:
+            codigo_id: ID del código
+            nombre_archivo: Nombre del archivo a actualizar
+        """
+        update_query = """
+            UPDATE codigo SET nombre_archivo = %s, fecha_subida = CURRENT_TIMESTAMP 
+            WHERE id = %s;
+        """
+        
+        cursor = self.db_connection.execute_query(
+            update_query,
+            params=(nombre_archivo, codigo_id),
+            commit=True
+        )
+        
+        if cursor:
+            cursor.close()
+            logger.debug(f"Actualizado nombre de archivo para código ID {codigo_id}: {nombre_archivo}")
+
     def insert_data(self, data, codigo, file_path, should_extract=True):
         """
         Inserta los datos en la estructura relacional de tablas
@@ -203,6 +238,13 @@ class DataHandler:
                 return None
             if isinstance(value, str) and (value.strip() == '' or value.lower() == 'nan'):
                 return None
+            # NUEVA LÓGICA: Manejar objetos de fecha (date objects) correctamente
+            if hasattr(value, 'date') and callable(getattr(value, 'date')):
+                # Si es un datetime, extraer solo la fecha
+                return value.date()
+            elif hasattr(value, '__class__') and value.__class__.__name__ == 'date':
+                # Si ya es un objeto date, devolverlo tal como está
+                return value
             return value
         
         # Procesar cada fila e insertarla en las tablas correspondientes

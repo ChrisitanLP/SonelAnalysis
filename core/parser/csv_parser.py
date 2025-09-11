@@ -360,22 +360,35 @@ class CSVParser:
             
         cleaned_df = df.copy()
         
-        # Mapeo de caracteres problemáticos comunes
+        # Mapeo de caracteres problemáticos comunes - ampliado para inglés
         char_replacements = {
-            '��': 'Σ',     # Símbolo suma
+            '��': 'Σ',     # Símbolo suma - común en archivos en inglés
             'ï¿½': 'Σ',    # Otro encoding del símbolo suma
-            'âˆ': 'Σ',    # Otro encoding del símbolo suma
+            'âˆ': 'Σ',     # Otro encoding del símbolo suma
             'Î£': 'Σ',     # Otro encoding del símbolo suma
+            'â��': 'Σ',     # Variación adicional del símbolo suma
+            '∑': 'Σ',      # Símbolo suma Unicode correcto
+            # Agregar más variaciones comunes encontradas en archivos en inglés
+            'Âº': '°',     # Símbolo de grado
+            'Â': '',       # Caracter problemático común
+            '\ufeff': '',  # BOM (Byte Order Mark)
         }
         
         # Limpiar nombres de columnas
         new_columns = []
         for col in cleaned_df.columns:
-            clean_col = str(col)
+            clean_col = str(col).strip()
             
             # Aplicar reemplazos de caracteres problemáticos
             for problematic, replacement in char_replacements.items():
                 clean_col = clean_col.replace(problematic, replacement)
+            
+            # Limpiar espacios múltiples que podrían afectar el reconocimiento
+            clean_col = re.sub(r'\s+', ' ', clean_col)
+            
+            # Log para debug del proceso de limpieza
+            if clean_col != str(col).strip():
+                logger.debug(f"Columna limpiada: '{str(col).strip()}' -> '{clean_col}'")
             
             new_columns.append(clean_col)
         
