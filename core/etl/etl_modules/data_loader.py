@@ -22,7 +22,6 @@ class DataLoader:
         Returns:
             bool: True si la carga fue exitosa
         """
-        logger.info(f"📦 Cargando datos para el código: {codigo}")
         connection = self.db_connection.get_connection()
         if not connection:
             return False

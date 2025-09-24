@@ -71,7 +71,6 @@ class DirectoryProcessor:
         
         if force_reprocess:
             files = file_extractor.find_files_in_directory(directory)
-            logger.info(f"🔄 Modo de reprocesamiento forzado: procesando todos los archivos")
         else:
             files = file_extractor.find_files_to_process(directory)
         
@@ -87,7 +86,6 @@ class DirectoryProcessor:
     def _process_files(self, files, force_reprocess, data_transformer, data_loader):
         """Procesa la lista de archivos"""
         total_files = len(files)
-        logger.info(f"📄 {total_files} archivos encontrados para procesamiento")
 
         success_count = 0
         failed_files = []
