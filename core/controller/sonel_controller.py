@@ -9,12 +9,14 @@ Fecha: 2025
 """
 
 import os
+import csv
 import sys
 import json
 import time
 import logging
 import traceback
 from pathlib import Path
+from datetime import datetime
 from typing import Tuple, Dict, Any, Optional
 
 from core.etl.sonel_etl import SonelETL
@@ -22,7 +24,7 @@ from config.logger import get_logger
 from core.database.connection import DatabaseConnection
 from core.extractors.pywin_extractor import SonelExtractorCompleto
 from core.extractors.pygui_extractor import SonelGuiExtractorCompleto
-from config.settings import get_full_config, validate_configuration, validate_screen_resolution, get_portable_paths, find_sonel_exe
+from config.settings import get_full_config, validate_configuration, validate_screen_resolution, get_portable_paths, find_sonel_exe, get_application_directory, load_config
 
 
 class SonelController:
@@ -40,24 +42,102 @@ class SonelController:
         """
         # MODIFICACIÓN: Usar ruta portable para config_file
         if config_file is None:
-            from config.settings import get_application_directory
-            app_dir = get_application_directory()
-            config_file = os.path.join(app_dir, "config", "config.ini")
+            config_file = self._get_portable_config_path()
         
         self.config_file = config_file
-        self.win_config = get_full_config()
+
+        # Cargar configuración con manejo de errores
+        try:
+            self.win_config = get_full_config()
+        except Exception as e:
+            print(f"⚠️ Error cargando configuración completa: {e}")
+            # Configuración mínima de fallback
+            self.win_config = {
+                'LOGGING': {'level': 'INFO'},
+                'PATHS': self._get_fallback_paths()
+            }
         
-        # Configurar logger
-        self.logger = get_logger("sonel_controller", f"{__name__}_controller")
-        self.logger.setLevel(getattr(logging, self.win_config['LOGGING']['level']))
+        # Configurar logger con manejo de errores
+        try:
+            self.logger = get_logger("sonel_controller", f"{__name__}_controller")
+            self.logger.setLevel(getattr(logging, self.win_config['LOGGING']['level']))
+        except Exception as e:
+            print(f"⚠️ Error configurando logger: {e}")
+            # Logger básico de fallback
+            self.logger = logging.getLogger(__name__)
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
         
         # Configurar rutas de forma portable
-        self.rutas = self._configurar_rutas_portable()
+        try:
+            self.rutas = self._configurar_rutas_portable()
+        except Exception as e:
+            self.logger.error(f"Error configurando rutas: {e}")
+            self.rutas = self._get_fallback_paths()
         
-        # NUEVO: Verificar y crear directorios necesarios
-        self._asegurar_directorios()
+        # Asegurar directorios necesarios
+        try:
+            self._asegurar_directorios()
+            self.logger.info("Controlador Sonel inicializado correctamente (modo portable)")
+        except Exception as e:
+            self.logger.error(f"Error asegurando directorios: {e}")
+
+    def _get_portable_config_path(self) -> str:
+        """
+        NUEVO MÉTODO: Obtiene la ruta del archivo de configuración de forma portable
         
-        self.logger.info("🎯 Controlador Sonel inicializado correctamente")
+        Returns:
+            str: Ruta del archivo config.ini
+        """
+        try:
+            if getattr(sys, 'frozen', False):
+                # Ejecutable PyInstaller
+                app_dir = os.path.dirname(sys.executable)
+            else:
+                # Desarrollo
+                app_dir = get_application_directory()
+            
+            # Buscar config.ini en ubicaciones probables
+            possible_configs = [
+                os.path.join(app_dir, 'config.ini'),
+                os.path.join(app_dir, 'config', 'config.ini'),
+                os.path.join(get_application_directory(), 'config', 'config.ini')
+            ]
+            
+            for config_path in possible_configs:
+                if os.path.exists(config_path):
+                    return config_path
+            
+            # Si no existe, devolver la primera opción como default
+            return possible_configs[0]
+            
+        except Exception as e:
+            print(f"Error obteniendo ruta de config portable: {e}")
+            return 'config.ini'
+        
+    def _get_fallback_paths(self) -> Dict[str, str]:
+        """
+        NUEVO MÉTODO: Obtiene rutas de fallback en caso de error
+        
+        Returns:
+            dict: Rutas básicas de fallback
+        """
+        try:
+            if getattr(sys, 'frozen', False):
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                base_dir = get_application_directory()
+        except:
+            base_dir = os.getcwd()
+        
+        return {
+            "input_directory": os.path.join(base_dir, 'data', 'archivos_pqm'),
+            "output_directory": os.path.join(base_dir, 'data', 'archivos_csv'),
+            "sonel_exe_path": os.path.join(base_dir, 'SonelAnalysis.exe')
+        }
 
     def _configurar_rutas_portable(self) -> Dict[str, str]:
         """
@@ -67,26 +147,84 @@ class SonelController:
             dict: Diccionario con las rutas configuradas
         """
         
-        # Obtener rutas portables
-        portable_paths = get_portable_paths()
-        
-        # Verificar que el ejecutable de Sonel exista
-        sonel_exe = portable_paths['sonel_exe_path']
-        if not os.path.exists(sonel_exe):
-            # Intentar encontrarlo nuevamente
-            found_exe = find_sonel_exe()
-            if found_exe:
-                sonel_exe = found_exe
-                self.logger.info(f"🔍 Ejecutable de Sonel encontrado en: {sonel_exe}")
-            else:
-                self.logger.warning(f"⚠️ Ejecutable de Sonel no encontrado. Configurado: {sonel_exe}")
-        
-        return {
-            "input_directory": portable_paths['input_dir'],
-            "output_directory": portable_paths['output_dir'],
-            "sonel_exe_path": sonel_exe
-        }
+        try:
+            # Obtener rutas portables
+            portable_paths = get_portable_paths()
+            
+            # Validar ejecutable de Sonel con búsqueda mejorada
+            sonel_exe = portable_paths['sonel_exe_path']
+            if not os.path.exists(sonel_exe):
+                self.logger.warning(f"Ejecutable Sonel no encontrado en: {sonel_exe}")
+                
+                # Búsqueda mejorada del ejecutable
+                found_exe = self._find_sonel_exe_comprehensive()
+                if found_exe:
+                    sonel_exe = found_exe
+                    self.logger.info(f"Ejecutable Sonel encontrado en: {sonel_exe}")
+                else:
+                    self.logger.warning("Ejecutable Sonel no encontrado - funcionalidad GUI limitada")
+            
+            return {
+                "input_directory": portable_paths['input_dir'],
+                "output_directory": portable_paths['output_dir'],
+                "sonel_exe_path": sonel_exe
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error configurando rutas portables: {e}")
+            return self._get_fallback_paths()
     
+    def _find_sonel_exe_comprehensive(self) -> Optional[str]:
+        """
+        NUEVO MÉTODO: Búsqueda comprensiva del ejecutable Sonel
+        
+        Returns:
+            str: Ruta del ejecutable encontrado o None
+        """
+        try:
+            # Determinar directorio base
+            if getattr(sys, 'frozen', False):
+                app_dir = os.path.dirname(sys.executable)
+            else:
+                app_dir = get_application_directory()
+            
+            # Lista exhaustiva de ubicaciones posibles
+            search_locations = [
+                # En el directorio del ejecutable
+                os.path.join(app_dir, "SonelAnalysis.exe"),
+                os.path.join(app_dir, "sonel", "SonelAnalysis.exe"),
+                os.path.join(app_dir, "bin", "SonelAnalysis.exe"),
+                
+                # En directorios relativos
+                os.path.join(app_dir, "..", "SonelAnalysis.exe"),
+                os.path.join(app_dir, "..", "sonel", "SonelAnalysis.exe"),
+                
+                # Ubicaciones comunes del sistema
+                r"C:\Program Files\Sonel\SonelAnalysis.exe",
+                r"C:\Program Files (x86)\Sonel\SonelAnalysis.exe", 
+                r"C:\Sonel\SonelAnalysis.exe",
+                
+                # Otras ubicaciones posibles
+                r"D:\Wolfly\Sonel\SonelAnalysis.exe",
+                r"C:\Users\Public\Sonel\SonelAnalysis.exe",
+            ]
+            
+            for location in search_locations:
+                try:
+                    if os.path.exists(location) and os.path.isfile(location):
+                        self.logger.info(f"Ejecutable Sonel encontrado: {location}")
+                        return location
+                except Exception as e:
+                    # Ignorar errores de acceso individual y continuar buscando
+                    continue
+            
+            self.logger.warning("Ejecutable Sonel no encontrado en ninguna ubicación conocida")
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error durante búsqueda de ejecutable Sonel: {e}")
+            return None
+
     def _asegurar_directorios(self):
         """
         NUEVO MÉTODO: Asegura que todos los directorios necesarios existan
@@ -155,7 +293,6 @@ class SonelController:
                 return False, self._get_empty_extraction_summary("Error en validación de entorno")
             
             # Crear instancia del extractor
-            self.logger.info("🔧 Inicializando extractor...")
             pywin_extractor = SonelExtractorCompleto(
                 input_dir=self.rutas["input_directory"],
                 output_dir=self.rutas["output_directory"], 
@@ -163,7 +300,6 @@ class SonelController:
             )
             
             # Ejecutar procesamiento completo dinámico
-            self.logger.info("🎯 Iniciando procesamiento completo...")
             resultados = pywin_extractor.ejecutar_extraccion_completa_dinamica()
             
             # Validar resultados
@@ -224,7 +360,6 @@ class SonelController:
                 return False, self._get_empty_extraction_summary("Error en validación de entorno")
             
             # MODIFICACIÓN: Crear instancia del extractor GUI con paths configurados correctamente
-            self.logger.info("🔧 Inicializando extractor GUI...")
             pygui_extractor = SonelGuiExtractorCompleto(
                 input_dir=self.rutas["input_directory"],
                 output_dir=self.rutas["output_directory"], 
@@ -330,7 +465,6 @@ class SonelController:
         
         try:
             # Inicializar conexión a base de datos
-            from config.settings import load_config
             etl_config = load_config(self.config_file)
             
             db_connection = DatabaseConnection(etl_config)
@@ -380,7 +514,6 @@ class SonelController:
                 etl.close()
             if db_connection:
                 db_connection.close()
-            self.logger.info("🧹 Recursos liberados correctamente")
 
     def run_complete_workflow(self, force_reprocess: bool = False, 
                              skip_gui: bool = False, skip_etl: bool = False) -> Tuple[bool, Dict[str, Any]]:
@@ -412,7 +545,6 @@ class SonelController:
             if not gui_success:
                 self.logger.warning("⚠️ Extracción PYWIN falló, continuando con ETL...")
         else:
-            self.logger.info("⏭️ Extracción PYWIN omitida por configuración")
             extraction_summary = self._get_empty_extraction_summary()
         
         # Log del resumen de extracción
@@ -427,7 +559,6 @@ class SonelController:
             if not etl_success:
                 self.logger.error("❌ Procesamiento ETL falló")
         else:
-            self.logger.info("⏭️ Procesamiento ETL omitido por configuración")
             db_summary = self._get_empty_db_summary()
         
         # Generar resumen final
@@ -632,7 +763,6 @@ class SonelController:
 
     def _log_summary(self, summary: Dict[str, Any]) -> None:
         """Log del resumen ETL"""
-        self.logger.info("📊 Resumen del flujo:")
         for k, v in summary.items():
             self.logger.info(f"   • {k:15}: {v}")
 
@@ -726,13 +856,11 @@ class SonelController:
         Returns:
             tuple: (success: bool, message: str) - Estado y mensaje de resultado
         """
-        self.logger.info("📊 Iniciando exportación de mediciones_planas a CSV")
         
         db_connection = None
         
         try:
             # Inicializar conexión a base de datos
-            from config.settings import load_config
             etl_config = load_config(self.config_file)
             
             db_connection = DatabaseConnection(etl_config)
@@ -782,13 +910,14 @@ class SonelController:
                 SELECT 
                     mp.id,
                     c.codigo,
-                    -- NUEVO: Extraer nombre sin extensión .csv
+                    -- Extraer nombre sin extensión .csv
                     CASE 
                         WHEN c.nombre_archivo ILIKE '%.csv' THEN 
                             LEFT(c.nombre_archivo, LENGTH(c.nombre_archivo) - 4)
                         ELSE 
                             c.nombre_archivo
                     END AS nombre_archivo_limpio,
+                    c.origen,
                     mp.fecha,
                     mp.time,
                     mp.utc_zone,
@@ -847,8 +976,6 @@ class SonelController:
             file_path: Ruta del archivo CSV
             rows: Datos a escribir (ahora incluye nombre_archivo_limpio en posición 2)
         """
-        import csv
-        from datetime import datetime
         
         # CORRECCIÓN: Usar UTF-8 con BOM para compatibilidad completa
         with open(file_path, 'w', newline='', encoding='utf-8-sig') as csvfile:
@@ -870,7 +997,8 @@ class SonelController:
             headers = [
                 'ID Registro',
                 'Código Cliente',
-                'Nombre Archivo Origen',  # NUEVA COLUMNA
+                'Nombre Archivo Origen',
+                'Tipo de Origen',
                 'Fecha',
                 'Hora Local',
                 'Zona UTC',
@@ -899,31 +1027,35 @@ class SonelController:
             
             # DATOS CON MAPEO ACTUALIZADO
             for row in rows:
-                # Nuevo mapeo considerando la columna adicional:
-                # row[0] = id, row[1] = codigo, row[2] = nombre_archivo_limpio
-                # row[3] = fecha, row[4] = time, row[5] = utc_zone, etc.
                 formatted_row = []
-                
+            
                 for i, value in enumerate(row):
                     if value is None:
                         formatted_row.append('')
-                    elif i == 2:  # NUEVA: Columna 'nombre_archivo_limpio'
+                    elif i == 2:  # Columna 'nombre_archivo_limpio'
                         # Asegurar que el nombre esté limpio (sin extensión)
                         if value and str(value).lower().endswith('.csv'):
                             clean_name = str(value)[:-4]  # Remover últimos 4 caracteres (.csv)
                             formatted_row.append(clean_name)
                         else:
                             formatted_row.append(str(value) if value else '')
-                    elif i == 3:  # Columna 'fecha' - timestamp completo (antes era 2)
+                    elif i == 3:  # NUEVA: Columna 'origen'
+                        # Formatear el campo origen de manera legible
+                        if value:
+                            origen_display = str(value).title()  # Capitalizar primera letra
+                            formatted_row.append(origen_display)
+                        else:
+                            formatted_row.append('Cliente')  # Valor por defecto
+                    elif i == 4:  # Columna 'fecha' (antes era 3, ahora es 4)
                         formatted_row.append(str(value))
-                    elif i == 4:  # Columna 'time' - hora local (antes era 3)
+                    elif i == 5:  # Columna 'time' (antes era 4, ahora es 5)
                         formatted_row.append(str(value))
-                    elif i == 5:  # Columna 'utc_zone' (antes era 4)
+                    elif i == 6:  # Columna 'utc_zone' (antes era 5, ahora es 6)
                         if value:
                             formatted_row.append(f"{value}")
                         else:
                             formatted_row.append('')
-                    elif i in [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]:  # Columnas numéricas (indices aumentados en 1)
+                    elif i in [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]:  # Columnas numéricas (indices aumentados en 1 más)
                         # Formatear números con 3 decimales para mayor precisión
                         try:
                             if value is not None and value != '':
