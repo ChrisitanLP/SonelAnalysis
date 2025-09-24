@@ -22,8 +22,6 @@ class VoltageTransformer:
         if data is None or data.empty:
             logger.error("No hay datos para transformar")
             return None
-            
-        logger.info("Iniciando transformación de datos")
         
         try:
             # Copia para no modificar el original
@@ -97,12 +95,10 @@ class VoltageTransformer:
                     date_parsed = pd.to_datetime(df[date_col], errors='coerce')
                     # MODIFICACIÓN: Usar solo la fecha sin componente horario
                     transformed_df['date_field'] = date_parsed.dt.date
-                    logger.info(f"Campo Date procesado correctamente desde columna: {date_col}")
                 except Exception as e:
                     logger.warning(f"Error al procesar campo Date: {e}")
                     transformed_df['date_field'] = None
             else:
-                logger.info("No se encontró columna Date separada")
                 transformed_df['date_field'] = None
             
             time_utc_col = column_map.get('time_utc') or column_map.get('time_utc5')
@@ -144,7 +140,6 @@ class VoltageTransformer:
                     
                     transformed_df['time'] = time_series.apply(parse_time)
                     transformed_df['utc_zone'] = utc_zone
-                    logger.info(f"Campo Time procesado correctamente desde columna: {time_utc_col} con zona {utc_zone}")
                 except Exception as e:
                     logger.warning(f"Error al procesar campo Time UTC: {e}")
                     transformed_df['time'] = None
@@ -233,8 +228,6 @@ class VoltageTransformer:
                     logger.warning("Las columnas de potencia existen pero no contienen datos")
             else:
                 logger.warning("No se encontraron columnas de potencia en el archivo")
-            
-            logger.info("Transformación de datos completada exitosamente")
             return transformed_df
             
         except Exception as e:

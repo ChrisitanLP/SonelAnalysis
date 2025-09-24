@@ -24,19 +24,62 @@ class SonelDataExtractorGUI(QMainWindow):
         self.is_dark_mode = False
         self.theme_manager = ThemeManager()
 
-        config_file='config.ini'
+        config_file = self._get_config_file_portable()
         self.config = load_config(config_file)
-        db_connection = DatabaseConnection(self.config)
-        self.db_connection = db_connection.get_connection()
 
+        # Base de datos con manejo de errores mejorado
         try:
-            self.controller = SonelController()
+            db_connection = DatabaseConnection(self.config)
+            self.db_connection = db_connection.get_connection()
+            if self.db_connection:
+                print("✅ Conexión a base de datos establecida")
+            else:
+                print("⚠️ No se pudo conectar a la base de datos (se continuará sin BD)")
+                self.db_connection = None
+        except Exception as e:
+            print(f"⚠️ Error inicializando conexión BD: {e}")
+            self.db_connection = None
+
+        # Controlador con manejo de errores robusto
+        try:
+            self.controller = SonelController(config_file)
+            print("✅ Controlador inicializado correctamente")
         except Exception as e:
             print(f"⚠️ Error inicializando controlador: {e}")
             self.controller = None
 
         self.init_ui()
+
+    def _get_config_file_portable(self):
+        """
+        NUEVO MÉTODO: Obtiene la ruta del archivo de configuración de forma portable
         
+        Returns:
+            str: Ruta del archivo config.ini
+        """
+        if getattr(sys, 'frozen', False):
+            # Modo PyInstaller - buscar config en directorio del ejecutable
+            app_dir = os.path.dirname(sys.executable)
+            possible_configs = [
+                os.path.join(app_dir, 'config.ini'),
+                os.path.join(app_dir, 'config', 'config.ini')
+            ]
+            
+            # Intentar encontrar config existente
+            for config_path in possible_configs:
+                if os.path.exists(config_path):
+                    print(f"Config encontrado: {config_path}")
+                    return config_path
+            
+            # Si no existe, usar el primero como default
+            default_config = possible_configs[0]
+            print(f"Usando config por defecto: {default_config}")
+            return default_config
+        else:
+            # Modo desarrollo
+            app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            return os.path.join(app_dir, 'config', 'config.ini')
+
     def init_ui(self):
         self.setWindowTitle("Sonel Data Extractor - Sistema ETL Empresarial")
         self.setGeometry(100, 100, 1400, 900)
@@ -141,16 +184,40 @@ class SonelDataExtractorGUI(QMainWindow):
         return csv_data, etl_data
 
     def load_json_file(self, file_path):
-        """Cargar archivo JSON de forma segura"""
+        """
+        MODIFICADO: Cargar archivo JSON de forma segura y portable
+        
+        Args:
+            file_path: Ruta del archivo JSON
+            
+        Returns:
+            dict: Contenido del archivo JSON o diccionario vacío
+        """
         try:
+            # Manejar rutas relativas y absolutas
+            if not os.path.isabs(file_path):
+                # Ruta relativa - buscar en directorio de la aplicación
+                if getattr(sys, 'frozen', False):
+                    app_dir = os.path.dirname(sys.executable)
+                else:
+                    app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+                file_path = os.path.join(app_dir, file_path)
+            
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as file:
-                    return json.load(file)
+                    data = json.load(file)
+                    print(f"✅ JSON cargado: {file_path}")
+                    return data
             else:
-                print(f"Archivo no encontrado: {file_path}")
+                print(f"⚠️ Archivo JSON no encontrado: {file_path}")
                 return {}
+                
+        except json.JSONDecodeError as e:
+            print(f"❌ Error de formato JSON en {file_path}: {e}")
+            return {}
         except Exception as e:
-            print(f"Error al cargar {file_path}: {e}")
+            print(f"❌ Error cargando JSON {file_path}: {e}")
             return {}
         
     def update_static_data(self):
@@ -735,7 +802,7 @@ class SonelDataExtractorGUI(QMainWindow):
 
     def _refresh_all_tabs_after_complete(self):
         """
-        MODIFICACIÓN: Refrescar todos los tabs después del proceso completo
+        Refrescar todos los tabs después del proceso completo
         Asegurar compatibilidad con sistema consolidado
         """
         try:
@@ -874,19 +941,50 @@ class SonelDataExtractorGUI(QMainWindow):
             self.status_panel.add_log_entry(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] ✅ Proceso completado exitosamente")
 
     def closeEvent(self, event):
-        """Manejar cierre de la aplicación - limpiar recursos"""
+        """
+        MODIFICADO: Manejo de cierre mejorado para modo portable
+        """
         try:
+            print("Cerrando aplicación...")
+            
             # Limpiar el analyzer de carpetas
             if hasattr(self.control_panel, 'cleanup_folder_analyzer'):
-                self.control_panel.cleanup_folder_analyzer()
+                try:
+                    self.control_panel.cleanup_folder_analyzer()
+                    print("✅ Folder analyzer limpiado")
+                except Exception as e:
+                    print(f"⚠️ Error limpiando folder analyzer: {e}")
             
-            # Limpiar otros recursos si existen
+            # Limpiar timer de progreso
             if hasattr(self, 'progress_timer') and self.progress_timer.isActive():
-                self.progress_timer.stop()
-                
-            print("Aplicación cerrada correctamente")
+                try:
+                    self.progress_timer.stop()
+                    print("✅ Timer de progreso detenido")
+                except Exception as e:
+                    print(f"⚠️ Error deteniendo timer: {e}")
+            
+            # Cerrar conexión de base de datos
+            if hasattr(self, 'db_connection') and self.db_connection:
+                try:
+                    if hasattr(self.db_connection, 'close'):
+                        self.db_connection.close()
+                    print("✅ Conexión BD cerrada")
+                except Exception as e:
+                    print(f"⚠️ Error cerrando conexión BD: {e}")
+            
+            # Limpiar controlador
+            if hasattr(self, 'controller') and self.controller:
+                try:
+                    if hasattr(self.controller, 'cleanup'):
+                        self.controller.cleanup()
+                    print("✅ Controlador limpiado")
+                except Exception as e:
+                    print(f"⚠️ Error limpiando controlador: {e}")
+            
+            print("✅ Aplicación cerrada correctamente")
             event.accept()
             
         except Exception as e:
-            print(f"Error al cerrar aplicación: {e}")
+            print(f"❌ Error durante cierre de aplicación: {e}")
+            # Aceptar el cierre incluso con errores para evitar que se cuelgue
             event.accept()

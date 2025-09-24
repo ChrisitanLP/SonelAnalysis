@@ -20,9 +20,6 @@ class CSVParser:
             DataFrame con los datos o None si hay errores
         """
         try:
-            # Intentar leer directamente con detección automática
-            logger.info(f"Intentando leer archivo CSV: {file_path}")
-            
             # Probar diferentes combinaciones de separador y encoding
             for sep in [';', ',', '\t', '|']:
                 for encoding in ['utf-8', 'utf-8-sig', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16', 'utf-16le', 'utf-16be', 'windows-1252', 'iso-8859-15']:
@@ -31,7 +28,6 @@ class CSVParser:
                         
                         # Verificar si las primeras filas contienen datos numéricos en lugar de encabezados
                         if df.shape[1] > 0 and all(isinstance(col, (int, float)) for col in df.columns):
-                            logger.info("Se ha detectado que las columnas son numéricas. Intentando con header=None")
                             # Posible archivo sin encabezados o con encabezados en la primera fila
                             df = pd.read_csv(file_path, sep=sep, encoding=encoding, header=None)
                             # Intentar usar primera fila como encabezados
@@ -163,7 +159,6 @@ class CSVParser:
                         # Buscar filas que contengan palabras clave como "Fecha", "Hora", "U1", "U2"
                         for i, row in preview_str.iterrows():
                             row_values = " ".join(row.values)
-                            logger.info(f"Fila {i+1}: {row_values[:100]}...")  # Mostrar primeros 100 caracteres
                             
                             # Buscar patrones de encabezados más amplios
                             header_patterns = [
@@ -174,7 +169,6 @@ class CSVParser:
                             ]
                             
                             if any(any(re.search(pattern, val) for val in row.values) for pattern in header_patterns):
-                                logger.info(f"Posible fila de encabezados encontrada en la fila {i+1}")
                                 # Intentar con esta fila como encabezado
                                 try:
                                     if i == 0:
@@ -254,7 +248,6 @@ class CSVParser:
                             
                             if any(re.search(pattern, line) for pattern in header_patterns):
                                 data_start_line = i
-                                logger.info(f"Posible línea de encabezados encontrada en línea {i+1}: {line[:100]}...")
                                 break
                             
                             # También considerar la línea con más columnas como posible encabezado
@@ -277,9 +270,6 @@ class CSVParser:
                                     continue
                                     
                                 df.columns = df.columns.astype(str)
-                                
-                                # Imprimir las columnas para debug
-                                logger.info(f"Columnas encontradas desde línea {data_start_line+1}: {list(df.columns)}")
                                 
                                 valid, column_map = validate_voltage_columns(df)
                                 if valid:

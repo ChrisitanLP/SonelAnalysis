@@ -91,7 +91,6 @@ def validate_voltage_columns(df):
                 break
 
     # Log del mapeo final para debug
-    logger.info("Mapeo final de columnas:")
     for key, value in column_mapping.items():
         logger.info(f"  {key} -> {value}")
 
@@ -111,14 +110,6 @@ def validate_voltage_columns(df):
         found_types = [k for k, v in essential_patterns.items() if v]
         logger.info(f"Se encontraron las medidas esenciales: {found_types}")
         return True, column_mapping
-    else:
-        missing_types = [k for k, v in essential_patterns.items() if not v]
-        logger.warning(f"Faltan medidas esenciales: {missing_types}")
-        
-        # Log detallado para debug cuando no se encuentran columnas
-        logger.warning("Análisis detallado de columnas no reconocidas:")
-        for col in df.columns:
-            logger.warning(f"  Columna no mapeada: '{col}'")
     
     # Si no se encuentran las columnas mínimas, devolver False
     return False, column_mapping

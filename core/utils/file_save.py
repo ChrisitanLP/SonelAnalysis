@@ -1,6 +1,7 @@
 # componentes_guardado.py
 import os
 import json
+import logging
 from pathlib import Path
 from datetime import datetime
 from config.settings import get_full_config, load_config
@@ -17,7 +18,6 @@ class ComponentesGuardado:
         self.ruta_coordenadas = ruta_coordenadas or os.path.join(self.config['PATHS']['output_dir'], "component_positions.json")
     
     def _get_default_logger(self):
-        import logging
         logger = logging.getLogger("ComponentesGuardado")
         if not logger.handlers:
             handler = logging.StreamHandler()
@@ -33,7 +33,6 @@ class ComponentesGuardado:
             if os.path.exists(self.ruta_coordenadas):
                 with open(self.ruta_coordenadas, "r", encoding="utf-8") as f:
                     coordenadas = json.load(f)
-                self.logger.info(f"📁 Coordenadas cargadas desde '{self.ruta_coordenadas}'")
                 return coordenadas
             else:
                 self.logger.info(f"📄 Archivo de coordenadas '{self.ruta_coordenadas}' no existe, se creará")
@@ -55,7 +54,6 @@ class ComponentesGuardado:
             with open(self.ruta_coordenadas, "w", encoding="utf-8") as f:
                 json.dump(coordenadas_actuales, f, indent=4, ensure_ascii=False)
             
-            self.logger.info(f"✅ Coordenadas actualizadas en '{self.ruta_coordenadas}'")
             return True
         except Exception as e:
             self.logger.error(f"❌ Error guardando coordenadas: {e}")
@@ -115,7 +113,6 @@ class ComponentesGuardado:
             self.logger.info(f"📁 Información de componentes ya existe en '{self.ruta_salida}'")
             return
 
-        self.logger.info("📥 Guardando información de RadioButtons y CheckBoxes...")
         componentes = []
         componentes += self._procesar_controles(radiobuttons, "RadioButton")
         componentes += self._procesar_controles(checkboxes, "CheckBox")
@@ -183,8 +180,6 @@ class ComponentesGuardado:
         Verifica si es la primera ejecución basándose en la existencia de archivos de coordenadas.
         Retorna True si es la primera ejecución, False en caso contrario.
         """
-        import os
-        
         # Verificar si existe el archivo de coordenadas
         if os.path.exists(self.ruta_coordenadas):
             self.logger.info("📁 Archivo de coordenadas existe, no es primera ejecución")
