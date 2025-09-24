@@ -45,8 +45,6 @@ class FileProcessor:
             cliente_codigo = extract_client_code(file_path)
             self.registry.register_processing_start(file_path, cliente_codigo)
             
-            logger.info(f"📄 Procesando archivo: {file_path}")
-            
             # Extraer datos del archivo
             df = self._extract_file_data(file_path, start_time)
             if df is None:
@@ -60,8 +58,6 @@ class FileProcessor:
             # Validar código de cliente
             if not self._validate_client_code(cliente_codigo, file_path, start_time):
                 return False
-            
-            logger.info(f"📌 Código de cliente extraído: {cliente_codigo}")
             
             # Cargar datos
             success = data_loader.load_data(transformed_data, cliente_codigo, file_path)
@@ -169,4 +165,3 @@ class FileProcessor:
         from core.extractors.file_extractor import FileExtractor
         file_extractor = FileExtractor(self.config, self.registry.registry_file)
         file_extractor.reset_file_status(file_path)
-        logger.info(f"🔄 Estado de procesamiento reiniciado para: {os.path.basename(file_path)}")

@@ -1,6 +1,8 @@
 #sonel_extractor/database/operations.py
 
 import re
+import os
+import pandas as pd
 from config.logger import logger
 from core.utils.validators import extract_client_code
 from config.settings import (
@@ -95,26 +97,32 @@ class DataHandler:
                 logger.error("No se pudo obtener un código válido del archivo.")
                 return None
         
+        # Extraer nombre del archivo y determinar origen
+        nombre_archivo = None
+        origen = "cliente"  # Valor por defecto
+        
+        if file_path:
+            nombre_archivo = os.path.basename(file_path)
+            origen = self.determine_origen(nombre_archivo)  # NUEVA LÍNEA
+        
         # Para el caso del flujo estándar ETL (sin archivo)
         if codigo == "ETL_STANDARD" and not should_extract:
-            logger.info(f"Utilizando código estándar ETL: {codigo}")
+            nombre_archivo = "ETL_STANDARD"
+            origen = "cliente"  # ETL_STANDARD se considera como cliente
         else:
-            # Con la nueva implementación, el código siempre es numérico
-            # pero verificamos para asegurar que sea de 10 dígitos
-            if not re.match(r'^\d{10}$', codigo):
-                logger.warning(f"El código '{codigo}' no tiene el formato esperado de 10 dígitos.")
+            # Con la nueva implementación, el código puede tener entre 2 y 10 dígitos
+            # Verificamos que sea numérico y tenga la longitud correcta
+            if not re.match(r'^\d{2,10}$', codigo):
+                logger.warning(f"El código '{codigo}' no tiene el formato esperado de 2-10 dígitos.")
                 
                 if should_extract and file_path:
-                    logger.info(f"Intentando extraer código nuevamente del archivo: {file_path}")
                     codigo = extract_client_code(file_path)
                     
-                    if not codigo or not re.match(r'^\d{10}$', codigo):
-                        logger.error(f"No se pudo obtener un código válido de 10 dígitos después de reintento.")
+                    if not codigo or not re.match(r'^\d{2,10}$', codigo):
+                        logger.error(f"No se pudo obtener un código válido de 2-10 dígitos después de reintento.")
                         return None
                 else:
                     return None
-
-        logger.info(f"Intentando obtener/crear código en BD: '{codigo}'")
 
         # Primero verificar si ya existe
         cursor = self.db_connection.execute_query(
@@ -129,12 +137,17 @@ class DataHandler:
             if row:
                 codigo_id = row[0]
                 logger.info(f"Código existente encontrado con ID: {codigo_id}")
+                
+                # Si existe, actualizar nombre de archivo y origen
+                if nombre_archivo and should_extract:
+                    self._update_nombre_archivo(codigo_id, nombre_archivo, origen)  # MODIFICADA
+                
                 return codigo_id
 
-        # Si no existe, intentar insertarlo
+        # Si no existe, intentar insertarlo con origen
         cursor = self.db_connection.execute_query(
             INSERT_CODIGO_QUERY,
-            params=(codigo,),
+            params=(codigo, nombre_archivo, origen),  # MODIFICADA: agregado origen
             commit=True
         )
 
@@ -143,12 +156,36 @@ class DataHandler:
             cursor.close()
             if row:
                 codigo_id = row[0]
-                logger.info(f"Nuevo código creado con ID: {codigo_id}")
+                logger.info(f"Nuevo código creado con ID: {codigo_id}, archivo: {nombre_archivo} y origen: {origen}")
                 return codigo_id
 
         logger.error(f"No se pudo obtener o crear el código: {codigo}")
         return None
     
+    def _update_nombre_archivo(self, codigo_id, nombre_archivo, origen):
+        """
+        Actualiza el nombre de archivo para un código existente
+        
+        Args:
+            codigo_id: ID del código
+            nombre_archivo: Nombre del archivo a actualizar
+            origen: Origen a actualizar
+        """
+        update_query = """
+            UPDATE codigo SET nombre_archivo = %s, origen = %s, fecha_subida = CURRENT_TIMESTAMP 
+            WHERE id = %s;
+        """
+        
+        cursor = self.db_connection.execute_query(
+            update_query,
+            params=(nombre_archivo, origen, codigo_id),
+            commit=True
+        )
+        
+        if cursor:
+            cursor.close()
+            logger.debug(f"Actualizado nombre de archivo para código ID {codigo_id}: {nombre_archivo}, origen: {origen}")
+
     def insert_data(self, data, codigo, file_path, should_extract=True):
         """
         Inserta los datos en la estructura relacional de tablas
@@ -192,6 +229,24 @@ class DataHandler:
                   
         # Contador de filas procesadas exitosamente
         successful_rows = 0
+
+        # Función auxiliar para manejar valores nulos/NaN
+        def clean_value(value):
+            """Convierte NaN, None y valores inválidos a None (NULL en DB)"""
+            if value is None:
+                return None
+            if isinstance(value, (int, float)) and (pd.isna(value) or str(value).lower() == 'nan'):
+                return None
+            if isinstance(value, str) and (value.strip() == '' or value.lower() == 'nan'):
+                return None
+            # NUEVA LÓGICA: Manejar objetos de fecha (date objects) correctamente
+            if hasattr(value, 'date') and callable(getattr(value, 'date')):
+                # Si es un datetime, extraer solo la fecha
+                return value.date()
+            elif hasattr(value, '__class__') and value.__class__.__name__ == 'date':
+                # Si ya es un objeto date, devolverlo tal como está
+                return value
+            return value
         
         # Procesar cada fila e insertarla en las tablas correspondientes
         for index, row in data.iterrows():
@@ -199,8 +254,8 @@ class DataHandler:
                 # 1. Insertar en tabla mediciones y obtener ID
                 medicion_cursor = self.db_connection.execute_query(
                     INSERT_MEDICION_QUERY,
-                    params=(codigo_id, row.get('tiempo_utc'), ),
-                    commit=False  # No hacemos commit aún
+                    params=(codigo_id, clean_value(row.get('tiempo_utc'))),
+                    commit=False
                 )
                 
                 if not medicion_cursor:
@@ -214,10 +269,10 @@ class DataHandler:
                 voltaje_cursor = self.db_connection.execute_query(
                     INSERT_VOLTAJE_QUERY,
                     params=(
-                        row.get('u_l1_avg_10min'),
-                        row.get('u_l2_avg_10min'),
-                        row.get('u_l3_avg_10min'),
-                        row.get('u_l12_avg_10min'),
+                        clean_value(row.get('u_l1_avg')),
+                        clean_value(row.get('u_l2_avg')),
+                        clean_value(row.get('u_l3_avg')),
+                        clean_value(row.get('u_l12_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -230,12 +285,12 @@ class DataHandler:
                 
                 voltaje_cursor.close()
                 
-                # 3. Insertar en tabla corriente_mediciones con valores predeterminados o nulos
+                # 3. Insertar en tabla corriente_mediciones
                 corriente_cursor = self.db_connection.execute_query(
                     INSERT_CORRIENTE_QUERY,
                     params=(
-                        row.get('i_l1_avg', None),
-                        row.get('i_l2_avg', None),
+                        clean_value(row.get('i_l1_avg')),
+                        clean_value(row.get('i_l2_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -248,23 +303,23 @@ class DataHandler:
                 
                 corriente_cursor.close()
                 
-                # 4. Insertar en tabla potencia_mediciones con valores predeterminados o nulos
+                # 4. Insertar en tabla potencia_mediciones
                 potencia_cursor = self.db_connection.execute_query(
                     INSERT_POTENCIA_QUERY,
-                    params= (
-                        row.get('p_l1_avg', None),
-                        row.get('p_l2_avg', None),
-                        row.get('p_l3_avg', None),
-                        row.get('p_e_avg', None),
-                        row.get('q1_l1_avg', None),
-                        row.get('q1_l2_avg', None),
-                        row.get('q1_e_avg', None),
-                        row.get('sn_l1_avg', None),
-                        row.get('sn_l2_avg', None),
-                        row.get('sn_e_avg', None),
-                        row.get('s_l1_avg', None),
-                        row.get('s_l2_avg', None),
-                        row.get('s_e_avg', None),
+                    params=(
+                        clean_value(row.get('p_l1_avg')),
+                        clean_value(row.get('p_l2_avg')),
+                        clean_value(row.get('p_l3_avg')),
+                        clean_value(row.get('p_e_avg')),
+                        clean_value(row.get('q1_l1_avg')),
+                        clean_value(row.get('q1_l2_avg')),
+                        clean_value(row.get('q1_e_avg')),
+                        clean_value(row.get('sn_l1_avg')),
+                        clean_value(row.get('sn_l2_avg')),
+                        clean_value(row.get('sn_e_avg')),
+                        clean_value(row.get('s_l1_avg')),
+                        clean_value(row.get('s_l2_avg')),
+                        clean_value(row.get('s_e_avg')),
                         medicion_id
                     ),
                     commit=False
@@ -277,32 +332,33 @@ class DataHandler:
                 
                 potencia_cursor.close()
 
+                # 5. Insertar en tabla única (mediciones_planas) con campos modificados
                 cursor = self.db_connection.execute_query(
                     INSERT_TABLA_UNICA_QUERY,
                     params=(
                         codigo_id,
-                        row.get('tiempo_utc'),
-                        row.get('date_field'),     
-                        row.get('time_utc5'),
-                        row.get('u_l1_avg_10min'),
-                        row.get('u_l2_avg_10min'),
-                        row.get('u_l3_avg_10min'),
-                        row.get('u_l12_avg_10min'),
-                        row.get('i_l1_avg'),
-                        row.get('i_l2_avg'),
-                        row.get('p_l1_avg'),
-                        row.get('p_l2_avg'),
-                        row.get('p_l3_avg'),
-                        row.get('p_e_avg'),
-                        row.get('q1_l1_avg'),
-                        row.get('q1_l2_avg'),
-                        row.get('q1_e_avg'),
-                        row.get('sn_l1_avg'),
-                        row.get('sn_l2_avg'),
-                        row.get('sn_e_avg'),
-                        row.get('s_l1_avg'),
-                        row.get('s_l2_avg'),
-                        row.get('s_e_avg')
+                        clean_value(row.get('tiempo_utc')),
+                        clean_value(row.get('time')),
+                        clean_value(row.get('utc_zone')),
+                        clean_value(row.get('u_l1_avg')),
+                        clean_value(row.get('u_l2_avg')),
+                        clean_value(row.get('u_l3_avg')),
+                        clean_value(row.get('u_l12_avg')),
+                        clean_value(row.get('i_l1_avg')),
+                        clean_value(row.get('i_l2_avg')),
+                        clean_value(row.get('p_l1_avg')),
+                        clean_value(row.get('p_l2_avg')),
+                        clean_value(row.get('p_l3_avg')),
+                        clean_value(row.get('p_e_avg')),
+                        clean_value(row.get('q1_l1_avg')),
+                        clean_value(row.get('q1_l2_avg')),
+                        clean_value(row.get('q1_e_avg')),
+                        clean_value(row.get('sn_l1_avg')),
+                        clean_value(row.get('sn_l2_avg')),
+                        clean_value(row.get('sn_e_avg')),
+                        clean_value(row.get('s_l1_avg')),
+                        clean_value(row.get('s_l2_avg')),
+                        clean_value(row.get('s_e_avg'))
                     ),
                     commit=True
                 )
@@ -325,75 +381,23 @@ class DataHandler:
         logger.info(f"Datos cargados exitosamente en la BD: {successful_rows}/{len(data)} filas")
         return successful_rows > 0
     
-    def export_all_mediciones_planas(self):
+    def determine_origen(self, nombre_archivo):
         """
-        Exportar todos los registros de la tabla mediciones_planas
+        Determina el origen basado en el nombre del archivo
         
+        Args:
+            nombre_archivo: Nombre del archivo a analizar
+            
         Returns:
-            list: Lista de tuplas con todos los registros o None si hay error
+            str: "transformador" si contiene "TRF", "cliente" en caso contrario
         """
-        try:
-            query = """
-                SELECT 
-                    mp.id,
-                    c.codigo,
-                    mp.fecha,
-                    mp.date_field,
-                    mp.time_utc5,
-                    mp.u_l1_avg,
-                    mp.u_l2_avg,
-                    mp.u_l3_avg,
-                    mp.u_l12_avg,
-                    mp.i_l1_avg,
-                    mp.i_l2_avg,
-                    mp.p_l1_avg,
-                    mp.p_l2_avg,
-                    mp.p_l3_avg,
-                    mp.p_e_avg,
-                    mp.q1_l1_avg,
-                    mp.q1_l2_avg,
-                    mp.q1_e_avg,
-                    mp.sn_l1_avg,
-                    mp.sn_l2_avg,
-                    mp.sn_e_avg,
-                    mp.s_l1_avg,
-                    mp.s_l2_avg,
-                    mp.s_e_avg,
-                    mp.fecha_subida
-                FROM mediciones_planas mp
-                LEFT JOIN codigo c ON mp.codigo_id = c.id
-                ORDER BY mp.fecha DESC;
-            """
-            
-            cursor = self.db_connection.execute_query(query, commit=False)
-            
-            if cursor:
-                rows = cursor.fetchall()
-                cursor.close()
-                logger.info(f"Exportados {len(rows)} registros de mediciones_planas")
-                return rows
-            else:
-                logger.error("Error al ejecutar consulta de exportación")
-                return None
-                
-        except Exception as e:
-            logger.error(f"Error al exportar mediciones_planas: {e}")
-            return None
-    
-    def get_mediciones_planas_headers(self):
-        """
-        Obtener los encabezados de la tabla mediciones_planas para exportación
+        if not nombre_archivo:
+            return "cliente"
         
-        Returns:
-            list: Lista de nombres de columnas
-        """
-        return [
-            'ID', 'Código_Cliente', 'Fecha_Hora', 'Fecha', 'Hora_UTC5',
-            'U_L1_Avg', 'U_L2_Avg', 'U_L3_Avg', 'U_L12_Avg',
-            'I_L1_Avg', 'I_L2_Avg',
-            'P_L1_Avg', 'P_L2_Avg', 'P_L3_Avg', 'P_E_Avg',
-            'Q1_L1_Avg', 'Q1_L2_Avg', 'Q1_E_Avg',
-            'SN_L1_Avg', 'SN_L2_Avg', 'SN_E_Avg',
-            'S_L1_Avg', 'S_L2_Avg', 'S_E_Avg',
-            'Fecha_Subida'
-        ]
+        # Convertir a mayúsculas para hacer la comparación insensible a mayúsculas/minúsculas
+        nombre_upper = nombre_archivo.upper()
+        
+        if "TRF" in nombre_upper:
+            return "transformador"
+        else:
+            return "cliente"

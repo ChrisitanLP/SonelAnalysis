@@ -31,7 +31,6 @@ class SummaryGenerator:
             for file_path in error_files[:3]:
                 file_data = self.registry.registry_data["files"][file_path]
                 error_msg = file_data.get("error_message", "Sin mensaje")[:100]
-                logger.info(f"  - {os.path.basename(file_path)}: {error_msg}...")
     
     def get_processing_report(self):
         """Obtiene un reporte detallado del procesamiento"""
@@ -286,9 +285,6 @@ class SummaryGenerator:
             # Guardar archivo JSON
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(summary_data, f, indent=2, ensure_ascii=False)
-            
-            logger.info(f"💾 Resumen ETL guardado en: {output_file}")
-            logger.info(f"📁 Tamaño del archivo: {os.path.getsize(output_file)} bytes")
             
             return output_file
             

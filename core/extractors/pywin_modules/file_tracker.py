@@ -18,20 +18,22 @@ class FileTracker:
 
     def _generate_file_key(self, file_path):
         """
-        Genera clave única basada SOLO en el contenido del archivo para evitar duplicados globales
+        Genera clave única basada en contenido del archivo Y directorio para permitir 
+        archivos con mismo nombre en diferentes directorios
         
         Args:
             file_path (str): Ruta completa del archivo
             
         Returns:
-            str: Clave única para identificar el archivo globalmente basada en contenido
+            str: Clave única que incluye información del directorio
         """
         import hashlib
         
-        # Usar solo el nombre del archivo como identificador principal
+        # Obtener información del archivo y directorio
         filename = os.path.basename(file_path)
+        directory_name = os.path.basename(os.path.dirname(file_path))
         
-        # Generar hash basado en CONTENIDO del archivo, no en metadatos del sistema
+        # Generar hash basado en CONTENIDO del archivo
         try:
             if os.path.exists(file_path):
                 # Leer una muestra del contenido del archivo para generar hash único
@@ -56,16 +58,24 @@ class FileTracker:
                     # Incluir el tamaño del archivo como validación adicional
                     size_hash = hashlib.md5(str(file_size).encode()).hexdigest()[:4]
                     
-                    return f"{filename}_{content_hash}_{size_hash}"
+                    # NUEVA LÓGICA: Incluir directorio en la clave para permitir duplicados
+                    directory_hash = hashlib.md5(directory_name.encode()).hexdigest()[:6]
+                    
+                    return f"{filename}_{content_hash}_{size_hash}_{directory_hash}"
             else:
-                # Si el archivo no existe, usar solo el nombre (esto es un fallback)
+                # Si el archivo no existe, usar solo el nombre con directorio
                 self.logger.warning(f"Archivo no existe para generar clave: {file_path}")
-                return filename
+                directory_hash = hashlib.md5(directory_name.encode()).hexdigest()[:6]
+                return f"{filename}_{directory_hash}"
                 
         except Exception as e:
             self.logger.warning(f"No se pudo generar hash de contenido para {filename}: {e}")
-            # Fallback: usar solo el nombre del archivo
-            return filename
+            # Fallback: usar nombre del archivo con directorio
+            try:
+                directory_hash = hashlib.md5(directory_name.encode()).hexdigest()[:6]
+                return f"{filename}_{directory_hash}"
+            except:
+                return filename
     
     def get_processing_statistics(self):
         """
@@ -102,9 +112,6 @@ class FileTracker:
                 )
                 ultimo_procesado = latest_entry.get('processing_completed', 'N/A')
             
-            # Log de estadísticas para debugging
-            self.logger.info(f"📊 Estadísticas cargadas - Total: {len(files_info)}, Último: {ultimo_procesado}")
-            
             return {
                 "total": len(files_info),
                 "archivos": archivos_procesados,
@@ -118,6 +125,7 @@ class FileTracker:
     def is_already_processed(self, file_path):
         """
         Verifica si un archivo ya ha sido procesado anteriormente usando la nueva estructura JSON.
+        MODIFICADO: Ahora considera directorio en la validación
 
         Args:
             file_path (str): Ruta completa del archivo a verificar
@@ -139,26 +147,13 @@ class FileTracker:
             if not files_info:
                 return False
 
-            # nueva clave basada en contenido del archivo
+            # NUEVA clave basada en contenido del archivo Y directorio
             file_key = self._generate_file_key(file_path)
 
-            # Verificar TODAS las claves existentes para detectar duplicados por nombre
+            # Obtener información del directorio para logs mejorados
             filename = os.path.basename(file_path)
+            directory_name = os.path.basename(os.path.dirname(file_path))
             
-            # Buscar si ya existe un archivo con el mismo nombre (independiente de la clave)
-            existing_entries = []
-            for existing_key, entry in files_info.items():
-                if entry.get("filename") == filename:
-                    existing_entries.append((existing_key, entry))
-            
-            # Mostrar información de duplicados encontrados
-            if len(existing_entries) > 1:
-                self.logger.info(f"🔍 Archivo '{filename}' encontrado en {len(existing_entries)} registros:")
-                for key, entry in existing_entries:
-                    status = entry.get("status", "")
-                    paths = entry.get("source_paths", [])
-                    self.logger.info(f"   - Clave: {key}, Estado: {status}, Rutas: {len(paths)}")
-
             # Verificar si el archivo está en el registro usando la nueva clave
             entry = files_info.get(file_key)
             if entry:
@@ -167,36 +162,33 @@ class FileTracker:
                 source_paths = entry.get("source_paths", [])
 
                 if status == "exitoso" and csv_verified:
-                    self.logger.info(f"⏭️ Saltando {filename} (ya procesado exitosamente)")
+                    self.logger.info(f"⏭️ Saltando {filename} del directorio '{directory_name}' (ya procesado exitosamente)")
                     self.logger.info(f"   🔑 Clave: {file_key}")
                     self.logger.info(f"   📁 Rutas conocidas: {len(source_paths)}")
                     if len(source_paths) > 0:
                         self.logger.info(f"   📍 Primera ruta: {source_paths[0]}")
                     return True
                 else:
-                    self.logger.info(f"🔁 Reintentando procesamiento de {filename}")
+                    self.logger.info(f"🔁 Reintentando procesamiento de {filename} del directorio '{directory_name}'")
                     self.logger.info(f"   🔑 Clave: {file_key}")
                     self.logger.info(f"   ⚠️ Razón: Estado='{status}', CSV_verificado={csv_verified}")
                     return False
             else:
-                # Verificar si existe con otra clave (archivo movido o copiado)
-                for existing_key, existing_entry in existing_entries:
-                    if existing_key != file_key:  # Es una clave diferente
-                        status = existing_entry.get("status", "")
-                        csv_verified = existing_entry.get("csv_output", {}).get("verified", False)
-                        
-                        if status == "exitoso" and csv_verified:
-                            self.logger.info(f"⏭️ Saltando {filename} (ya procesado con otra clave)")
-                            self.logger.info(f"   🔑 Clave actual: {file_key}")
-                            self.logger.info(f"   🔑 Clave existente: {existing_key}")
-                            self.logger.info(f"   📝 El archivo será registrado con la nueva clave pero no reprocesado")
-                            
-                            # Registrar la nueva ruta en el archivo existente
-                            self._update_source_paths(existing_key, file_path, files_info, processed_data)
+                file_name = os.path.basename(file_path)
+                file_path_normalized = os.path.abspath(file_path)
+                
+                # NUEVA LÓGICA: Buscar otros archivos con el mismo nombre pero diferente directorio
+                with open(self.processed_files_json, 'r', encoding='utf-8') as f:
+                    processed_data = json.load(f)
+                
+                for entry in processed_data.get("files", {}).values():
+                    if entry.get("filename") == file_name:
+                        if file_path_normalized in entry.get("source_paths", []):
+                            self.logger.info(f"⏭️ Saltando {filename} del directorio '{directory_name}' (ya procesado exitosamente)")
+                            self.logger.info(f"   📌 Archivo '{file_name}' detectado como procesado")
+                            self.logger.info(f"   📁 Ruta en source_paths: {file_path_normalized}")
                             return True
-
             return False
-
         except json.JSONDecodeError as e:
             self.logger.warning(f"Error leyendo JSON de procesados: {e}")
             return False
@@ -292,7 +284,6 @@ class FileTracker:
             
             # Si existe con otra clave, consolidar información
             if existing_entries:
-                self.logger.info(f"🔄 Consolidando registro existente para {file_name}")
                 
                 # Tomar el primer registro existente como base
                 base_key, base_entry = existing_entries[0]
@@ -321,18 +312,36 @@ class FileTracker:
                     if csv_path and os.path.exists(csv_path):
                         try:
                             csv_info = self._get_file_info_basic(csv_path)
+                            csv_filename = os.path.basename(csv_path)
+                            
+                            # NUEVA FUNCIONALIDAD: Detectar si se aplicó numeración incremental
+                            is_numbered = self._detectar_csv_numerado(csv_filename, file_stem)
+
+                            # NUEVA FUNCIONALIDAD: Verificación física adicional
+                            physical_verification = self._verify_csv_physically(csv_path)
+                            
                             base_entry["csv_output"] = {
-                                "filename": os.path.basename(csv_path),
+                                "filename": csv_filename,
                                 "path": csv_path,
                                 "size_bytes": csv_info.get("size", 0),
                                 "created": csv_info.get("modified", datetime.now().isoformat()),
-                                "verified": True
+                                "verified": True,
+                                "physically_verified": physical_verification,
+                                "numbered": is_numbered,  # NUEVO: indicador de numeración
+                                "original_name": f"{file_stem}.csv" if is_numbered else csv_filename
                             }
+                            
+                            if is_numbered:
+                                self.logger.info(f"   📝 CSV con numeración detectado: {csv_filename}")
+                            if physical_verification:
+                                self.logger.info(f"   ✅ CSV verificado físicamente: {csv_filename}")
+                                
                         except Exception as e:
                             self.logger.warning(f"Error obteniendo info de CSV {csv_path}: {e}")
                             base_entry["csv_output"] = {
                                 "filename": os.path.basename(csv_path) if csv_path else "error.csv",
                                 "verified": False,
+                                "physically_verified": False,
                                 "error": f"Error obteniendo información: {e}"
                             }
                 
@@ -348,8 +357,6 @@ class FileTracker:
                     if dup_key in files_info:
                         del files_info[dup_key]
                         self.logger.info(f"🗑️ Eliminado registro duplicado con clave: {dup_key}")
-                
-                self.logger.info(f"✅ Registro consolidado para {file_name} con clave: {base_key}")
                 
             else:
                 # Proceder normalmente
@@ -395,6 +402,7 @@ class FileTracker:
                 else:
                     registro["csv_output"] = {
                         "verified": False,
+                        "physically_verified": False,
                         "error": "CSV no generado o no encontrado"
                     }
                 
@@ -428,6 +436,83 @@ class FileTracker:
             self.logger.error(f"❌ Error crítico registrando archivo procesado {file_path}: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
+
+    def _verify_csv_physically(self, csv_path):
+        """
+        Verifica físicamente que el archivo CSV existe y tiene contenido válido.
+        
+        Args:
+            csv_path (str): Ruta del archivo CSV a verificar
+            
+        Returns:
+            bool: True si el archivo existe y es válido
+        """
+        try:
+            if not csv_path or not os.path.exists(csv_path):
+                return False
+            
+            # Verificar tamaño mínimo
+            file_size = os.path.getsize(csv_path)
+            if file_size < 100:  # Muy pequeño para ser válido
+                return False
+            
+            # Verificar que se puede leer como texto
+            try:
+                with open(csv_path, 'r', encoding='utf-8') as f:
+                    first_lines = f.read(500)  # Leer primeras 500 chars
+                    if len(first_lines.strip()) == 0:
+                        return False
+            except (UnicodeDecodeError, PermissionError):
+                return False
+            
+            return True
+            
+        except Exception as e:
+            self.logger.warning(f"Error verificando CSV físicamente {csv_path}: {e}")
+            return False
+
+    def _detectar_csv_numerado(self, csv_filename, file_stem):
+        """
+        Detecta si un archivo CSV tiene numeración incremental aplicada.
+        CORREGIDO: Mejorado para detectar múltiples patrones de numeración
+        
+        Args:
+            csv_filename (str): Nombre del archivo CSV
+            file_stem (str): Nombre base sin extensión
+            
+        Returns:
+            bool: True si el archivo tiene numeración aplicada
+        """
+        import re
+        
+        # Patrón principal: "número_nombre.csv" (usado por el sistema actual)
+        pattern_underscore = rf'^(\d+)_{re.escape(file_stem)}\.csv$'
+        match_underscore = re.match(pattern_underscore, csv_filename)
+        
+        if match_underscore:
+            numero = match_underscore.group(1)
+            self.logger.debug(f"CSV numerado detectado (patrón underscore): {csv_filename} (número: {numero})")
+            return True
+        
+        # Patrón alternativo: "número. nombre.csv"
+        pattern_dot = rf'^(\d+)\.\s*{re.escape(file_stem)}\.csv$'
+        match_dot = re.match(pattern_dot, csv_filename)
+        
+        if match_dot:
+            numero = match_dot.group(1)
+            self.logger.debug(f"CSV numerado detectado (patrón punto): {csv_filename} (número: {numero})")
+            return True
+        
+        # Patrón adicional: "(número) nombre.csv"
+        pattern_parenthesis = rf'^\((\d+)\)\s*{re.escape(file_stem)}\.csv$'
+        match_parenthesis = re.match(pattern_parenthesis, csv_filename)
+        
+        if match_parenthesis:
+            numero = match_parenthesis.group(1)
+            self.logger.debug(f"CSV numerado detectado (patrón paréntesis): {csv_filename} (número: {numero})")
+            return True
+        
+        return False
 
     def _load_processed_files_data(self):
         """
@@ -469,3 +554,4 @@ class FileTracker:
                 return {"size": 0, "modified": datetime.now().isoformat()}
         except Exception as e:
             return {"size": 0, "modified": datetime.now().isoformat(), "error": str(e)}
+        

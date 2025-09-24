@@ -339,6 +339,15 @@ class DbTab(QWidget):
     def export_table_to_csv(self):
         """Exportar todos los registros de mediciones_planas a CSV usando el controlador"""
         try:
+            # Verificar controlador
+            if not self.controller:
+                QMessageBox.warning(
+                    self,
+                    "Error de Sistema",
+                    "No se pudo inicializar el controlador. Verifique la configuración."
+                )
+                return
+            
             # Abrir diálogo para seleccionar ubicación de archivo
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             default_filename = f"mediciones_EEASA_{timestamp}.csv"
@@ -352,7 +361,7 @@ class DbTab(QWidget):
                 "Guardar Reporte EEASA en CSV",
                 default_filename,
                 "Archivos CSV (*.csv);;Todos los archivos (*)",
-                options=options  # Agregar las opciones
+                options=options
             )
             
             if not file_path:
@@ -372,23 +381,37 @@ class DbTab(QWidget):
             success, message = self.controller.export_mediciones_to_csv(file_path)
             
             if success:
-                QMessageBox.information(
-                    self, 
-                    "Exportación EEASA Exitosa", 
-                    f"El reporte empresarial ha sido generado correctamente:\n{file_path}\n\n{message}"
-                )
+                # Verificar que el archivo se creó correctamente
+                if os.path.exists(file_path):
+                    QMessageBox.information(
+                        self, 
+                        "Exportación EEASA Exitosa", 
+                        f"El reporte empresarial ha sido generado correctamente:\n\n"
+                        f"Archivo: {os.path.basename(file_path)}\n"
+                        f"Ubicación: {os.path.dirname(file_path)}\n\n"
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Advertencia",
+                        f"El proceso reportó éxito pero no se encuentra el archivo:\n{file_path}"
+                    )
             else:
                 QMessageBox.critical(
                     self, 
                     "Error de Exportación EEASA", 
-                    f"No se pudo generar el reporte empresarial:\n{message}"
+                    f"No se pudo generar el reporte empresarial:\n\n{message}"
                 )
-                
+                    
         except Exception as e:
             QMessageBox.critical(
                 self, 
                 "Error Inesperado", 
-                f"Error durante la exportación: {str(e)}"
+                f"Error durante la exportación:\n{str(e)}\n\n"
+                f"Por favor, verifique:\n"
+                f"• Conexión a la base de datos\n"
+                f"• Permisos de escritura en la ubicación seleccionada\n"
+                f"• Que no haya otros procesos usando el archivo"
             )
         finally:
             # Restaurar botón

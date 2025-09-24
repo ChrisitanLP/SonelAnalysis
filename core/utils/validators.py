@@ -18,25 +18,39 @@ def validate_voltage_columns(df):
     # Convertir todos los nombres de columnas a string para evitar errores con enteros
     df.columns = df.columns.astype(str)
 
+    # Log de las columnas originales para debug
+    logger.debug("Columnas originales encontradas:")
+    for i, col in enumerate(df.columns):
+        logger.debug(f"  [{i}]: '{col}' (len: {len(col)})")
+
     # Mapeo de nombres de columnas estándar a nombres encontrados
     column_mapping = {}
 
     # Procesar patrones en orden específico para evitar conflictos
     ordered_patterns = [
-        'time', 'date', 'time_utc5',  # NUEVOS CAMPOS AGREGADOS
-        'u_l1', 'u_l2', 'u_l3', 'u_l12',
-        'i_l1', 'i_l2', 
-        'p_l1', 'p_l2', 'p_l3', 'p_e',
-        'q1_l1', 'q1_l2', 'q1_e',
-        'sn_l1', 'sn_l2', 'sn_e',  # Procesar Sn antes que S
-        's_l1', 's_l2', 's_e'      # Procesar S después
+        'time', 'date', 'time_utc', 'utc_zone',  # Campos de tiempo
+        'u_l1', 'u_l2', 'u_l3', 'u_l12',        # Voltajes
+        'i_l1', 'i_l2',                          # Corrientes
+        'p_l1', 'p_l2', 'p_l3', 'p_e',          # Potencia activa
+        'q1_l1', 'q1_l2', 'q1_e',               # Potencia reactiva
+        'sn_l1', 'sn_l2', 'sn_e',               # Potencia aparente compleja (procesar antes que S)
+        's_l1', 's_l2', 's_e'                   # Potencia aparente (procesar después)
     ]
 
     for std_name in ordered_patterns:
         if std_name in COLUMN_PATTERNS:
             pattern = COLUMN_PATTERNS[std_name]
+            
             # Buscar todas las columnas que coinciden con el patrón
-            matched = [col for col in df.columns if re.search(pattern, col)]
+            matched = []
+            for col in df.columns:
+                try:
+                    if re.search(pattern, col):
+                        matched.append(col)
+                        logger.debug(f"Patrón '{std_name}' coincide con columna: '{col}'")
+                except re.error as e:
+                    logger.warning(f"Error en regex para patrón '{std_name}': {e}")
+                    continue
             
             if matched:
                 # Para potencia aparente S, asegurarnos de no tomar columnas Sn
@@ -60,18 +74,43 @@ def validate_voltage_columns(df):
                     logger.debug(f"Columna {std_name} mapeada a: {matched[0]}")
             else:
                 logger.debug(f"No se encontró columna que coincida con patrón {std_name}: {pattern}")
+    
+    # Manejar compatibilidad con time_utc5 y variaciones UTC (mapear a time_utc si existe)
+    if 'time_utc' not in column_mapping:
+        # Buscar usando patrones más amplios para compatibilidad con diferentes zonas UTC
+        time_utc_patterns = [
+            r'(?i)(time|tiempo)\s*\(utc[+-]?\d+\)',  # UTC con cualquier número
+            r'(?i)(time|tiempo).*utc.*[+-]?\d*'       # Patrón más flexible
+        ]
+        
+        for pattern in time_utc_patterns:
+            matched = [col for col in df.columns if re.search(pattern, col)]
+            if matched:
+                column_mapping['time_utc'] = matched[0]
+                logger.debug(f"Columna time_utc mapeada desde patrón UTC genérico: {matched[0]}")
+                break
 
     # Log del mapeo final para debug
-    logger.info("Mapeo final de columnas:")
     for key, value in column_mapping.items():
         logger.info(f"  {key} -> {value}")
 
-    # Verificar columnas requeridas mínimas (tiempo y al menos dos voltajes)
-    required_minimum = ['time', 'u_l1', 'u_l2', 'p_l1', 'p_l2']
-    if all(req in column_mapping for req in required_minimum):
-        logger.info(f"Se encontraron las columnas mínimas requeridas: {[column_mapping[req] for req in required_minimum]}")
+    # Verificar columnas requeridas mínimas (tiempo y al menos algunos valores eléctricos)
+    # Flexibilizar los requerimientos para manejar mejor archivos con diferentes estructuras
+    essential_patterns = {
+        'time_found': any(key in column_mapping for key in ['time', 'date', 'time_utc']),
+        'voltage_found': any(key in column_mapping for key in ['u_l1', 'u_l2', 'u_l3']),
+        'current_found': any(key in column_mapping for key in ['i_l1', 'i_l2']),
+        'power_found': any(key in column_mapping for key in ['p_l1', 'p_l2', 'p_l3', 'p_e'])
+    }
+    
+    # Requerir al menos tiempo y alguna medida eléctrica (voltaje, corriente o potencia)
+    if (essential_patterns['time_found'] and 
+        (essential_patterns['voltage_found'] or essential_patterns['current_found'] or essential_patterns['power_found'])):
+        
+        found_types = [k for k, v in essential_patterns.items() if v]
+        logger.info(f"Se encontraron las medidas esenciales: {found_types}")
         return True, column_mapping
-
+    
     # Si no se encuentran las columnas mínimas, devolver False
     return False, column_mapping
 
@@ -109,7 +148,7 @@ def generate_unique_code():
 def extract_client_code(file_path):
     """
     Extrae el código del cliente del nombre del archivo.
-    El código siempre son los últimos 10 dígitos del nombre del archivo.
+    El código es la última cadena de dígitos del nombre del archivo (entre 2 y 10 dígitos).
     Si no se puede extraer, genera un código numérico único basado en el hash del nombre.
     
     Args:
@@ -129,9 +168,9 @@ def extract_client_code(file_path):
         file_name = os.path.basename(file_path)
         name_without_ext = os.path.splitext(file_name)[0]
         
-        # Método principal: buscar exactamente 10 dígitos consecutivos
+        # Método principal: buscar la última cadena de dígitos (entre 2 y 10 dígitos)
         # al final del nombre del archivo (antes de posible espacio en blanco al final)
-        pattern = r'(\d{10})\s*$'
+        pattern = r'(\d{2,10})\s*$'
         match = re.search(pattern, name_without_ext)
         
         if match:
@@ -139,21 +178,25 @@ def extract_client_code(file_path):
             logger.info(f"Código de cliente extraído correctamente: {code}")
             return code
         
-        # Segundo método: buscar 10 dígitos consecutivos en cualquier parte del nombre
-        pattern = r'(\d{10})'
-        match = re.search(pattern, name_without_ext)
+        # Segundo método: buscar la última cadena de dígitos consecutivos en cualquier parte del nombre
+        # Encontrar todas las cadenas de 2-10 dígitos y tomar la última
+        pattern = r'(\d{2,10})'
+        matches = re.findall(pattern, name_without_ext)
         
-        if match:
-            code = match.group(1)
-            logger.info(f"Código de cliente extraído del nombre (método 2): {code}")
+        if matches:
+            # Tomar la última cadena encontrada
+            code = matches[-1]
+            logger.info(f"Código de cliente extraído del nombre (último grupo): {code}")
             return code
         
-        # Tercer método: Extraer los últimos 10 dígitos si hay al menos 10 dígitos en total
+        # Tercer método: Si hay al menos 2 dígitos en total, tomar los últimos
         all_digits = ''.join(char for char in name_without_ext if char.isdigit())
-        if len(all_digits) >= 10:
-            code = all_digits[-10:]
-            logger.info(f"Código numérico extraído (últimos 10 dígitos): {code}")
-            return code
+        if len(all_digits) >= 2:
+            # Tomar hasta 10 dígitos de los últimos dígitos disponibles
+            code = all_digits[-min(10, len(all_digits)):]
+            if len(code) >= 2:  # Asegurar que tenga al menos 2 dígitos
+                logger.info(f"Código numérico extraído (últimos dígitos): {code}")
+                return code
         
         # Si no hay suficientes dígitos, generar un código automático único basado en hash
         # del nombre del archivo para mantener consistencia entre ejecuciones
@@ -188,25 +231,25 @@ def validate_file_name(file_path):
         file_name = os.path.basename(file_path)
         name, ext = os.path.splitext(file_name)
         
-        # Validar que tenga al menos 10 caracteres antes de la extensión
-        if len(name) < 10:
+        # Validar que tenga al menos 2 caracteres antes de la extensión
+        if len(name) < 2:
             logger.warning(f"El archivo {file_name} tiene un nombre demasiado corto para extraer un código válido")
             return False
         
-        # Método principal: Buscar exactamente 10 dígitos consecutivos en el nombre
-        pattern = r'\d{10}'
+        # Método principal: Buscar al menos una cadena de 2-10 dígitos consecutivos en el nombre
+        pattern = r'\d{2,10}'
         if re.search(pattern, name):
-            logger.info(f"Nombre de archivo válido: {file_name} - contiene un código de 10 dígitos")
+            logger.info(f"Nombre de archivo válido: {file_name} - contiene un código válido")
             return True
             
-        # Verificar si hay al menos 10 dígitos en total en el nombre
+        # Verificar si hay al menos 2 dígitos en total en el nombre
         digits_count = sum(1 for char in name if char.isdigit())
-        if digits_count >= 10:
-            logger.info(f"Nombre de archivo aceptable: {file_name} - contiene al menos 10 dígitos")
+        if digits_count >= 2:
+            logger.info(f"Nombre de archivo aceptable: {file_name} - contiene al menos 2 dígitos")
             return True
         
         # Si no hay suficientes dígitos, el archivo no es válido para nuestro proceso
-        logger.warning(f"El archivo {file_name} no contiene suficientes dígitos (mínimo 10) para extraer un código")
+        logger.warning(f"El archivo {file_name} no contiene suficientes dígitos (mínimo 2) para extraer un código")
         # En el nuevo sistema, siempre consideramos los archivos válidos, ya que generaremos un código único si es necesario
         return True
         
@@ -218,7 +261,7 @@ def has_valid_client_code(file_path):
     """
     Determina si un archivo tiene un código de cliente válido que puede ser extraído.
     Esta función es más estricta que validate_file_name, ya que verifica específicamente
-    si se puede extraer un código de cliente de 10 dígitos.
+    si se puede extraer un código de cliente de 2-10 dígitos.
     
     Args:
         file_path: Ruta al archivo a validar
@@ -230,14 +273,14 @@ def has_valid_client_code(file_path):
         file_name = os.path.basename(file_path)
         name, _ = os.path.splitext(file_name)
         
-        # Buscar un patrón de 10 dígitos consecutivos
-        pattern = r'\d{10}'
+        # Buscar un patrón de 2-10 dígitos consecutivos
+        pattern = r'\d{2,10}'
         if re.search(pattern, name):
             return True
             
-        # Si no hay 10 dígitos consecutivos, verificar si hay al menos 10 dígitos en total
+        # Si no hay dígitos consecutivos suficientes, verificar si hay al menos 2 dígitos en total
         digits_count = sum(1 for char in name if char.isdigit())
-        if digits_count >= 10:
+        if digits_count >= 2:
             return True
             
         # En el nuevo sistema, siempre consideramos que tiene código válido, ya que generaremos uno si es necesario
@@ -245,5 +288,5 @@ def has_valid_client_code(file_path):
         
     except Exception as e:
         logger.error(f"Error al verificar código de cliente en {file_path}: {e}")
-        return True  # En caso de error, consideramos válido y generaremos un código único
+        return True
         

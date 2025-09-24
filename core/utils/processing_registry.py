@@ -39,7 +39,6 @@ class ProcessingRegistry:
             try:
                 with open(self.registry_file, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                    logger.info(f"📋 Registro de procesamiento cargado: {len(data.get('files', {}))} archivos registrados")
                     return data
             except (json.JSONDecodeError, IOError) as e:
                 logger.warning(f"⚠️ Error al cargar registro, creando uno nuevo: {e}")
@@ -175,7 +174,6 @@ class ProcessingRegistry:
         }
         
         self._save_registry()
-        logger.info(f"📝 Iniciando procesamiento registrado: {os.path.basename(file_path)}")
     
     def register_processing_success(self, file_path: str, additional_info: Dict = None):
         """
@@ -378,7 +376,6 @@ class ProcessingRegistry:
         }
         
         self._save_registry()
-        logger.info(f"⏱️ Tiempo total de batch registrado: {total_time_seconds:.2f} segundos")
 
     def get_batch_processing_time(self) -> float:
         """

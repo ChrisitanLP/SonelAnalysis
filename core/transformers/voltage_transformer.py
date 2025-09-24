@@ -22,8 +22,6 @@ class VoltageTransformer:
         if data is None or data.empty:
             logger.error("No hay datos para transformar")
             return None
-            
-        logger.info("Iniciando transformación de datos")
         
         try:
             # Copia para no modificar el original
@@ -52,49 +50,72 @@ class VoltageTransformer:
                                 break
                         
                         if date_col and re.search(r'(?i)hora|time', time_col):
-                            # Combinar fecha y hora si están separadas
+                            # Combinar fecha y hora si están separadas, pero extraer solo la fecha
                             date_time = df[date_col].astype(str) + ' ' + df[time_col].astype(str)
-                            transformed_df['tiempo_utc'] = pd.to_datetime(date_time, errors='coerce')
+                            full_datetime = pd.to_datetime(date_time, errors='coerce')
+                            # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                            transformed_df['tiempo_utc'] = full_datetime.dt.date
                         else:
                             # Intentar diferentes formatos de fecha/hora
-                            for date_format in ['%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%m/%d/%Y %H:%M:%S']:
+                            datetime_parsed = None
+                            for date_format in ['%Y-%m-%d %H:%M:%S', '%d/%m/%Y %H:%M:%S', '%m/%d/%Y %H:%M:%S', 
+                                            '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y']:
                                 try:
-                                    transformed_df['tiempo_utc'] = pd.to_datetime(df[time_col], format=date_format)
+                                    datetime_parsed = pd.to_datetime(df[time_col], format=date_format)
                                     break
                                 except:
                                     continue
                             
                             # Si los formatos anteriores fallan, usar el parser automático
-                            if 'tiempo_utc' not in transformed_df.columns:
-                                transformed_df['tiempo_utc'] = pd.to_datetime(df[time_col], errors='coerce')
+                            if datetime_parsed is None:
+                                datetime_parsed = pd.to_datetime(df[time_col], errors='coerce')
+                            
+                            # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                            transformed_df['tiempo_utc'] = datetime_parsed.dt.date
                     else:
                         # Probablemente ya es datetime
-                        transformed_df['tiempo_utc'] = df[time_col]
+                        datetime_parsed = df[time_col]
+                        # MODIFICACIÓN: Extraer solo la fecha sin componente horario
+                        transformed_df['tiempo_utc'] = datetime_parsed.dt.date
                 except Exception as e:
                     logger.error(f"Error al convertir columna de tiempo: {e}")
-                    # Usar el valor original como fallback
-                    transformed_df['tiempo_utc'] = df[time_col]
+                    # Usar el valor original como fallback, pero intentar extraer solo fecha
+                    try:
+                        datetime_fallback = pd.to_datetime(df[time_col], errors='coerce')
+                        transformed_df['tiempo_utc'] = datetime_fallback.dt.date
+                    except:
+                        transformed_df['tiempo_utc'] = df[time_col]
             else:
                 logger.error("No se encontró columna de tiempo para la transformación")
                 return None
-        
+
             date_col = column_map.get('date')
             if date_col:
                 try:
-                    transformed_df['date_field'] = pd.to_datetime(df[date_col], errors='coerce').dt.date
-                    logger.info(f"Campo Date procesado correctamente desde columna: {date_col}")
+                    date_parsed = pd.to_datetime(df[date_col], errors='coerce')
+                    # MODIFICACIÓN: Usar solo la fecha sin componente horario
+                    transformed_df['date_field'] = date_parsed.dt.date
                 except Exception as e:
                     logger.warning(f"Error al procesar campo Date: {e}")
                     transformed_df['date_field'] = None
             else:
-                logger.info("No se encontró columna Date separada")
                 transformed_df['date_field'] = None
             
-            time_utc5_col = column_map.get('time_utc5')
-            if time_utc5_col:
+            time_utc_col = column_map.get('time_utc') or column_map.get('time_utc5')
+            utc_zone = None
+
+            if time_utc_col:
                 try:
-                    # Procesar tiempo UTC-5, puede venir como string con formato HH:MM:SS.mmm
-                    time_series = df[time_utc5_col].astype(str)
+                    # Extraer la zona UTC del nombre de la columna
+                    utc_zone_match = re.search(r'utc([+-]\d+)', time_utc_col.lower())
+                    if utc_zone_match:
+                        utc_zone = f"UTC{utc_zone_match.group(1)}"
+                    else:
+                        # Valor por defecto si no se puede extraer
+                        utc_zone = "UTC-5"
+                    
+                    # Procesar tiempo UTC, puede venir como string con formato HH:MM:SS.mmm
+                    time_series = df[time_utc_col].astype(str)
                     
                     # Intentar convertir a tiempo
                     def parse_time(time_str):
@@ -117,14 +138,16 @@ class VoltageTransformer:
                         except:
                             return None
                     
-                    transformed_df['time_utc5'] = time_series.apply(parse_time)
-                    logger.info(f"Campo Time (UTC-5) procesado correctamente desde columna: {time_utc5_col}")
+                    transformed_df['time'] = time_series.apply(parse_time)
+                    transformed_df['utc_zone'] = utc_zone
                 except Exception as e:
-                    logger.warning(f"Error al procesar campo Time (UTC-5): {e}")
-                    transformed_df['time_utc5'] = None
+                    logger.warning(f"Error al procesar campo Time UTC: {e}")
+                    transformed_df['time'] = None
+                    transformed_df['utc_zone'] = None
             else:
-                logger.info("No se encontró columna Time (UTC-5) separada")
-                transformed_df['time_utc5'] = None
+                logger.info("No se encontró columna Time UTC separada")
+                transformed_df['time'] = None
+                transformed_df['utc_zone'] = None
             
             # Función auxiliar para convertir valores a numéricos
             def convert_to_numeric(df, source_col):
@@ -152,10 +175,10 @@ class VoltageTransformer:
 
             # Convertir columnas de voltaje
             voltage_columns = {
-                'u_l1_avg_10min': column_map.get('u_l1'),
-                'u_l2_avg_10min': column_map.get('u_l2'),
-                'u_l3_avg_10min': column_map.get('u_l3'),
-                'u_l12_avg_10min': column_map.get('u_l12')
+                'u_l1_avg': column_map.get('u_l1'),
+                'u_l2_avg': column_map.get('u_l2'),
+                'u_l3_avg': column_map.get('u_l3'),
+                'u_l12_avg': column_map.get('u_l12')
             }
             
             for target_col, source_col in voltage_columns.items():
@@ -205,8 +228,6 @@ class VoltageTransformer:
                     logger.warning("Las columnas de potencia existen pero no contienen datos")
             else:
                 logger.warning("No se encontraron columnas de potencia en el archivo")
-            
-            logger.info("Transformación de datos completada exitosamente")
             return transformed_df
             
         except Exception as e:

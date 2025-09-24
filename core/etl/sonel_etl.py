@@ -90,28 +90,25 @@ class SonelETL:
     def _run_standard_etl(self, extraction_method, force_reprocess):
         """Ejecuta el proceso ETL estándar"""
         # Paso 1: Extracción
-        logger.info("📥 Iniciando extracción de datos")
         extracted_data = self.data_extractor.extract_data(extraction_method, force_reprocess)
         if extracted_data is None:
-            logger.info("ℹ️ No hay datos nuevos para procesar")
+            logger.info("No hay datos nuevos para procesar")
             return True
-           
+        
         # Paso 2: Transformación
-        logger.info("🔧 Iniciando transformación de datos")
         transformed_data = self.data_transformer.transform_data(extracted_data)
         if transformed_data is None:
-            logger.error("❌ Fallo en la fase de transformación de datos")
+            logger.error("Fallo en la fase de transformación de datos")
             return False
-           
+        
         # Paso 3: Carga
-        logger.info("⬆️ Cargando datos transformados a la base de datos")
         cliente_codigo = "ETL_STANDARD"
-        load_success = self.data_loader.load_data_standard(transformed_data, cliente_codigo)
+        # Modificación: pasar nombre de archivo para ETL estándar
+        load_success = self.data_loader.load_data_standard(transformed_data, cliente_codigo, "ETL_STANDARD_PROCESS")
         if not load_success:
-            logger.error("❌ Fallo en la fase de carga de datos")
+            logger.error("Fallo en la fase de carga de datos")
             return False
-           
-        logger.info("✅ Proceso ETL completado exitosamente")
+        
         return True
     
     def process_file(self, file_path, force_reprocess=False):

@@ -16,7 +16,7 @@ from core.utils.callbacks import ProcessingCallbackManager, ProcessingEventType,
 from config.logger import get_logger
 from core.database.connection import DatabaseConnection
 from core.extractors.pywin_extractor import SonelExtractorCompleto
-from config.settings import get_full_config, validate_configuration, validate_screen_resolution
+from config.settings import get_full_config, validate_configuration, validate_screen_resolution, load_config
 
 
 class SonelControllerEnhanced:
@@ -124,7 +124,6 @@ class SonelControllerEnhanced:
         
         try:
             # Inicializar conexión a base de datos
-            from config.settings import load_config
             etl_config = load_config(self.config_file)
             
             db_connection = DatabaseConnection(etl_config)

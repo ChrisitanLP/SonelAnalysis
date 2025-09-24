@@ -8,6 +8,7 @@ from core.parser.csv_parser import CSVParser
 from core.extractors.base import BaseExtractor
 from core.parser.excel_parser import ExcelParser
 from config.settings import FILE_SEARCH_PATTERNS
+from core.utils.validators import validate_voltage_columns
 from core.utils.processing_registry import ProcessingRegistry
 
 class FileExtractor(BaseExtractor):
@@ -43,7 +44,6 @@ class FileExtractor(BaseExtractor):
                 logger.info(f"ℹ️ No se encontraron archivos nuevos para procesar en {self.data_dir}")
                 return None
 
-            logger.info(f"Procesando archivo por defecto: {files[0]}")
             return self.extract_from_file(files[0])
         except Exception as e:
             logger.exception(f"Error en extract(): {e}")
@@ -82,7 +82,6 @@ class FileExtractor(BaseExtractor):
                 logger.warning("Extracción de archivos XML no implementada completamente")
                 try:
                     df = pd.read_xml(file_path)
-                    from utils.validators import validate_voltage_columns
                     valid, _ = validate_voltage_columns(df)
                     if valid:
                         return df
@@ -181,7 +180,6 @@ class FileExtractor(BaseExtractor):
             dict: Diccionario con rutas de archivos como claves y DataFrames como valores
         """
         if force_reprocess:
-            logger.info("🔄 Modo de reprocesamiento forzado activado")
             files = self.find_files_in_directory(directory)
         else:
             files = self.find_files_to_process(directory)
@@ -267,11 +265,9 @@ class FileExtractor(BaseExtractor):
                 if file_key in self.registry.registry_data["files"]:
                     del self.registry.registry_data["files"][file_key]
                     self.registry._save_registry()
-                    logger.info(f"🔄 Estado reiniciado: {os.path.basename(file_path)}")
             else:
                 if file_key in self.registry.registry_data["files"]:
                     self.registry.registry_data["files"][file_key]["status"] = new_status
                     self.registry._save_registry()
-                    logger.info(f"🔄 Estado cambiado a {new_status}: {os.path.basename(file_path)}")
         except Exception as e:
             logger.exception(f"Error al reiniciar estado del archivo {file_path}: {e}")

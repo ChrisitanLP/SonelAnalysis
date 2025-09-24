@@ -5,6 +5,8 @@ Sistema de callbacks para actualizaciones en tiempo real del procesamiento
 import os
 import time
 import json
+import psutil
+import platform
 from enum import Enum
 from datetime import datetime
 from config.logger import logger
@@ -350,9 +352,6 @@ class ProcessingCallbackManager:
     
     def _get_system_info(self) -> Dict[str, Any]:
         """Obtiene información del sistema"""
-        import platform
-        import psutil
-        
         return {
             'platform': platform.platform(),
             'python_version': platform.python_version(),

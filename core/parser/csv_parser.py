@@ -20,9 +20,6 @@ class CSVParser:
             DataFrame con los datos o None si hay errores
         """
         try:
-            # Intentar leer directamente con detección automática
-            logger.info(f"Intentando leer archivo CSV: {file_path}")
-            
             # Probar diferentes combinaciones de separador y encoding
             for sep in [';', ',', '\t', '|']:
                 for encoding in ['utf-8', 'utf-8-sig', 'latin1', 'iso-8859-1', 'cp1252', 'utf-16', 'utf-16le', 'utf-16be', 'windows-1252', 'iso-8859-15']:
@@ -31,7 +28,6 @@ class CSVParser:
                         
                         # Verificar si las primeras filas contienen datos numéricos en lugar de encabezados
                         if df.shape[1] > 0 and all(isinstance(col, (int, float)) for col in df.columns):
-                            logger.info("Se ha detectado que las columnas son numéricas. Intentando con header=None")
                             # Posible archivo sin encabezados o con encabezados en la primera fila
                             df = pd.read_csv(file_path, sep=sep, encoding=encoding, header=None)
                             # Intentar usar primera fila como encabezados
@@ -163,7 +159,6 @@ class CSVParser:
                         # Buscar filas que contengan palabras clave como "Fecha", "Hora", "U1", "U2"
                         for i, row in preview_str.iterrows():
                             row_values = " ".join(row.values)
-                            logger.info(f"Fila {i+1}: {row_values[:100]}...")  # Mostrar primeros 100 caracteres
                             
                             # Buscar patrones de encabezados más amplios
                             header_patterns = [
@@ -174,7 +169,6 @@ class CSVParser:
                             ]
                             
                             if any(any(re.search(pattern, val) for val in row.values) for pattern in header_patterns):
-                                logger.info(f"Posible fila de encabezados encontrada en la fila {i+1}")
                                 # Intentar con esta fila como encabezado
                                 try:
                                     if i == 0:
@@ -254,7 +248,6 @@ class CSVParser:
                             
                             if any(re.search(pattern, line) for pattern in header_patterns):
                                 data_start_line = i
-                                logger.info(f"Posible línea de encabezados encontrada en línea {i+1}: {line[:100]}...")
                                 break
                             
                             # También considerar la línea con más columnas como posible encabezado
@@ -277,9 +270,6 @@ class CSVParser:
                                     continue
                                     
                                 df.columns = df.columns.astype(str)
-                                
-                                # Imprimir las columnas para debug
-                                logger.info(f"Columnas encontradas desde línea {data_start_line+1}: {list(df.columns)}")
                                 
                                 valid, column_map = validate_voltage_columns(df)
                                 if valid:
@@ -360,22 +350,35 @@ class CSVParser:
             
         cleaned_df = df.copy()
         
-        # Mapeo de caracteres problemáticos comunes
+        # Mapeo de caracteres problemáticos comunes - ampliado para inglés
         char_replacements = {
-            '��': 'Σ',     # Símbolo suma
+            '��': 'Σ',     # Símbolo suma - común en archivos en inglés
             'ï¿½': 'Σ',    # Otro encoding del símbolo suma
-            'âˆ': 'Σ',    # Otro encoding del símbolo suma
+            'âˆ': 'Σ',     # Otro encoding del símbolo suma
             'Î£': 'Σ',     # Otro encoding del símbolo suma
+            'â��': 'Σ',     # Variación adicional del símbolo suma
+            '∑': 'Σ',      # Símbolo suma Unicode correcto
+            # Agregar más variaciones comunes encontradas en archivos en inglés
+            'Âº': '°',     # Símbolo de grado
+            'Â': '',       # Caracter problemático común
+            '\ufeff': '',  # BOM (Byte Order Mark)
         }
         
         # Limpiar nombres de columnas
         new_columns = []
         for col in cleaned_df.columns:
-            clean_col = str(col)
+            clean_col = str(col).strip()
             
             # Aplicar reemplazos de caracteres problemáticos
             for problematic, replacement in char_replacements.items():
                 clean_col = clean_col.replace(problematic, replacement)
+            
+            # Limpiar espacios múltiples que podrían afectar el reconocimiento
+            clean_col = re.sub(r'\s+', ' ', clean_col)
+            
+            # Log para debug del proceso de limpieza
+            if clean_col != str(col).strip():
+                logger.debug(f"Columna limpiada: '{str(col).strip()}' -> '{clean_col}'")
             
             new_columns.append(clean_col)
         

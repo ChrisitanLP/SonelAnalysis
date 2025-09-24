@@ -19,10 +19,18 @@ class TextUtils:
         """
         if not texto:
             return ""
-        texto = texto.lower().strip()
-        # Eliminar caracteres especiales comunes
-        texto = re.sub(r'[^\w\s.]', '', texto)
-        return texto
+        
+        # Eliminar etiquetas HTML
+        texto = re.sub(r"<sub>(.*?)</sub>", r"\1", texto, flags=re.IGNORECASE)
+        texto = re.sub(r"<.*?>", "", texto)
+        
+        # Eliminar símbolos y caracteres especiales
+        texto = re.sub(r"[<>_/\-\(\)\[\]{}]", " ", texto)
+        
+        # Normalizar espacios y convertir a minúsculas
+        texto = re.sub(r'\s+', ' ', texto)
+        
+        return texto.lower().strip()
     
     @staticmethod
     def texto_coincide(texto_control, lista_traducciones):
@@ -42,3 +50,21 @@ class TextUtils:
                 return True
         return False
     
+    @staticmethod
+    def contiene_termino_excluido(texto, terminos_excluidos):
+        """
+        Verifica si el texto contiene algún término que debe ser excluido
+        
+        Args:
+            texto (str): Texto a verificar
+            terminos_excluidos (list): Lista de términos excluidos
+            
+        Returns:
+            bool: True si contiene término excluido, False en caso contrario
+        """
+        texto_normalizado = TextUtils.normalizar_texto(texto)
+        for termino in terminos_excluidos:
+            termino_normalizado = TextUtils.normalizar_texto(termino)
+            if termino_normalizado in texto_normalizado:
+                return True
+        return False
