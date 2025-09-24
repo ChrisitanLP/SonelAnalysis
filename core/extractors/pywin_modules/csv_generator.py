@@ -30,7 +30,6 @@ class CSVGenerator:
         try:
             # Generar nombre esperado del CSV
             expected_csv_path = self._get_expected_csv_name(archivo_pqm)
-            self.logger.info(f"📄 Archivo CSV esperado: {os.path.basename(expected_csv_path)}")
             
             # Guardar archivo CSV
             time.sleep(1)
@@ -44,7 +43,6 @@ class CSVGenerator:
             time.sleep(3)
 
             # Buscar el archivo CSV con nombres alternativos
-            self.logger.info(f"🔍 Iniciando verificación de archivo")
             found_csv = self._find_generated_csv(expected_csv_path, archivo_pqm)
             
             if found_csv and self._verify_file_creation(found_csv):
@@ -75,8 +73,6 @@ class CSVGenerator:
         """
         verification_attempts = 0
         
-        self.logger.info(f"🔍 Iniciando verificación de archivo: {os.path.basename(csv_path)}")
-        
         while verification_attempts < max_attempts:
             if os.path.exists(csv_path):
                 file_size = os.path.getsize(csv_path)
@@ -88,7 +84,6 @@ class CSVGenerator:
             
             verification_attempts += 1
             time.sleep(self.delays['file_verification'])
-            self.logger.info(f"🔄 Verificación {verification_attempts}/{max_attempts} - Buscando: {os.path.basename(csv_path)}")
         
         self.logger.error(f"❌ Archivo no pudo ser verificado después de {max_attempts} intentos: {os.path.basename(csv_path)}")
         return False
@@ -218,7 +213,6 @@ class CSVGenerator:
             possible_path = os.path.join(self.PATHS['output_dir'], possible_name)
             if os.path.exists(possible_path):
                 self.logger.info(f"📂 Archivo CSV encontrado con nombre alternativo: {possible_name}")
-                self.logger.info(f"   📁 Directorio fuente: {source_directory}")
                 return possible_path
         
         # Buscar cualquier archivo CSV creado recientemente con patrón similar
@@ -247,8 +241,6 @@ class CSVGenerator:
                     
                     if time_diff < 300:  # 5 minutos
                         self.logger.info(f"📂 Posible archivo CSV encontrado por similitud: {most_recent[0]}")
-                        self.logger.info(f"   📁 Directorio fuente: {source_directory}")
-                        self.logger.info(f"   ⏰ Creado hace {int(time_diff)} segundos")
                         return most_recent[2]
         
         except Exception as e:

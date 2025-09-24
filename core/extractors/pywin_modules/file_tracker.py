@@ -112,9 +112,6 @@ class FileTracker:
                 )
                 ultimo_procesado = latest_entry.get('processing_completed', 'N/A')
             
-            # Log de estadísticas para debugging
-            self.logger.info(f"📊 Estadísticas cargadas - Total: {len(files_info)}, Último: {ultimo_procesado}")
-            
             return {
                 "total": len(files_info),
                 "archivos": archivos_procesados,
@@ -177,26 +174,21 @@ class FileTracker:
                     self.logger.info(f"   ⚠️ Razón: Estado='{status}', CSV_verificado={csv_verified}")
                     return False
             else:
+                file_name = os.path.basename(file_path)
+                file_path_normalized = os.path.abspath(file_path)
+                
                 # NUEVA LÓGICA: Buscar otros archivos con el mismo nombre pero diferente directorio
-                same_name_files = []
-                for existing_key, existing_entry in files_info.items():
-                    if existing_entry.get("filename") == filename and existing_key != file_key:
-                        same_name_files.append((existing_key, existing_entry))
-
-                if same_name_files:
-                    self.logger.info(f"📂 Archivo {filename} encontrado en otros directorios ({len(same_name_files)} registros)")
-                    self.logger.info(f"   📁 Directorio actual: '{directory_name}' (nuevo procesamiento)")
-                    
-                    for i, (key, entry) in enumerate(same_name_files, 1):
-                        other_paths = entry.get("source_paths", [])
-                        other_dir = "desconocido"
-                        if other_paths:
-                            other_dir = os.path.basename(os.path.dirname(other_paths[0]))
-                        status = entry.get("status", "")
-                        self.logger.info(f"   📁 Directorio {i}: '{other_dir}' (Estado: {status})")
-
+                with open(self.processed_files_json, 'r', encoding='utf-8') as f:
+                    processed_data = json.load(f)
+                
+                for entry in processed_data.get("files", {}).values():
+                    if entry.get("filename") == file_name:
+                        if file_path_normalized in entry.get("source_paths", []):
+                            self.logger.info(f"⏭️ Saltando {filename} del directorio '{directory_name}' (ya procesado exitosamente)")
+                            self.logger.info(f"   📌 Archivo '{file_name}' detectado como procesado")
+                            self.logger.info(f"   📁 Ruta en source_paths: {file_path_normalized}")
+                            return True
             return False
-
         except json.JSONDecodeError as e:
             self.logger.warning(f"Error leyendo JSON de procesados: {e}")
             return False
@@ -292,7 +284,6 @@ class FileTracker:
             
             # Si existe con otra clave, consolidar información
             if existing_entries:
-                self.logger.info(f"🔄 Consolidando registro existente para {file_name}")
                 
                 # Tomar el primer registro existente como base
                 base_key, base_entry = existing_entries[0]
@@ -366,8 +357,6 @@ class FileTracker:
                     if dup_key in files_info:
                         del files_info[dup_key]
                         self.logger.info(f"🗑️ Eliminado registro duplicado con clave: {dup_key}")
-                
-                self.logger.info(f"✅ Registro consolidado para {file_name} con clave: {base_key}")
                 
             else:
                 # Proceder normalmente
@@ -565,3 +554,4 @@ class FileTracker:
                 return {"size": 0, "modified": datetime.now().isoformat()}
         except Exception as e:
             return {"size": 0, "modified": datetime.now().isoformat(), "error": str(e)}
+        

@@ -1,4 +1,6 @@
 import os
+import re
+import glob
 import json
 import time
 import psutil
@@ -52,7 +54,7 @@ class SonelExtractorCompleto:
         os.makedirs(self.PATHS['output_dir'], exist_ok=True)
         os.makedirs(self.PATHS['process_file_dir'], exist_ok=True)
     
-        # ✅ Logger específico para pywinauto (para usar en clases hijas)
+        # Logger específico para pywinauto (para usar en clases hijas)
         self.pywinauto_logger = get_logger("pywinauto", f"{__name__}_pywinauto")
         
         # Configurar nivel de logging
@@ -64,13 +66,14 @@ class SonelExtractorCompleto:
         self.pywinauto_logger.info(f"📁 Directorio salida: {self.PATHS['output_dir']}")
         self.pywinauto_logger.info("="*80)
         
-        # ✅ Log de configuración de loggers
+        # Log de configuración de loggers
         self.pywinauto_logger.info("📊 Sistema de logging configurado:")
         self.pywinauto_logger.info(f"   - Logger pywinauto: {self.pywinauto_logger.name}")
 
         self.process_start_time = None
         self.total_files_attempted = 0
         self.total_size_bytes = 0
+        self.archivos_saltados = []
 
         # Inicializar módulos
         self._init_modules()
@@ -90,7 +93,7 @@ class SonelExtractorCompleto:
         pqm_files = self.file_manager.get_pqm_files()
         
         if pqm_files:
-            # NUEVO: Analizar duplicados por directorio
+            # Analizar duplicados por directorio
             duplicate_analysis = self.file_manager.check_duplicate_filenames_across_directories(pqm_files)
             
             self.pywinauto_logger.info("📊 Análisis de duplicados por directorio:")
@@ -99,7 +102,7 @@ class SonelExtractorCompleto:
             self.pywinauto_logger.info(f"   🔄 Nombres duplicados: {duplicate_analysis['duplicate_filenames']}")
             
             if duplicate_analysis['duplicate_filenames'] > 0:
-                self.pywinauto_logger.info("   ✅ Cada archivo será procesado independientemente por directorio")
+                self.pywinauto_logger.info("   Cada archivo será procesado independientemente por directorio")
                 self.pywinauto_logger.info("   📝 Los CSVs tendrán numeración incremental para evitar conflictos")
         
         return pqm_files
@@ -109,8 +112,42 @@ class SonelExtractorCompleto:
         return self.file_tracker.get_processing_statistics()
 
     def ya_ha_sido_procesado(self, file_path):
-        """Verifica si un archivo ya ha sido procesado anteriormente"""
-        return self.file_tracker.is_already_processed(file_path)
+        """
+        Verifica si un archivo ya ha sido procesado anteriormente.
+        Se revisa tanto la clave única como la ruta en source_paths.
+        """
+        file_name = os.path.basename(file_path)
+
+        # Verificar con la clave única existente (lógica actual)
+        if self.file_tracker.is_already_processed(file_path):
+            nombre_archivo = os.path.basename(file_path)
+            self.archivos_saltados.append(nombre_archivo)
+            self.pywinauto_logger.info(f"📌 Archivo '{file_name}' detectado como procesado por CLAVE única.")
+            return True
+
+        # Si no está ni por clave ni por ruta
+        return False
+    
+    def agregar_resumen_consolidado(self, file_path):
+        """
+        Verifica si un archivo ya ha sido procesado anteriormente.
+        Se revisa tanto la clave única como la ruta en source_paths.
+        """
+        try:
+            nombre_archivo = os.path.basename(file_path)
+
+            if nombre_archivo in self.archivos_saltados:
+                self.pywinauto_logger.info(f"📋 Agregado al resumen consolidado: {nombre_archivo}")
+                return True
+
+            self.pywinauto_logger.info(f"🚫 No se agrega al resumen consolidado: {nombre_archivo} (archivo saltado)")
+            return False
+        except json.JSONDecodeError as e:
+            self.pywinauto_logger.warning(f"Error leyendo JSON de procesados: {e}")
+            return False
+        except Exception as e:
+            self.pywinauto_logger.error(f"Error verificando archivo procesado {file_path}: {e}")
+            return False
 
     def registrar_archivo_procesado(self, file_path, resultado_exitoso=True, csv_path=None, 
                                   processing_time=None, error_message=None, additional_info=None):
@@ -227,7 +264,7 @@ class SonelExtractorCompleto:
 
             # Log del resultado final con tipo de archivo
             if proceso_exitoso:
-                self.pywinauto_logger.info(f"✅ Procesamiento exitoso: {nombre_archivo} ({pqm_type})")
+                self.pywinauto_logger.info(f"Procesamiento exitoso: {nombre_archivo} ({pqm_type})")
             else:
                 self.pywinauto_logger.error(f"❌ Procesamiento falló: {nombre_archivo} ({pqm_type}) - No se generó CSV válido")
             
@@ -274,7 +311,7 @@ class SonelExtractorCompleto:
             "saltados": 0,
             "csvs_verificados": 0,
             "detalles": [],
-            "tipos_archivo": {}  # Nuevo: contador por tipo de extensión
+            "tipos_archivo": {}  # contador por tipo de extensión
         }
         
         try:
@@ -288,11 +325,11 @@ class SonelExtractorCompleto:
             archivos_pqm = self.get_pqm_files()
             if not archivos_pqm:
                 self.pywinauto_logger.warning("⚠️ No se encontraron archivos PQM para procesar")
-                # ✅ ASEGURAR: Generar resumen incluso sin archivos
+                # Generar resumen incluso sin archivos
                 summary = self._generate_extraction_summary(resultados_globales, archivos_pqm)
                 self._log_extraction_summary(summary)
                 
-                # ✅ NUEVO: Intentar generar archivo de resumen incluso sin procesamiento
+                # Intentar generar archivo de resumen incluso sin procesamiento
                 try:
                     output_file = self.save_csv_summary_to_file()
                     if output_file:
@@ -315,7 +352,6 @@ class SonelExtractorCompleto:
             resultados_globales["tipos_archivo"] = tipos_encontrados
             
             # Log de tipos encontrados
-            self.pywinauto_logger.info("📋 Tipos de archivo PQM encontrados:")
             for tipo, cantidad in tipos_encontrados.items():
                 self.pywinauto_logger.info(f"   - {tipo}: {cantidad} archivo(s)")
             
@@ -329,15 +365,9 @@ class SonelExtractorCompleto:
             resultados_globales["saltados"] = len(archivos_pqm) - len(archivos_pendientes)
             
             if not archivos_pendientes:
-                self.pywinauto_logger.info("✅ Todos los archivos ya han sido procesados")
                 summary = self._generate_extraction_summary(resultados_globales, archivos_pqm)
                 self._log_extraction_summary(summary)
-                
-                # ✅ ASEGURAR: Generar resumen con archivos ya procesados
-                output_file = self.save_csv_summary_to_file()
-                if output_file:
-                    self.pywinauto_logger.info(f"📄 Resumen actualizado guardado en: {output_file}")
-                
+
                 return resultados_globales
             
             self.pywinauto_logger.info(f"🔄 Archivos pendientes de procesar: {len(archivos_pendientes)}")
@@ -367,7 +397,7 @@ class SonelExtractorCompleto:
                             "csv_verificado": True,
                             "tipo_pqm": pqm_type
                         })
-                        self.pywinauto_logger.info(f"✅ Archivo procesado exitosamente: {nombre_archivo} ({pqm_type})")
+                        self.pywinauto_logger.info(f"Archivo procesado exitosamente: {nombre_archivo} ({pqm_type})")
                         
                         # CIERRE SUAVE - Solo cerrar procesos, no forzar
                         try:
@@ -413,10 +443,8 @@ class SonelExtractorCompleto:
 
                 # Pausa entre archivos para estabilidad
                 if i < len(archivos_pendientes):
-                    self.pywinauto_logger.info("⏳ Pausa entre archivos")
                     time.sleep(4)
             
-            # [RESTO DEL CÓDIGO PERMANECE IGUAL...]
             # Resumen final mejorado con más detalles
             self._log_final_summary(resultados_globales, archivos_pqm)
 
@@ -424,28 +452,25 @@ class SonelExtractorCompleto:
             self._log_extraction_summary(summary)
 
             # Limpieza final
-            self.pywinauto_logger.info("🧹 Limpieza final de procesos Sonel Analysis")
             try:
                 self.close_sonel_analysis_force()
             except Exception as e:
                 self.pywinauto_logger.warning(f"⚠️ Error en limpieza final: {e}")
 
-            # ✅ CRÍTICO: Generar resumen CSV para GUI - SIEMPRE
+            # Generar resumen CSV para GUI - SIEMPRE
             try:
                 csv_summary = self.get_csv_summary_for_gui()
                 resultados_globales["csv_summary"] = csv_summary
                 
-                # ✅ ASEGURAR: Guardar archivo de resumen
+                # Guardar archivo de resumen
                 output_file = self.save_csv_summary_to_file()
                 if output_file:
-                    self.pywinauto_logger.info(f"✅ Resumen final guardado exitosamente en: {output_file}")
                     resultados_globales["resumen_archivo"] = output_file
                 else:
                     self.pywinauto_logger.error("❌ No se pudo guardar el archivo de resumen")
                     
             except Exception as resumen_error:
                 self.pywinauto_logger.error(f"❌ Error crítico generando resumen final: {resumen_error}")
-                import traceback
                 self.pywinauto_logger.error(traceback.format_exc())
 
             return resultados_globales
@@ -457,11 +482,10 @@ class SonelExtractorCompleto:
             summary = self._generate_extraction_summary(resultados_globales, archivos_pqm if 'archivos_pqm' in locals() else [])
             self._log_extraction_summary(summary)
             
-            # ✅ ASEGURAR: Generar resumen incluso en caso de error crítico
+            # Generar resumen incluso en caso de error crítico
             try:
                 output_file = self.save_csv_summary_to_file()
                 if output_file:
-                    self.pywinauto_logger.info(f"📄 Resumen de error guardado en: {output_file}")
                     resultados_globales["resumen_archivo"] = output_file
             except Exception as error_summary:
                 self.pywinauto_logger.error(f"❌ Error guardando resumen de error: {error_summary}")
@@ -587,7 +611,7 @@ class SonelExtractorCompleto:
                 
                 # Determinar estado y mensaje
                 if status == "exitoso" and csv_verified:
-                    status_display = f"✅ Procesado ({pqm_type})"
+                    status_display = f"Procesado ({pqm_type})"
                     csv_output_name = csv_output.get('filename', f"{file_stem}.csv")
                     message = f"Procesado correctamente - Tipo: {pqm_type}"
                     
@@ -651,7 +675,7 @@ class SonelExtractorCompleto:
         """Log del resumen final con información detallada"""
         self.pywinauto_logger.info("\n" + "="*80)
         self.pywinauto_logger.info("📊 RESUMEN FINAL DE PROCESAMIENTO")
-        self.pywinauto_logger.info(f"✅ Procesados exitosamente: {resultados_globales['procesados_exitosos']}")
+        self.pywinauto_logger.info(f"Procesados exitosamente: {resultados_globales['procesados_exitosos']}")
         self.pywinauto_logger.info(f"📄 CSVs verificados: {resultados_globales['csvs_verificados']}")
         self.pywinauto_logger.info(f"❌ Procesados con error: {resultados_globales['procesados_fallidos']}")
         self.pywinauto_logger.info(f"⏭️  Saltados (ya procesados): {resultados_globales['saltados']}")
@@ -686,14 +710,12 @@ class SonelExtractorCompleto:
             total_files = len(archivos_pqm)
             
             if total_files == 0:
-                self.pywinauto_logger.info("📄 No hay archivos PQM para procesar")
                 return CSVSummaryUtils._get_empty_csv_summary()
             
-            # ✅ CORREGIDO: Cargar datos de procesamiento desde JSON usando nueva estructura
+            # CORREGIDO: Cargar datos de procesamiento desde JSON usando nueva estructura
             processed_data = self.file_tracker._load_processed_files_data()
             
             if not processed_data:
-                self.pywinauto_logger.info("📊 No hay datos de procesamiento registrados aún")
                 return CSVSummaryUtils._get_empty_csv_summary()
             
             # Inicializar contadores
@@ -705,10 +727,18 @@ class SonelExtractorCompleto:
             execution_times = []
             files_details = []
             
-            # NUEVA LÓGICA: Solo procesar archivos que NO fueron saltados
+            # Solo procesar archivos que NO fueron saltados
             archivos_realmente_procesados = []
+            archivos_excluidos_count = 0
+        
             for archivo_pqm in archivos_pqm:
                 file_key = self.file_tracker._generate_file_key(archivo_pqm)
+
+                # Verificar si el archivo fue saltado en esta ejecución
+                if self.agregar_resumen_consolidado(archivo_pqm):
+                    archivos_excluidos_count += 1
+                    self.pywinauto_logger.debug(f"⏭️ Excluido del resumen: {os.path.basename(archivo_pqm)} (saltado en esta ejecución)")
+                    continue
                 
                 # Verificar si el archivo existe en el registro Y fue procesado recientemente
                 if file_key in processed_data:
@@ -719,25 +749,25 @@ class SonelExtractorCompleto:
                     if processing_date:
                         try:
                             processing_datetime = datetime.fromisoformat(processing_date.replace('Z', '+00:00'))
-                            current_session_start = self.process_start_time or (datetime.now() - timedelta(days=45))
+                            current_session_start = self.process_start_time or (datetime.now() - timedelta(hours=730))
                             
                             if processing_datetime >= current_session_start:
                                 archivos_realmente_procesados.append(archivo_pqm)
                                 self.pywinauto_logger.debug(f"📊 Incluido en resumen: {os.path.basename(archivo_pqm)} (procesado: {processing_date})")
                             else:
+                                archivos_excluidos_count += 1
                                 self.pywinauto_logger.debug(f"⏭️ Excluido del resumen: {os.path.basename(archivo_pqm)} (procesado previamente: {processing_date})")
                         except ValueError:
-                            # Si hay error parseando la fecha, incluir por seguridad
+                            # Si hay error parseando la fecha, incluir por seguridad si no fue saltado
                             archivos_realmente_procesados.append(archivo_pqm)
                             self.pywinauto_logger.warning(f"⚠️ Error parseando fecha para {os.path.basename(archivo_pqm)}, incluido por seguridad")
                 else:
                     # Si no está en el registro, significa que es nuevo y debe ser incluido
                     archivos_realmente_procesados.append(archivo_pqm)
-                    self.pywinauto_logger.debug(f"📋 Archivo nuevo incluido: {os.path.basename(archivo_pqm)}")
             
             self.pywinauto_logger.info(f"📊 Archivos para resumen CSV: {len(archivos_realmente_procesados)}/{len(archivos_pqm)} (excluidos {len(archivos_pqm) - len(archivos_realmente_procesados)} ya procesados)")
             
-            # ✅ CORREGIDO: Procesar solo archivos que fueron realmente procesados
+            # CORREGIDO: Procesar solo archivos que fueron realmente procesados
             for archivo_pqm in archivos_realmente_procesados:
                 file_detail = self._process_file_for_summary(archivo_pqm, processed_data)
                 
@@ -775,7 +805,7 @@ class SonelExtractorCompleto:
             # Calcular total de registros estimado (basado en archivos exitosos)
             total_records = csv_files_generated * 3278  # Estimación promedio por archivo
             
-            # ✅ NUEVO: Log de resumen generado para debugging
+            # Log de resumen generado para debugging
             self.pywinauto_logger.info(f"📊 Resumen CSV generado - Procesados: {processed_files}/{total_files_for_metrics}, CSVs: {csv_files_generated}, Errores: {errors}, Advertencias: {warnings}")
             
             return {
@@ -794,7 +824,6 @@ class SonelExtractorCompleto:
             
         except Exception as e:
             self.pywinauto_logger.error(f"❌ Error generando resumen CSV para GUI: {e}")
-            import traceback
             self.pywinauto_logger.error(traceback.format_exc())
             return CSVSummaryUtils._get_empty_csv_summary()
         
@@ -868,9 +897,9 @@ class SonelExtractorCompleto:
         # Usar la nueva función de generación de claves globales que incluye directorio
         file_key = self.file_tracker._generate_file_key(archivo_pqm)
         
-        # NUEVA LÓGICA: Buscar información de otros archivos con el mismo nombre en diferentes directorios
+        # Buscar información de otros archivos con el mismo nombre en diferentes directorios
         same_name_different_dirs = []
-        matching_entries = []  # NUEVO: Para archivos que corresponden al mismo archivo
+        matching_entries = []  # Para archivos que corresponden al mismo archivo
         
         for key, info in processed_data.items():
             if info.get('filename') == file_name:
@@ -881,19 +910,19 @@ class SonelExtractorCompleto:
                     if other_dir != source_directory:
                         same_name_different_dirs.append((key, info, other_dir))
                     else:
-                        # CRÍTICO: Archivo con mismo nombre y directorio (posible match exacto)
+                        # Archivo con mismo nombre y directorio (posible match exacto)
                         matching_entries.append((key, info))
         
         # CORRECCIÓN PRINCIPAL: Verificar si existe un registro que corresponda a este archivo
         processed_info = None
         actual_key = file_key
         
-        # 1. Buscar por clave exacta
+        # Buscar por clave exacta
         if file_key in processed_data:
             processed_info = processed_data[file_key]
             actual_key = file_key
         
-        # 2. NUEVO: Buscar por archivos que puedan corresponder al mismo archivo físico
+        # Buscar por archivos que puedan corresponder al mismo archivo físico
         elif matching_entries:
             # Verificar si algún archivo de matching_entries corresponde al mismo archivo físico
             for match_key, match_info in matching_entries:
@@ -905,13 +934,12 @@ class SonelExtractorCompleto:
                     if os.path.abspath(known_path) == current_path:
                         processed_info = match_info
                         actual_key = match_key
-                        self.pywinauto_logger.debug(f"🎯 Archivo encontrado por ruta física: {file_name}")
                         break
                 
                 if processed_info:
                     break
         
-        # 3. NUEVO: Buscar archivos procesados exitosamente del mismo nombre en otros directorios
+        # Buscar archivos procesados exitosamente del mismo nombre en otros directorios
         #    y verificar si generaron un CSV que coincida con este archivo
         elif same_name_different_dirs:
             for other_key, other_info, other_dir in same_name_different_dirs:
@@ -937,16 +965,16 @@ class SonelExtractorCompleto:
             csv_output = processed_info.get('csv_output', {})
             csv_verified = csv_output.get('verified', False)
             
-            # CORRECCIÓN CRÍTICA: Usar tiempo real del procesamiento
+            # Usar tiempo real del procesamiento
             execution_time_seconds = processed_info.get('processing_time_seconds', 0)
             
-            # NUEVA LÓGICA: Verificar físicamente el CSV numerado si es necesario
+            # Verificar físicamente el CSV numerado si es necesario
             csv_filename = csv_output.get('filename', f"{file_stem}.csv")
             
             # Verificar físicamente si existe el CSV (incluyendo versiones numeradas)
             csv_exists_physically = self._verify_csv_exists_physically(file_stem, csv_filename)
             
-            # CORRECCIÓN: Determinar estado correcto
+            # Determinar estado correcto
             is_from_other_directory = 'message_modifier' in processed_info
             
             if status == "exitoso" and (csv_verified or csv_exists_physically):
@@ -962,7 +990,6 @@ class SonelExtractorCompleto:
                 # Si el CSV fue verificado físicamente pero no marcado como verified, actualizar
                 if not csv_verified and csv_exists_physically:
                     message += " (CSV verificado físicamente)"
-                    self.pywinauto_logger.info(f"🔧 CSV verificado físicamente para {file_name}: {csv_filename}")
                     
             elif status == "exitoso" and not csv_verified and not csv_exists_physically:
                 status_display = f"⚠️ Advertencia ({pqm_type})"
@@ -974,7 +1001,7 @@ class SonelExtractorCompleto:
                 error_msg = processed_info.get('error_message', 'Error desconocido')
                 message = f"Error: {error_msg} - Directorio: {source_directory}, Tipo: {pqm_type}"
             
-            # NUEVA INFORMACIÓN: Mostrar información sobre archivos con mismo nombre en otros directorios
+            # Mostrar información sobre archivos con mismo nombre en otros directorios
             if same_name_different_dirs and not is_from_other_directory:
                 other_dirs = [other_dir for _, _, other_dir in same_name_different_dirs]
                 message += f" (También procesado en: {', '.join(other_dirs)})"
@@ -986,7 +1013,7 @@ class SonelExtractorCompleto:
             status_type = "pending"
             message = f"Archivo pendiente - Directorio: {source_directory}, Tipo: {pqm_type}"
             
-            # CORRECCIÓN: Usar estimación basada en tamaño para archivos pendientes
+            # Usar estimación basada en tamaño para archivos pendientes
             execution_time_seconds = CSVSummaryUtils._estimate_execution_time(file_size_bytes)
             
             # Mostrar si existe en otros directorios
@@ -998,7 +1025,7 @@ class SonelExtractorCompleto:
                 if processed_dirs:
                     message += f" (Ya procesado en: {', '.join(processed_dirs)})"
         
-        # CORRECCIÓN: Mejorar detección del nombre CSV esperado con numeración
+        # Mejorar detección del nombre CSV esperado con numeración
         if processed_info:
             csv_filename = self._get_actual_csv_filename(file_stem, processed_info)
         else:
@@ -1037,43 +1064,38 @@ class SonelExtractorCompleto:
         try:
             output_dir = self.PATHS['output_dir']
             
-            # 1. Verificar el nombre reportado directamente
+            # Verificar el nombre reportado directamente
             reported_path = os.path.join(output_dir, reported_csv_filename)
             if os.path.exists(reported_path):
                 self.pywinauto_logger.debug(f"CSV encontrado con nombre reportado: {reported_csv_filename}")
                 return True
             
-            # 2. Verificar nombre base sin numeración
+            # Verificar nombre base sin numeración
             base_csv_name = f"{file_stem}.csv"
             base_path = os.path.join(output_dir, base_csv_name)
             if os.path.exists(base_path):
                 self.pywinauto_logger.debug(f"CSV encontrado con nombre base: {base_csv_name}")
                 return True
             
-            # 3. Buscar versiones con numeración incremental (formato usado por el sistema)
+            # Buscar versiones con numeración incremental (formato usado por el sistema)
             numbered_patterns = [
                 f"{file_stem}.csv",  # Original
                 f"*_{file_stem}.csv",  # Patrón numérico: 1_nombre.csv, 2_nombre.csv, etc.
             ]
             
-            import glob
             for pattern in numbered_patterns:
                 pattern_path = os.path.join(output_dir, pattern)
                 matching_files = glob.glob(pattern_path)
                 if matching_files:
                     found_file = os.path.basename(matching_files[0])
-                    self.pywinauto_logger.debug(f"CSV encontrado con patrón numerado: {found_file}")
                     return True
             
-            # 4. Búsqueda manual en el directorio por si los patrones fallan
+            # Búsqueda manual en el directorio por si los patrones fallan
             try:
                 for filename in os.listdir(output_dir):
                     if filename.endswith('.csv'):
                         # Verificar si el nombre contiene el file_stem
                         if file_stem in filename:
-                            # Verificar patrones específicos de numeración
-                            import re
-                            
                             # Patrón: número_nombre.csv
                             if re.match(rf'^\d+_{re.escape(file_stem)}\.csv$', filename):
                                 self.pywinauto_logger.debug(f"CSV encontrado con numeración manual: {filename}")
@@ -1105,20 +1127,16 @@ class SonelExtractorCompleto:
             str: Nombre real del archivo CSV
         """
         try:
-            # 1. Intentar usar el nombre registrado
+            # Intentar usar el nombre registrado
             csv_output = processed_info.get('csv_output', {})
             registered_filename = csv_output.get('filename', f"{file_stem}.csv")
             
-            # 2. Verificar si el nombre registrado existe físicamente
+            # Verificar si el nombre registrado existe físicamente
             output_dir = self.PATHS['output_dir']
             registered_path = os.path.join(output_dir, registered_filename)
             
             if os.path.exists(registered_path):
                 return registered_filename
-            
-            # 3. Buscar versiones numeradas existentes
-            import glob
-            import re
             
             # Patrón para archivos numerados
             numbered_pattern = os.path.join(output_dir, f"*_{file_stem}.csv")
@@ -1130,14 +1148,14 @@ class SonelExtractorCompleto:
                 self.pywinauto_logger.debug(f"CSV numerado encontrado para {file_stem}: {found_file}")
                 return found_file
             
-            # 4. Buscar archivo base
+            # Buscar archivo base
             base_filename = f"{file_stem}.csv"
             base_path = os.path.join(output_dir, base_filename)
             
             if os.path.exists(base_path):
                 return base_filename
             
-            # 5. Búsqueda manual más exhaustiva
+            # Búsqueda manual más exhaustiva
             try:
                 for filename in os.listdir(output_dir):
                     if filename.endswith('.csv') and file_stem in filename:
@@ -1148,7 +1166,7 @@ class SonelExtractorCompleto:
             except OSError:
                 pass
             
-            # 6. Fallback: usar nombre registrado o base
+            # Fallback: usar nombre registrado o base
             return registered_filename if registered_filename != f"{file_stem}.csv" else f"{file_stem}.csv"
             
         except Exception as e:
@@ -1167,31 +1185,29 @@ class SonelExtractorCompleto:
         Returns:
             bool: True si el CSV corresponde al archivo
         """
-        import re
-        
         # Remover extensión del CSV
         csv_stem = csv_filename.replace('.csv', '')
         
-        # 1. Verificación exacta (sin numeración)
+        # Verificación exacta (sin numeración)
         if csv_stem == file_stem:
             return True
         
-        # 2. Verificar patrón de numeración: "número_nombre"
+        # Verificar patrón de numeración: "número_nombre"
         pattern_numbered = rf'^(\d+)_{re.escape(file_stem)}$'
         if re.match(pattern_numbered, csv_stem):
             return True
         
-        # 3. Verificar patrón con espacios: "número. nombre"
+        # Verificar patrón con espacios: "número. nombre"
         pattern_spaced = rf'^(\d+)\.\s*{re.escape(file_stem)}$'
         if re.match(pattern_spaced, csv_stem):
             return True
         
-        # 4. Verificar patrón con paréntesis: "(número) nombre"
+        # Verificar patrón con paréntesis: "(número) nombre"
         pattern_parenthesis = rf'^\((\d+)\)\s*{re.escape(file_stem)}$'
         if re.match(pattern_parenthesis, csv_stem):
             return True
         
-        # 5. Verificación por contenido de nombre (para casos especiales)
+        # Verificación por contenido de nombre (para casos especiales)
         # Normalizar nombres removiendo caracteres especiales para comparación
         csv_normalized = re.sub(r'[^\w\s]', '', csv_stem).lower()
         file_normalized = re.sub(r'[^\w\s]', '', file_stem).lower()
@@ -1220,7 +1236,7 @@ class SonelExtractorCompleto:
             # Asegurar que el directorio existe
             os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
-            # ✅ CAMBIO CRÍTICO: Usar el resumen filtrado que ya excluye archivos saltados
+            # CAMBIO Usar el resumen filtrado que ya excluye archivos saltados
             csv_summary_actual = self.get_csv_summary_for_gui()
             
             if not csv_summary_actual:
@@ -1233,16 +1249,17 @@ class SonelExtractorCompleto:
                 try:
                     with open(output_file, 'r', encoding='utf-8') as f:
                         existing_data = json.load(f)
-                    self.pywinauto_logger.info(f"📊 Cargando datos existentes desde: {output_file}")
                 except Exception as e:
                     self.pywinauto_logger.warning(f"⚠️ Error cargando datos existentes: {e}. Creando archivo nuevo.")
                     existing_data = {}
 
-            # **NUEVA LÓGICA: Consolidar SOLO archivos procesados en la ejecución actual**
+            # **Consolidar SOLO archivos procesados en la ejecución actual**
             consolidated_files = {}
             
-            # 1. Cargar archivos existentes (de ejecuciones anteriores)
+            # Cargar archivos existentes (de ejecuciones anteriores)
             existing_files = existing_data.get("files_processed", [])
+            current_session_start = self.process_start_time or (datetime.now() - timedelta(hours=730))
+
             for file_data in existing_files:
                 if isinstance(file_data, dict) and 'filename' in file_data:
                     filename = file_data['filename']
@@ -1253,8 +1270,6 @@ class SonelExtractorCompleto:
                     file_key = f"{filename}#{source_dir}#{processing_date[:10] if processing_date else 'unknown'}"
                     
                     # Verificar si este archivo fue procesado en la sesión actual
-                    current_session_start = self.process_start_time or (datetime.now() - timedelta(hours=24))
-                    
                     should_keep_existing = True
                     if processing_date:
                         try:
@@ -1262,20 +1277,16 @@ class SonelExtractorCompleto:
                             # Si fue procesado en la sesión actual, será reemplazado por los datos nuevos
                             if processing_datetime >= current_session_start:
                                 should_keep_existing = False
-                                self.pywinauto_logger.debug(f"🔄 Archivo será actualizado: {filename} (procesado en sesión actual)")
                         except ValueError:
                             pass  # Mantener archivo si hay error parseando fecha
                     
                     if should_keep_existing:
                         consolidated_files[file_key] = file_data
-                        self.pywinauto_logger.debug(f"📋 Archivo mantenido de sesión anterior: {filename}")
 
-            # 2. Agregar/actualizar SOLO archivos del procesamiento actual (excluye saltados)
+            # Agregar/actualizar SOLO archivos del procesamiento actual (excluye saltados)
             current_input_dir = os.path.basename(self.PATHS.get('input_dir', 'directorio_actual'))
-            current_files = csv_summary_actual.get("files", [])  # Ya filtrado por get_csv_summary_for_gui()
+            current_files = csv_summary_actual.get("files", [])  # Ya filtrado 
             current_date = datetime.now().isoformat()
-            
-            self.pywinauto_logger.info(f"📊 Archivos de sesión actual para consolidar: {len(current_files)}")
             
             for file_data in current_files:
                 if isinstance(file_data, dict) and 'filename' in file_data:
@@ -1289,9 +1300,8 @@ class SonelExtractorCompleto:
                     
                     # Agregar archivo procesado en sesión actual
                     consolidated_files[file_key] = file_data
-                    self.pywinauto_logger.debug(f"📝 Archivo de sesión actual consolidado: {filename}")
 
-            # **NUEVA LÓGICA: Calcular métricas consolidadas correctamente**
+            # **Calcular métricas consolidadas correctamente**
             total_files = len(consolidated_files)
             processed_files = sum(1 for f in consolidated_files.values() if f.get('processed', False))
             errors = sum(1 for f in consolidated_files.values() if f.get('status_type') == 'error')
@@ -1373,7 +1383,7 @@ class SonelExtractorCompleto:
             # Verificar que el archivo se creó correctamente
             if os.path.exists(output_file):
                 file_size = os.path.getsize(output_file)
-                self.pywinauto_logger.info(f"✅ Resumen CSV consolidado guardado en: {output_file}")
+                self.pywinauto_logger.info(f"Resumen CSV consolidado guardado en: {output_file}")
                 self.pywinauto_logger.info(f"📄 Tamaño del archivo: {file_size} bytes")
                 self.pywinauto_logger.info(f"📊 Archivos consolidados: {total_files} combinaciones archivo-directorio")
                 self.pywinauto_logger.info(f"📁 Directorios procesados: {len(unique_directories)}")
@@ -1407,6 +1417,5 @@ class SonelExtractorCompleto:
 
         except Exception as e:
             self.pywinauto_logger.error(f"❌ Error crítico guardando resumen CSV consolidado: {e}")
-            import traceback
             self.pywinauto_logger.error(traceback.format_exc())
             return None

@@ -3,6 +3,7 @@ import time
 import pyperclip
 import pyautogui
 from pywinauto import mouse
+from datetime import datetime
 from config.logger import get_logger
 from core.utils.coordinates_utils import CoordinatesUtils
 
@@ -391,18 +392,34 @@ class GuiConfiguracion:
 
             # === Nombre limpio del archivo ===
             nombre_archivo = expected_csv_path
+
+            # ✅ Normalizar nombre del archivo
             nombre_archivo = nombre_archivo.strip()
-            if "." in nombre_archivo:
-                partes = nombre_archivo.split(".")
+
+            # Extraer carpeta y nombre
+            carpeta = os.path.dirname(nombre_archivo)
+            nombre = os.path.basename(nombre_archivo)
+            
+            if "." in nombre:
+                partes = nombre.split(".")
                 nombre_sin_puntos = "".join(partes[:-1])
                 extension = partes[-1]
-                nombre_archivo = f"{nombre_sin_puntos}.{extension}"
+                nombre = f"{nombre_sin_puntos}.{extension}"
             else:
-                nombre_archivo = f"{nombre_archivo}.csv"
                 self.logger.warning("⚠️ El nombre del archivo no contenía una extensión explícita.")
 
-            pyperclip.copy(nombre_archivo)
-            self.logger.info(f"📝 Nombre normalizado y copiado: {nombre_archivo}")
+            nombre_final = self._aplicar_numeracion_incremental_csv(carpeta, nombre)
+            archivo_a_guardar = os.path.join(carpeta, nombre_final)
+
+            # Logs para debugging
+            self.logger.info(f"   📁 Ruta base: {carpeta}")
+            self.logger.info(f"   📄 Nombre sanitizado: {nombre}")
+            self.logger.info(f"   📄 Nombre final (con numeración si aplica): {nombre_final}")
+            self.logger.info(f"   💾 Guardando como: {archivo_a_guardar}")
+
+
+            pyperclip.copy(archivo_a_guardar)
+            self.logger.info(f"📝 Nombre normalizado y copiado: {archivo_a_guardar}")
 
             # === Clic en el campo de nombre ===
             name_coord = self.coordinates[name_field_key]
@@ -439,3 +456,52 @@ class GuiConfiguracion:
             dict: Resumen de coordenadas
         """
         return CoordinatesUtils.get_coordinates_summary(self.coordinates)
+    
+
+    def _aplicar_numeracion_incremental_csv(self, carpeta, nombre_archivo):
+        """
+        Aplica numeración incremental al nombre del archivo CSV si ya existe.
+        
+        Args:
+            carpeta (str): Directorio donde se guardará el archivo
+            nombre_archivo (str): Nombre del archivo original con extensión
+            
+        Returns:
+            str: Nombre del archivo con numeración incremental si es necesario
+        """
+        import os
+        
+        # Ruta completa del archivo original
+        ruta_completa = os.path.join(carpeta, nombre_archivo)
+        
+        # Si no existe, usar el nombre original
+        if not os.path.exists(ruta_completa):
+            self.logger.info(f"   ✅ Nombre disponible: {nombre_archivo}")
+            return nombre_archivo
+        
+        # Extraer nombre base y extensión
+        nombre_base, extension = os.path.splitext(nombre_archivo)
+        
+        # Buscar el siguiente número disponible
+        contador = 1
+        max_intentos = 500
+        
+        while contador <= max_intentos:
+            nombre_numerado = f"{contador}_{nombre_base}{extension}"
+            ruta_numerada = os.path.join(carpeta, nombre_numerado)
+            
+            if not os.path.exists(ruta_numerada):
+                self.logger.info(f"   🔄 Archivo ya existe, aplicando numeración: {nombre_numerado}")
+                self.logger.info(f"   📝 Número asignado: {contador}")
+                return nombre_numerado
+            
+            contador += 1
+        
+        # Si se agotaron los intentos, usar timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_timestamp = f"{timestamp}_{nombre_base}{extension}"
+        
+        self.logger.warning(f"⚠️ Se agotaron {max_intentos} intentos de numeración")
+        self.logger.info(f"   🕐 Usando timestamp: {nombre_timestamp}")
+        
+        return nombre_timestamp
