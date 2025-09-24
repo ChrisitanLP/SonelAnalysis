@@ -97,15 +97,18 @@ class DataHandler:
                 logger.error("No se pudo obtener un código válido del archivo.")
                 return None
         
-        # Extraer nombre del archivo
+        # Extraer nombre del archivo y determinar origen
         nombre_archivo = None
+        origen = "cliente"  # Valor por defecto
+        
         if file_path:
             nombre_archivo = os.path.basename(file_path)
+            origen = self.determine_origen(nombre_archivo)  # NUEVA LÍNEA
         
         # Para el caso del flujo estándar ETL (sin archivo)
         if codigo == "ETL_STANDARD" and not should_extract:
-            logger.info(f"Utilizando código estándar ETL: {codigo}")
             nombre_archivo = "ETL_STANDARD"
+            origen = "cliente"  # ETL_STANDARD se considera como cliente
         else:
             # Con la nueva implementación, el código puede tener entre 2 y 10 dígitos
             # Verificamos que sea numérico y tenga la longitud correcta
@@ -113,7 +116,6 @@ class DataHandler:
                 logger.warning(f"El código '{codigo}' no tiene el formato esperado de 2-10 dígitos.")
                 
                 if should_extract and file_path:
-                    logger.info(f"Intentando extraer código nuevamente del archivo: {file_path}")
                     codigo = extract_client_code(file_path)
                     
                     if not codigo or not re.match(r'^\d{2,10}$', codigo):
@@ -121,8 +123,6 @@ class DataHandler:
                         return None
                 else:
                     return None
-
-        logger.info(f"Intentando obtener/crear código en BD: '{codigo}' con archivo: '{nombre_archivo}'")
 
         # Primero verificar si ya existe
         cursor = self.db_connection.execute_query(
@@ -138,16 +138,16 @@ class DataHandler:
                 codigo_id = row[0]
                 logger.info(f"Código existente encontrado con ID: {codigo_id}")
                 
-                # Si existe pero queremos actualizar el nombre de archivo, hacerlo
+                # Si existe, actualizar nombre de archivo y origen
                 if nombre_archivo and should_extract:
-                    self._update_nombre_archivo(codigo_id, nombre_archivo)
+                    self._update_nombre_archivo(codigo_id, nombre_archivo, origen)  # MODIFICADA
                 
                 return codigo_id
 
-        # Si no existe, intentar insertarlo
+        # Si no existe, intentar insertarlo con origen
         cursor = self.db_connection.execute_query(
             INSERT_CODIGO_QUERY,
-            params=(codigo, nombre_archivo),
+            params=(codigo, nombre_archivo, origen),  # MODIFICADA: agregado origen
             commit=True
         )
 
@@ -156,34 +156,35 @@ class DataHandler:
             cursor.close()
             if row:
                 codigo_id = row[0]
-                logger.info(f"Nuevo código creado con ID: {codigo_id} y archivo: {nombre_archivo}")
+                logger.info(f"Nuevo código creado con ID: {codigo_id}, archivo: {nombre_archivo} y origen: {origen}")
                 return codigo_id
 
         logger.error(f"No se pudo obtener o crear el código: {codigo}")
         return None
     
-    def _update_nombre_archivo(self, codigo_id, nombre_archivo):
+    def _update_nombre_archivo(self, codigo_id, nombre_archivo, origen):
         """
         Actualiza el nombre de archivo para un código existente
         
         Args:
             codigo_id: ID del código
             nombre_archivo: Nombre del archivo a actualizar
+            origen: Origen a actualizar
         """
         update_query = """
-            UPDATE codigo SET nombre_archivo = %s, fecha_subida = CURRENT_TIMESTAMP 
+            UPDATE codigo SET nombre_archivo = %s, origen = %s, fecha_subida = CURRENT_TIMESTAMP 
             WHERE id = %s;
         """
         
         cursor = self.db_connection.execute_query(
             update_query,
-            params=(nombre_archivo, codigo_id),
+            params=(nombre_archivo, origen, codigo_id),
             commit=True
         )
         
         if cursor:
             cursor.close()
-            logger.debug(f"Actualizado nombre de archivo para código ID {codigo_id}: {nombre_archivo}")
+            logger.debug(f"Actualizado nombre de archivo para código ID {codigo_id}: {nombre_archivo}, origen: {origen}")
 
     def insert_data(self, data, codigo, file_path, should_extract=True):
         """
@@ -379,3 +380,24 @@ class DataHandler:
         
         logger.info(f"Datos cargados exitosamente en la BD: {successful_rows}/{len(data)} filas")
         return successful_rows > 0
+    
+    def determine_origen(self, nombre_archivo):
+        """
+        Determina el origen basado en el nombre del archivo
+        
+        Args:
+            nombre_archivo: Nombre del archivo a analizar
+            
+        Returns:
+            str: "transformador" si contiene "TRF", "cliente" en caso contrario
+        """
+        if not nombre_archivo:
+            return "cliente"
+        
+        # Convertir a mayúsculas para hacer la comparación insensible a mayúsculas/minúsculas
+        nombre_upper = nombre_archivo.upper()
+        
+        if "TRF" in nombre_upper:
+            return "transformador"
+        else:
+            return "cliente"

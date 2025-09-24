@@ -15,6 +15,8 @@ class DatabaseConnection:
         """
         self.config = config
         self.connection = None
+        self._connection_attempts = 0
+        self._max_attempts = 3
         
     def connect(self):
         """
@@ -27,42 +29,61 @@ class DatabaseConnection:
             # MODIFICACIÓN: Manejo más robusto de configuración
             db_config = self._get_database_config()
             
-            logger.info(f"Intentando conectar a la base de datos: {db_config['host']}:{db_config['port']}")
-            
             self.connection = psycopg2.connect(
                 host=db_config['host'],
                 port=int(db_config['port']),
                 database=db_config['database'],
                 user=db_config['user'],
                 password=db_config['password'],
-                connect_timeout=10  # Timeout de 10 segundos
+                connect_timeout=15,  # Timeout de 10 segundos
+                application_name="SonelExtractor_Portable"
             )
             
             # Verificar que la conexión funcione
             cursor = self.connection.cursor()
-            cursor.execute("SELECT 1")
+            cursor.execute("SELECT version()")
+            db_version = cursor.fetchone()
             cursor.close()
             
-            logger.info("✅ Conexión exitosa a la base de datos PostgreSQL")
+            logger.info("✅ Conexión exitosa a PostgreSQL")
+            
+            # Resetear contador de intentos en caso de éxito
+            self._connection_attempts = 0
             return self.connection
             
-        except psycopg2.OperationalError as e:
-            error_msg = str(e)
-            if "could not connect to server" in error_msg.lower():
-                logger.error("❌ No se pudo conectar al servidor PostgreSQL")
-                logger.error("   Verifica que PostgreSQL esté ejecutándose y sea accesible")
-            elif "authentication failed" in error_msg.lower():
-                logger.error("❌ Error de autenticación con la base de datos")
-                logger.error("   Verifica las credenciales de usuario y contraseña")
-            elif "database" in error_msg.lower() and "does not exist" in error_msg.lower():
-                logger.error("❌ La base de datos especificada no existe")
-                logger.error("   Verifica que la base de datos 'sonel_data' exista")
-            else:
-                logger.error(f"❌ Error de conexión PostgreSQL: {e}")
+        except ImportError as e:
+            logger.error("❌ Error de dependencias de base de datos")
+            logger.error(f"Instala las dependencias necesarias: {e}")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error inesperado al conectar a la base de datos: {e}")
+            error_msg = str(e).lower()
+            
+            # Mensajes de error específicos y amigables
+            if "could not connect to server" in error_msg:
+                logger.error("❌ No se pudo conectar al servidor PostgreSQL")
+                logger.error("   Verifica que PostgreSQL esté ejecutándose")
+                logger.error(f"   Host configurado: {db_config.get('host', 'N/A')}")
+                logger.error(f"   Puerto configurado: {db_config.get('port', 'N/A')}")
+            elif "authentication failed" in error_msg:
+                logger.error("❌ Error de autenticación con la base de datos")
+                logger.error("   Verifica usuario y contraseña en la configuración")
+            elif "database" in error_msg and "does not exist" in error_msg:
+                logger.error("❌ La base de datos especificada no existe")
+                logger.error(f"   Base de datos: {db_config.get('database', 'N/A')}")
+            elif "timeout" in error_msg:
+                logger.error("❌ Timeout de conexión - El servidor no responde")
+                logger.error("   Verifica conectividad de red y firewall")
+            else:
+                logger.error(f"❌ Error de conexión PostgreSQL: {e}")
+                
+            # Sugerir acciones según el número de intentos
+            if self._connection_attempts < self._max_attempts:
+                logger.info(f"Reintentando conexión... ({self._connection_attempts}/{self._max_attempts})")
+            else:
+                logger.error("❌ Se agotaron los intentos de conexión")
+                logger.error("   La aplicación continuará sin funcionalidad de base de datos")
+                
             return None
 
     def _get_database_config(self) -> dict:
@@ -98,17 +119,45 @@ class DatabaseConnection:
         config.update(defaults)
         
         # 2. Sobrescribir con valores del archivo de configuración si existen
-        if self.config and 'DATABASE' in self.config:
-            for key in defaults.keys():
-                if key in self.config['DATABASE']:
-                    config[key] = self.config['DATABASE'][key]
+        if self.config and hasattr(self.config, 'sections'):
+        # ConfigParser object
+            if 'DATABASE' in self.config:
+                for key in defaults.keys():
+                    if key in self.config['DATABASE']:
+                        value = self.config['DATABASE'][key]
+                        if value and value.strip():  # Validar que no esté vacío
+                            config[key] = value.strip()
+        elif self.config and isinstance(self.config, dict):
+            # Dictionary object
+            if 'DATABASE' in self.config:
+                for key in defaults.keys():
+                    if key in self.config['DATABASE']:
+                        value = self.config['DATABASE'][key]
+                        if value and str(value).strip():
+                            config[key] = str(value).strip()
         
-        # 3. Sobrescribir con variables de entorno si existen (máxima prioridad)
+        # Sobrescribir con variables de entorno (máxima prioridad)
+        import os
         for key, env_var in env_mapping.items():
             env_value = os.getenv(env_var)
-            if env_value:
-                config[key] = env_value
-                logger.info(f"Usando variable de entorno {env_var} para {key}")
+            if env_value and env_value.strip():
+                config[key] = env_value.strip()
+        
+        # Validar configuración
+        for key, value in config.items():
+            if not value or not str(value).strip():
+                logger.warning(f"⚠️ Configuración BD '{key}' vacía, usando valor por defecto")
+                config[key] = defaults[key]
+        
+        # Validar puerto numérico
+        try:
+            port = int(config['port'])
+            if port < 1 or port > 65535:
+                raise ValueError(f"Puerto fuera de rango: {port}")
+            config['port'] = str(port)
+        except ValueError as e:
+            logger.warning(f"⚠️ Puerto inválido ({config['port']}), usando 5432")
+            config['port'] = '5432'
         
         return config
 
@@ -119,8 +168,21 @@ class DatabaseConnection:
         Returns:
             Connection: Objeto de conexión a la base de datos
         """
-        if not self.connection:
+        if self.connection:
+            try:
+                # Test rápido de la conexión existente
+                cursor = self.connection.cursor()
+                cursor.execute("SELECT 1")
+                cursor.close()
+                return self.connection
+            except Exception as e:
+                logger.warning(f"⚠️ Conexión existente inválida: {e}")
+                self.connection = None
+        
+        # Si no hay conexión válida, intentar crear una nueva
+        if not self.connection and self._connection_attempts < self._max_attempts:
             return self.connect()
+        
         return self.connection
 
     def execute_query(self, query, params=None, commit=False):
@@ -197,6 +259,11 @@ class DatabaseConnection:
     def close(self):
         """Cierra la conexión a la base de datos"""
         if self.connection:
-            self.connection.close()
-            self.connection = None
-            logger.info("Conexión a la base de datos cerrada")
+            try:
+                self.connection.close()
+                self.connection = None
+                logger.info("✅ Conexión a la base de datos cerrada")
+            except Exception as e:
+                logger.warning(f"⚠️ Error cerrando conexión BD: {e}")
+        else:
+            logger.debug("No hay conexión BD que cerrar")
