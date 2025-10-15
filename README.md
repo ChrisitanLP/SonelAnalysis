@@ -4,45 +4,52 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://www.postgresql.org)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/ChrisitanLP/SonelAnalysis)
 
-Automatización para la extracción, transformación y carga (ETL) de datos eléctricos desde archivos generados por **Sonel Analysis 4.6.6** a una base de datos **PostgreSQL**. Este script permite procesar archivos exportados o, en su defecto, automatizar la interfaz gráfica de la aplicación para obtener datos estructurados, con un enfoque especial en mediciones de **voltaje**.
+Sonel Data Extractor es un sistema automatizado ETL (Extract, Transform, Load) para procesar datos de mediciones eléctricas desde archivos PQM de medidores de calidad de energía Sonel Analysis, transformarlos y cargarlos en una base de datos PostgreSQL.
 
 ---
 
 ## 📋 Tabla de Contenidos
 
 - [Características principales](#-características-principales)
-- [Requisitos previos](#️-requisitos-previos)
+- [Requisitos del Sistema](#-requisitos-del-sistema)
 - [Instalación](#-instalación)
 - [Estructura del proyecto](#-estructura-del-proyecto)
-- [Configuración](#️-configuración)
-- [Preparación de la base de datos](#️-preparación-de-la-base-de-datos)
+- [Configuración](#-configuración)
 - [Uso](#-uso)
-- [Personalización](#-personalización)
-- [Validación y formato de datos](#️-validación-y-formato-de-datos)
+- [Empaquetado como Ejecutable](#-empaquetado-como-ejecutable)
+- [Validación y formato de datos](#-validación-y-formato-de-datos)
+- [Parámetros Eléctricos Procesados](#-parámetros-eléctricos-procesados)
 - [Solución de problemas](#-solución-de-problemas)
-- [Registro de logs](#-registro-de-logs)
-- [Limitaciones](#️-limitaciones)
+- [Logs y Diagnóstico](#-logs-y-diagnóstico)
+- [Estructura de Base de Datos](#-estructura-de-base-de-datos)
 - [Contribución](#-contribución)
-- [Licencia](#-licencia)
 
 ---
 
 ## 📌 Características principales
 
-- ✅ Extracción de datos desde archivos exportados (CSV, Excel, XML, MDB, DAT)
-- 🖥️ Automatización de la GUI de **Sonel Analysis** para exportar mediciones
-- 🔄 Transformación y validación automática de columnas relevantes
-- 🗄️ Carga estructurada a base de datos PostgreSQL
-- ⚙️ Configuración flexible mediante `.env` y `config.ini`
-- 📊 Registro de logs para monitoreo y diagnóstico
+- ✅ **Extracción Automatizada:** Automatización de la interfaz gráfica de Sonel Analysis para exportar datos  
+- ✅ **Transformación Inteligente:** Detección automática de formatos CSV y estandarización de datos  
+- ✅ **Carga a PostgreSQL:** Inserción en tablas normalizadas y desnormalizadas  
+- ✅ **Interfaz Gráfica:** Panel de control intuitivo con monitoreo en tiempo real  
+- ✅ **Gestión de Estado:** Seguimiento de archivos procesados para evitar duplicados  
+- ✅ **Sistema de Recuperación:** Respaldo automático con extracción basada en coordenadas  
+- ✅ **Logging Completo:** Registro detallado de todas las operaciones 
 
 ---
 
-## 🛠️ Requisitos previos
+## 🧩 Requisitos del Sistema
 
-- **Python** 3.7 o superior  
-- **PostgreSQL** 10 o superior  
-- **Sonel Analysis** 4.6.6 instalado (solo si se usará la extracción GUI)  
+### 🖥️ Software Requerido
+- **Sistema Operativo:** Windows 10/11 (64-bit)
+- **Python:** 3.8 o superior
+- **Sonel Analysis:** Versión 4.6.6
+- **PostgreSQL:** Versión 12 o superior
+
+### ⚙️ Hardware Mínimo
+- **CPU:** Dual-core 2.0 GHz  
+- **RAM:** 4 GB  
+- **Almacenamiento:** 2 GB libres  
 
 ---
 
@@ -50,19 +57,39 @@ Automatización para la extracción, transformación y carga (ETL) de datos elé
 
 ### 1. Clonar o descargar el proyecto
 ```bash
-git clone <repository-url>
+git clone https://github.com/ChrisitanLP/SonelAnalysis
 cd sonel-data-extractor
 ```
 
-### 2. Instalar dependencias
+### 2. Crear entorno virtual
 ```bash
-pip install pandas psycopg2-binary python-dotenv pyautogui pywinauto
+python -m venv venv
+venv\Scripts\activate
 ```
 
-### 3. Crear estructura de directorios
+### 3. Instalar dependencias
 ```bash
-mkdir -p data exports
+pip install -r requirements.txt
 ```
+
+### 4. Configurar base de datos
+```env
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=db_name
+DB_USER=db_user
+DB_PASSWORD=db_your_password
+```
+
+### 5. Crear base de datos
+```bash
+# Conectar a PostgreSQL
+psql -U db_user
+
+# Crear base de datos
+CREATE DATABASE db_name;
+```
+> El sistema creará las tablas automáticamente en el primer uso.
 
 ---
 
@@ -95,6 +122,16 @@ sonel:.
 │   └───__pycache__/
 └───utils/
     └───__pycache__/
+```
+
+## 📁 Estructura de Directorios en modo Portable
+```
+sonel/
+├── data/
+│   ├── archivos_pqm/    # Colocar archivos .pqm aquí
+│   └── archivos_csv/    # Archivos CSV generados
+├── logs/                # Archivos de log
+└── temp/                # Archivos temporales
 ```
 
 ### 📂 Descripción detallada de módulos
@@ -133,22 +170,27 @@ Esta estructura sigue los principios de:
 
 ## ⚙️ Configuración
 
-### Opción 1: Archivo `config.ini` (generado automáticamente)
+### Archivo `config.ini`
 
 ```ini
 [DATABASE]
 host = localhost
-port = ----
-database = sonel
-user = ****
-password = ****
+port = 5432
+database = db_name
+user = db_user
+password = db_your_password
 
 [PATHS]
-data_dir = ./data
-export_dir = ./exports
+input_dir = ./data/archivos_pqm
+output_dir = ./data/archivos_csv
+temp_dir = ./temp
+
+[LOGGING]
+level = INFO
+file = logs/sonel_app.log
 ```
 
-### Opción 2: Archivo `.env` (tiene prioridad sobre config.ini)
+### Archivo `.env` 
 
 ```env
 DB_HOST=localhost
@@ -162,51 +204,98 @@ EXPORT_DIR=./exports
 
 ---
 
-## 🗄️ Preparación de la base de datos
-
-### 1. Crear la base de datos
-
-```sql
-CREATE DATABASE sonel_data;
-```
-
-> **Nota:** La tabla `voltaje_mediciones` se creará automáticamente al ejecutar el script si no existe.
-
----
-
 ## 🚀 Uso
 
-### Método 1: Extracción desde archivos exportados
-
-1. Coloca tus archivos (`.csv`, `.xlsx`, `.xml`, `.mdb`, `.dat`) en la carpeta `data/`
-2. Ejecuta el script:
-
+### Ejecución Básica
 ```bash
-python extract_sonel_data.py
+# Activar entorno virtual
+venv\Scripts\activate
+
+# Ejecutar aplicación
+python app.py
 ```
 
-### Método 2: Automatización de la GUI
+### Interfaz Gráfica
 
-1. Asegúrate de que **Sonel Analysis** esté abierto
-2. Ejecuta el script en modo GUI:
+* **📁 Seleccionar Carpeta:** Escoge el directorio con archivos PQM
+* **▶️ Procesar Archivos:** Inicia el procesamiento
+* **📊 Monitorear Progreso:** Visualiza el estado una vez finalizado el proceso
+* **📈 Revisar Resultados:** Revisa las pestañas General, CSV y Base de Datos
+
+---
+## 🧱 Empaquetado como Ejecutable
+
+### Generar Versión Portable
 
 ```bash
-python extract_sonel_data.py gui
+python build_executable.py
 ```
 
-> **⚠️ Importante:** La aplicación Sonel Analysis debe estar abierta y visible antes de ejecutar el modo GUI.
+Este proceso:
+
+1. Verifica dependencias
+2. Limpia compilaciones anteriores
+3. Genera `.spec` para PyInstaller
+4. Compila el ejecutable
+5. Crea carpeta portable `SonelDataExtractor_Portable/`
+
+### Distribución del Ejecutable
+
+```
+SonelDataExtractor_Portable/
+├── SonelDataExtractor.exe
+├── qt.conf
+├── config.ini
+├── README.txt
+├── TROUBLESHOOTING.txt
+├── data/
+│   ├── archivos_pqm/
+│   └── archivos_csv/
+├── logs/
+└── temp/
+```
+
+**Uso del Ejecutable:**
+
+1. Copiar toda la carpeta `SonelDataExtractor_Portable`
+2. Ejecutar `SonelDataExtractor.exe`
+
+> ⚠️ No mover el ejecutable fuera de su carpeta portable.
+---
+
+## 📄 Tipos de Archivos Soportados
+
+* `.pqm702` – Power Quality Meter 702
+* `.pqm710` – Power Quality Meter 710
+* `.pqm711` – Power Quality Meter 711
+* `.pqm712` – Power Quality Meter 712
 
 ---
 
-## 🔧 Personalización
+## ⚡ Parámetros Eléctricos Procesados
 
-Puedes modificar el script para adaptarlo a necesidades específicas:
+### Mediciones de Voltaje
 
-| Componente | Función |
-|------------|---------|
-| `_validate_columns()` | Ajustar patrones de búsqueda de columnas relevantes |
-| `transform_voltage_data()` | Modificar estructura o cálculos |
-| `_extract_using_gui()` | Cambiar comportamiento de automatización de interfaz |
+* Voltaje L1, L2, L3 (RMS)
+* Voltaje línea-línea L12
+
+### Mediciones de Corriente
+
+* Corriente L1, L2 (RMS)
+
+### Mediciones de Potencia
+
+* Potencia Activa (P) por fase y total
+* Potencia Reactiva (Q) por fase y total
+* Potencia Aparente (S) por fase y total
+* Potencia Aparente Compleja (Sn) por fase y total
+
+### Datos Temporales
+
+* Timestamp UTC
+* Zona UTC
+* Fecha
+* Hora
 
 ---
 
@@ -238,19 +327,43 @@ Puedes modificar el script para adaptarlo a necesidades específicas:
 - ✅ Revisa los logs generados para más detalles
 - ✅ Considera adaptar la lógica de lectura para tu formato específico
 
+### No Qt platform plugin could be initialized
+- Asegurar que `qt.conf` esté junto al ejecutable
+- No mover el `.exe` fuera de su carpeta
+- Instalar **Visual C++ Redistributable**
+- Ejecutar como administrador
 ---
 
-## 📊 Registro de logs
+## 📜 Logs y Diagnóstico
 
-El script genera logs tanto en consola como en el archivo `sonel_extraction.log`. Revisa este archivo si deseas rastrear errores o auditorías de ejecución.
+### Ubicación
+
+* **Principal:** `logs/sonel_app.log`
+* **Rotativos:** `logs/sonel_app.log.1`, `sonel_app.log.2`, etc.
+
+### Niveles de Log
+
+* **DEBUG:** Detalles técnicos
+* **INFO:** Operaciones normales
+* **WARNING:** Situaciones anómalas recuperables
+* **ERROR:** Fallos de procesos
+* **CRITICAL:** Errores graves
 
 ---
 
-## ⚠️ Limitaciones
+## 🧮 Estructura de Base de Datos
 
-- La automatización GUI puede ser frágil ante cambios en la interfaz
-- El soporte para archivos `.mdb` puede requerir configuración ODBC adicional
-- Actualmente el script está optimizado para procesar solo datos de voltaje
+### Tablas Normalizadas
+
+* **codigo:** Información de clientes
+* **mediciones:** Registro base
+* **voltaje_mediciones:** Datos de voltaje
+* **corriente_mediciones:** Datos de corriente
+* **potencia_mediciones:** Datos de potencia
+
+### Tabla Desnormalizada
+
+* **mediciones_planas:** Consolidado de análisis
 
 ---
 
@@ -265,13 +378,15 @@ Si deseas colaborar o tienes sugerencias:
 
 ---
 
-## 📄 Licencia
+📅 **Última actualización:** 03/10/2025
 
-Este proyecto está disponible bajo la licencia que consideres apropiada para tu caso de uso.
+> **Versión Actual:** 1.2.0
 
 ---
 
+```
 **Desarrollado para automatizar el procesamiento de datos eléctricos con Sonel Analysis** ⚡
+```
 
 <div align="center">
 
